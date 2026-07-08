@@ -3,7 +3,9 @@
 score(v) = (1 − λ)·info_gain(v) + λ·normalized_fitness(v)
   λ = 0 → pure information-optimal (the thesis)
   λ = 1 → pure fitness-greedy (the baseline to beat / current practice)
-Submodular info_gain ⇒ greedy is (1 − 1/e) near-optimal.
+Under the v1 independent-noise model info_gain is modular (docs/SPEC.md#5), so greedy is exactly
+optimal for a fixed budget — it coincides with sorting candidates by the fixed weight and taking the
+top B. The (1 − 1/e) submodular bound is only the fallback for a future correlated-prior model.
 """
 
 from __future__ import annotations

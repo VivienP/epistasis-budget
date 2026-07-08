@@ -10,11 +10,19 @@ from __future__ import annotations
 
 __version__ = "0.1.0"
 
-from epibudget.epistasis import epsilon_pairwise, epsilon_third
+from epibudget.epistasis import (
+    epsilon_pairwise,
+    epsilon_third,
+    ground_truth_epistasis,
+    predicted_epistasis,
+    wht_spectrum,
+)
+from epibudget.graph import EpistasisFactorGraph
 from epibudget.types import Allocation, Interaction, Mutation, ScoredVariant, Variant
 
 __all__ = [
     "Allocation",
+    "EpistasisFactorGraph",
     "Interaction",
     "Mutation",
     "ScoredVariant",
@@ -22,4 +30,7 @@ __all__ = [
     "__version__",
     "epsilon_pairwise",
     "epsilon_third",
+    "ground_truth_epistasis",
+    "predicted_epistasis",
+    "wht_spectrum",
 ]

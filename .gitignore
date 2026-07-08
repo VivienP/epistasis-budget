@@ -1,0 +1,51 @@
+# AI tooling & project config — never commit
+CLAUDE.md
+AGENTS.md
+ROADMAP.md
+.claude/
+.cursor/
+.aider*
+
+# Secrets & env
+.env
+.env.*
+*.pem
+*.key
+credentials*.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# Tooling
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+
+# Data (downloaded, never committed — see docs/VALIDATION.md for fetch instructions)
+data/raw/
+data/proteingym/
+data/cache/
+*.csv.gz
+*.pt
+models/
+
+# Figures / large artifacts
+figures/*.png
+figures/*.pdf
+!figures/.gitkeep
+
+# OS & IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

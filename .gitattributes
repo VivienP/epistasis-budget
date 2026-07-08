@@ -1,0 +1,6 @@
+# Normalize line endings. Shell hooks and Python must stay LF (CRLF breaks the shebang / some tools).
+* text=auto
+*.py text eol=lf
+*.sh text eol=lf
+scripts/hooks/* text eol=lf
+*.md text

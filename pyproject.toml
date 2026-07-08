@@ -1,0 +1,88 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "epibudget"
+version = "0.1.0"
+description = "Information-optimal experimental budget allocation for mapping protein epistasis (zero-shot, ESM-2)."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "Vivien Perrelle" }]
+keywords = [
+    "protein-engineering",
+    "epistasis",
+    "deep-mutational-scanning",
+    "active-learning",
+    "experimental-design",
+    "esm2",
+    "proteingym",
+]
+
+# Runtime dependencies. Pinned loosely; lock in a follow-up once the demo is green.
+dependencies = [
+    "numpy>=1.26",
+    "scipy>=1.13",
+    "scikit-learn>=1.5",
+    "pandas>=2.2",
+    "networkx>=3.3",
+    "torch>=2.3",           # CPU wheels are fine; no dedicated GPU required
+    "transformers>=4.44",   # ESM-2 via facebook/esm2_* checkpoints
+    "typer>=0.12",          # CLI
+    "pydantic>=2.7",        # typed config
+    "rich>=13.7",           # CLI tables / progress
+    "matplotlib>=3.9",      # figures for the notebook / report
+    "tqdm>=4.66",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2",
+    "pytest-cov>=5.0",
+    "mypy>=1.11",
+    "ruff>=0.6",
+    "types-tqdm",
+    "jupyter>=1.0",         # reproducible demo notebook
+]
+
+[project.scripts]
+epibudget = "epibudget.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/VivienP/epistasis-budget"
+Documentation = "https://github.com/VivienP/epistasis-budget/tree/main/docs"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/epibudget"]
+
+# ----------------------------------------------------------------------
+# Tooling — matches the house standard: mypy --strict, ruff format/check.
+# ----------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+disallow_any_generics = true
+plugins = ["pydantic.mypy"]
+# Third-party libs without stubs — silence import errors, keep our code strict.
+[[tool.mypy.overrides]]
+module = ["transformers.*", "torch.*", "networkx.*", "sklearn.*", "scipy.*", "matplotlib.*"]
+ignore_missing_imports = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF", "PL"]
+ignore = ["PLR0913"]  # allow many-argument scientific functions
+
+[tool.pytest.ini_options]
+addopts = "-q --strict-markers"
+testpaths = ["tests"]
+markers = [
+    "slow: requires ESM-2 forward passes (minutes on CPU)",
+    "data: requires the ProteinGym GB1 dataset to be downloaded",
+]

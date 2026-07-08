@@ -66,10 +66,13 @@ class ScoredVariant(BaseModel):
     var_delta_g: float      # dispersion across masking perturbations (model uncertainty)
 
 class Interaction(BaseModel):
-    sites: tuple[int, ...]  # the position-tuple, e.g. (39, 41) or (39, 40, 41)
-    order: int              # 2 or 3 for pairwise / third-order
-    epsilon_hat: float      # ESM-2-predicted epistasis coefficient (WT-referenced)
-    sigma2: float           # current uncertainty (variance) about this coefficient
+    mutations: tuple[Mutation, ...]  # the identity: specific residues, e.g. ((39,'D','A'),(41,'G','W'))
+    sites: tuple[int, ...]           # derived position summary, e.g. (39, 41)
+    order: int                       # 2 or 3 for pairwise / third-order
+    epsilon_hat: float               # ESM-2-predicted epistasis coefficient (WT-referenced)
+    sigma2: float                    # current uncertainty (variance) about this coefficient
+    # Keyed by `mutations`, not `sites`: ε depends on the residues, and there are 19² (resp. 19³)
+    # amino-acid instances per position-pair (resp. -triple). Build via Interaction.of(...).
 
 class Allocation(BaseModel):
     budget: int
@@ -155,25 +158,37 @@ def epsilon_third(dg: Mapping[Variant, float], i, j, k) -> float:
 
 ## 5. Factor graph & uncertainty model — `graph.py`
 
-A Gaussian model over the interaction terms is enough to make selection tractable and submodular.
+A Gaussian model over the interaction terms is enough to make selection tractable.
 
-- **Nodes / factors:** each candidate `Interaction` (order 2 and 3) is a latent Gaussian parameter
-  `ε ~ N(ε_hat, σ²)`.
-- **Observations:** measuring a variant `v` reveals `ΔG(v)` (in simulation, from GB1). Because each ε is
-  a fixed linear combination of the `ΔG` of the variants in its loop (its faces/vertices), observing
-  those `ΔG` values reduces the posterior variance of the connected ε terms — a linear-Gaussian update.
+- **Model:** each candidate variant's `ΔG(v)` carries an independent Gaussian prior `N(ΔG_hat, τ²)`
+  with `τ² = var_delta_g(v)` (the ESM masking-perturbation dispersion). Each `Interaction`'s coefficient
+  is the fixed ±1 inclusion–exclusion combination of the `ΔG` of its loop, so `σ²(ε(S)) = Σ_{T∈loop} τ²_T`
+  (independent noise, coefficient² = 1).
+- **Observations:** measuring a variant `v` reveals `ΔG(v)` exactly, collapsing its `τ²` to 0 — standard
+  linear-Gaussian conditioning at zero observation noise. Every loop that `v` braces loses that term.
 - **Loop-closure structure:** a third-order interaction `ε(i,j,k)` couples 7 variants (`{i,j,k}`,
   `{ij,ik,jk}`, `{ijk}`). Measuring members of that loop is what "braces" the term (the geodetic
   collision made literal).
+- **Submodularity (honest form):** under this independent-noise, exact-measurement model
+  `info_gain(M, v) = τ²_v · n(v)` (n(v) = number of interactions whose loop contains v), independent
+  of `M`. So `info_gain` is **modular** — a degenerate special case of submodular in which the
+  diminishing-returns inequality holds with *equality*. Greedy is therefore not merely (1 − 1/e)-near
+  optimal but *exactly* optimal for a fixed budget. This is not the general A-optimality result (which
+  is not submodular once correlated priors or observation noise enter); it is a consequence of the
+  independent-noise assumption. Correlated priors (strict submodularity) are out of scope for v1 (§11).
 
 ```python
 class EpistasisFactorGraph:
-    def __init__(self, interactions: list[Interaction], variants: list[Variant]) -> None: ...
-    def posterior_variance(self, measured: set[Variant]) -> dict[tuple[int, ...], float]: ...
-    def total_uncertainty(self, measured: set[Variant]) -> float:   # Σ σ² over interactions
+    # var_delta_g must cover every order-1..max_order candidate (bare Variant carries no dispersion).
+    def __init__(self, interactions: Sequence[Interaction],
+                 var_delta_g: Mapping[Variant, float]) -> None: ...
+    # keyed by the interaction's `mutations` tuple (unique), never by `sites` (which collides).
+    def posterior_variance(self, measured: frozenset[Variant]) -> dict[tuple[Mutation, ...], float]: ...
+    def total_uncertainty(self, measured: frozenset[Variant]) -> float:   # Σ σ² over interactions
         ...
-    def info_gain(self, measured: set[Variant], candidate: Variant) -> float:
-        # reduction in total_uncertainty from additionally measuring `candidate`
+    def info_gain(self, measured: frozenset[Variant], candidate: Variant) -> float:
+        # reduction in total_uncertainty from additionally measuring `candidate`; depends only on
+        # membership, never on any revealed fitness value (no label leakage).
         ...
 ```
 
@@ -181,7 +196,9 @@ class EpistasisFactorGraph:
 
 ## 6. Acquisition — `acquisition.py`
 
-Greedy maximisation of expected uncertainty reduction. Submodular ⇒ (1 − 1/e) near-optimal, cheap.
+Greedy maximisation of expected uncertainty reduction. Under the v1 independent-noise model
+`info_gain` is modular (§5), so greedy is *exactly* optimal for a fixed budget — cheap. The (1 − 1/e)
+submodular bound is only the fallback for a future correlated-prior model.
 
 ```
 select(graph, candidates, B, lambda_) -> Allocation:

@@ -1,6 +1,6 @@
 # Prior art & the defensible wedge
 
-Before committing three weeks, we mapped the literature around every candidate framing. This document
+Before committing to a build, we mapped the literature around every candidate framing. This document
 records what exists, what is therefore *not* novel, and the precise contribution `epibudget` claims.
 Being explicit about this is itself a credibility signal: the failure mode of a portfolio project is
 re-building something that shipped 12 months ago.

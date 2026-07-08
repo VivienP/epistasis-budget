@@ -17,7 +17,9 @@ _STUB = "[yellow]Not implemented yet[/] — this scaffold is initialised; see do
 @app.command()
 def allocate(
     fasta: str = typer.Option(..., help="Path to the wild-type sequence (FASTA)."),
-    positions: str = typer.Option(..., help="Comma-separated 1-indexed positions, e.g. 39,40,41,54."),
+    positions: str = typer.Option(
+        ..., help="Comma-separated 1-indexed positions, e.g. 39,40,41,54."
+    ),
     budget: int = typer.Option(..., help="Number of variants to select (B wells)."),
     model: str = typer.Option("esm2_t33_650M", help="ESM-2 checkpoint short name."),
     lambda_: float = typer.Option(0.0, "--lambda", help="0=info-optimal, 1=fitness-greedy."),
@@ -39,7 +41,9 @@ def validate(
     out: str = typer.Option("report/"),
 ) -> None:
     """Run the frozen GB1 benchmark (info vs fitness vs random). See docs/VALIDATION.md."""
-    console.print(f"[bold]validate[/] dataset={dataset} budgets={budgets} model={model} seeds={seeds}")
+    console.print(
+        f"[bold]validate[/] dataset={dataset} budgets={budgets} model={model} seeds={seeds}"
+    )
     console.print(_STUB)
 
 

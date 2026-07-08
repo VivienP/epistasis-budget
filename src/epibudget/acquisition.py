@@ -23,7 +23,7 @@ def allocate(
     model_id: str = "",
 ) -> Allocation:
     """Greedily select ``budget`` variants maximising blended info-gain / fitness."""
-    raise NotImplementedError("Week 2 — see docs/ROADMAP.md")
+    raise NotImplementedError("Seedocs/ROADMAP.md")
 
 
 def fitness_greedy(candidates: Sequence[ScoredVariant], budget: int) -> list[Variant]:

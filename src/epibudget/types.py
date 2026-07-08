@@ -19,7 +19,9 @@ class ScoredVariant(BaseModel):
     model_config = {"frozen": True, "arbitrary_types_allowed": True}
 
     variant: Variant
-    delta_g: float = Field(description="Conjoint conditional log-likelihood ratio vs WT (higher=fitter)")
+    delta_g: float = Field(
+        description="Conjoint conditional log-likelihood ratio vs WT (higher=fitter)"
+    )
     var_delta_g: float = Field(ge=0.0, description="Dispersion across masking perturbations")
 
 
@@ -31,7 +33,9 @@ class Interaction(BaseModel):
     sites: tuple[int, ...]
     order: int = Field(ge=2, le=3)
     epsilon_hat: float = Field(description="ESM-2-predicted, WT-referenced epistasis coefficient")
-    sigma2: float = Field(ge=0.0, description="Current uncertainty (variance) about this coefficient")
+    sigma2: float = Field(
+        ge=0.0, description="Current uncertainty (variance) about this coefficient"
+    )
 
 
 class Allocation(BaseModel):
@@ -54,6 +58,8 @@ class Config(BaseModel):
     device: str = "cpu"
     n_perturbations: int = Field(default=16, ge=1)
     max_order: int = Field(default=3, ge=2, le=3)
-    lambda_: float = Field(default=0.0, ge=0.0, le=1.0, description="0=info-optimal, 1=fitness-greedy")
+    lambda_: float = Field(
+        default=0.0, ge=0.0, le=1.0, description="0=info-optimal, 1=fitness-greedy"
+    )
     seed: int = 0
     cache_dir: Path = Path("data/cache")

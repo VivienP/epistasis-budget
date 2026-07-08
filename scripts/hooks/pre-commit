@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# epibudget pre-commit gate. Opt in with:  git config core.hooksPath scripts/hooks
+#
+# Runs the checks epibudget's credibility depends on: format, lint, types, the OFFLINE test suite
+# (including the invariant-#1 guard), and a secret scan. Tolerant of a not-yet-set-up env: a missing tool
+# warns and is skipped rather than blocking a docs-only commit before dependencies are installed. When a
+# tool IS present, its failure blocks the commit.
+set -uo pipefail
+
+fail=0
+have() { command -v "$1" >/dev/null 2>&1; }
+
+run() {  # run <label> <cmd...>; block on failure, warn if the tool is missing
+  local label="$1"; shift
+  if ! have "$1"; then echo "  [skip] $label ($1 not installed)"; return 0; fi
+  echo "  [run ] $label"
+  if ! "$@"; then echo "  [FAIL] $label"; fail=1; fi
+}
+
+echo "epibudget pre-commit:"
+
+# Forbidden-file gate: these must never be committed (git-commit-rules section 2).
+# .gitignore is the first line of defense; this blocks a `git add -f` or an already-tracked slip.
+if have git; then
+  forbidden=$(git diff --cached --name-only | grep -iE '(^|/)(CLAUDE\.md|AGENTS\.md|ROADMAP\.md|\.env($|\.)|.*\.pem$|.*\.key$)|(^|/)\.claude/' || true)
+  if [ -n "$forbidden" ]; then
+    echo "  [FAIL] forbidden file(s) staged:"; echo "$forbidden" | sed 's/^/    - /'
+    echo "         these are excluded by git-commit-rules; unstage with: git restore --staged <file>"
+    fail=1
+  fi
+fi
+
+run "ruff format --check" ruff format --check src/ tests/
+run "ruff check"          ruff check src/ tests/
+run "mypy --strict"       mypy --strict src/
+run "pytest (offline)"    pytest -q -m "not slow and not data"
+
+# Secret scan on staged content (best-effort; blocks on a likely key). The hook scripts are excluded
+# from their own scan — their detection-pattern literals (sk-…, hf_…, BEGIN PRIVATE KEY) would
+# otherwise self-trigger a false positive whenever the hook itself is staged.
+if have git; then
+  if git diff --cached -U0 -- . ':(exclude)scripts/hooks/*' | grep -nE '(sk-[A-Za-z0-9]{20,}|ANTHROPIC_API_KEY=|hf_[A-Za-z0-9]{20,}|-----BEGIN [A-Z ]*PRIVATE KEY-----)'; then
+    echo "  [FAIL] possible secret in staged diff"; fail=1
+  fi
+fi
+
+if [ "$fail" -ne 0 ]; then
+  echo "pre-commit: BLOCKED. Fix the failures above (or --no-verify only with Vivien's explicit approval)."
+  exit 1
+fi
+echo "pre-commit: OK"

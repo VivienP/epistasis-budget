@@ -67,7 +67,7 @@ disallow_any_generics = true
 plugins = ["pydantic.mypy"]
 # Third-party libs without stubs — silence import errors, keep our code strict.
 [[tool.mypy.overrides]]
-module = ["transformers.*", "torch.*", "networkx.*", "sklearn.*", "scipy.*", "matplotlib.*"]
+module = ["transformers.*", "torch.*", "networkx.*", "sklearn.*", "scipy.*", "matplotlib.*", "pandas.*"]
 ignore_missing_imports = true
 
 [tool.ruff]
@@ -77,11 +77,15 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF", "PL"]
-ignore = ["PLR0913"]  # allow many-argument scientific functions
+ignore = [
+    "PLR0913",  # allow many-argument scientific functions
+    "RUF002",   # allow mathematical Unicode (−, –, ΔG) in docstrings — the formulae are the doc
+]
 
 [tool.pytest.ini_options]
 addopts = "-q --strict-markers"
 testpaths = ["tests"]
+pythonpath = ["src"]
 markers = [
     "slow: requires ESM-2 forward passes (minutes on CPU)",
     "data: requires the ProteinGym GB1 dataset to be downloaded",

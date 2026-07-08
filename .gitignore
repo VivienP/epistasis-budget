@@ -44,6 +44,9 @@ figures/*.png
 figures/*.pdf
 !figures/.gitkeep
 
+# Generated run reports (metrics/spike JSON) — regenerated from the fetched data, never committed
+report/
+
 # OS & IDE
 .DS_Store
 Thumbs.db

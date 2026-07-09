@@ -112,7 +112,7 @@ def _fmt(value: float | None) -> str:
     return "n/a" if value is None else f"{value:+.3f}"
 
 
-_METHODS = ("info", "fitness", "random", "practice")
+_METHODS = ("info", "fitness", "structural", "random", "practice")
 
 
 def _print_validation_report(report: Report, run_dir: Path) -> None:
@@ -218,7 +218,8 @@ def validate(
     n_perturbations: int = typer.Option(16, help="Masking passes for var[ΔG] (the info prior)."),
     max_order: int = typer.Option(3, help="Max interaction order (2 or 3)."),
 ) -> None:
-    """Run the frozen GB1 benchmark (info/fitness/random, + practice). See docs/VALIDATION.md."""
+    """Run the frozen GB1 benchmark (info/fitness/structural/random/practice). See VALIDATION.md."""
+    import hashlib  # noqa: PLC0415
     from datetime import UTC, datetime  # noqa: PLC0415
 
     from epibudget.data import (  # noqa: PLC0415
@@ -231,7 +232,9 @@ def validate(
     from epibudget.scoring import ConjointScorer  # noqa: PLC0415
     from epibudget.validate import run_validation  # noqa: PLC0415
 
-    landscape = load_gb1(Path(data))
+    data_path = Path(data)
+    landscape = load_gb1(data_path)
+    data_sha256 = hashlib.sha256(data_path.read_bytes()).hexdigest()
     candidates = enumerate_candidates(
         GB1_SITES, GB1_WT_AT_SITES, allowed_aa=alphabet, max_order=max_order
     )
@@ -239,7 +242,10 @@ def validate(
         f"[bold]validate[/] scoring {len(candidates)} candidates "
         f"(alphabet={alphabet!r}) with {model} …"
     )
-    scorer = ConjointScorer(_resolve_model_id(model), n_perturbations=n_perturbations, seed=0)
+    scorer_seed = 0
+    scorer = ConjointScorer(
+        _resolve_model_id(model), n_perturbations=n_perturbations, seed=scorer_seed
+    )
     scored = scorer.score_batch(GB1_WT_SEQUENCE, candidates)
 
     run_dir = Path(out) / datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
@@ -253,6 +259,9 @@ def validate(
         dataset=dataset,
         max_order=max_order,
         candidate_alphabet=alphabet,
+        scorer_seed=scorer_seed,
+        n_perturbations=n_perturbations,
+        data_sha256=data_sha256,
     )
     _print_validation_report(report, run_dir)
 

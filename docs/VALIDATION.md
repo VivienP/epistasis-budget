@@ -60,17 +60,25 @@ These are the target coefficients the selected experiments must recover.
 - **Primary (frozen):** Spearman and Pearson correlation between inferred and ground-truth ε
   coefficients, reported per order (pairwise, third) and pooled, at **B ∈ {48, 96, 192}**. Both
   correlations are always reported (never cherry-pick one). This is the number the decision rule reads.
-- **Companion diagnostics (pre-registered, additive — never a replacement for the primary, never in the
-  decision rule):** at each B, ~0.3–0.6% of third-order terms are informed at these budgets, so the
-  full-set number is real but low-power. Alongside it we report (a) the **informed-union-subset**
-  Spearman/Pearson — the same correlation restricted to terms with `loop(T) ∩ measured ≠ ∅` for at
-  least one of the four methods, a set fixed from the *selections* only (no ground-truth peeking, no
-  per-method cherry-picking, leakage-free); and (b) **`coverage_fraction`** per method/order, so an
-  info-optimal win is auditable as breadth vs precision. We do **not** restrict by `|ε| > threshold`:
-  that builds the evaluation set from the answer key (a p-hacking vector).
-- **Pre-registered expectation:** pairwise (~1,822 terms; each order-2/3 measurement touches ≤3
-  pairwise loop members) is the better-powered, decisive comparison; a third-order null at B ∈ {48, 96}
-  is to be read as *underpowered at this order/budget*, not as "H1 false" (invariant #2).
+- **Breadth vs precision (pre-registered, additive — never a replacement for the primary, never in the
+  decision rule):** a method can score well on the full-set correlation for two very different reasons —
+  it *measured* many terms directly (breadth), or it *predicted* the unmeasured ones well (precision).
+  Info-optimal front-loads low-order variants, so it directly measures (pins) a large fraction of the
+  pairwise terms; that inflates full-set recovery for a boring reason. To separate the two we report, per
+  method/order, all fixed from the *selections* only (leakage-free, no `|ε|>threshold` answer-key
+  restriction): (a) **`coverage_fraction`** and **`n_informed`** — terms this method's selection touches;
+  (b) **`n_pinned`** — terms whose *entire* loop is measured, hence recovered *exactly* (the pure breadth
+  count); and (c) **precision correlation** (`pearson_predicted` / `spearman_predicted`) — Spearman/Pearson
+  over the terms this method *informs but does not fully pin*, i.e. where it must genuinely predict the
+  ε from the ESM prior plus partial measurements. Breadth is `n_pinned`; precision is the predicted-term
+  correlation. A real, non-tautological info-optimal advantage must show up in **precision**, not only in
+  breadth.
+- **Pre-registered expectation:** pairwise (~1,822 terms at the full alphabet; each order-2/3 measurement
+  touches ≤3 pairwise loop members) is the better-powered, decisive comparison; a third-order null at
+  B ∈ {48, 96} is to be read as *underpowered at this order/budget*, not as "H1 false" (invariant #2).
+  Because the modular `info_gain = τ²·n(v)` weight is dominated by `n(v)` (a single sits in ~1140 loops),
+  info-optimal will structurally front-load singles then doubles and may measure *no triples* at these
+  budgets — an honest, expected property to report, not hide.
 - **Secondary:** hit-rate@B (fraction of the true top-fitness variants captured) — to demonstrate that
   chasing epistasis information does not catastrophically forfeit fitness discovery.
 - **Effect size + uncertainty:** for each B, bootstrap the correlation (≥ 1000 resamples) and report the
@@ -96,9 +104,27 @@ with the same figures.
 ## Mandatory baselines
 
 Every figure and table shows **info-optimal**, **fitness-greedy**, and **random** together. Dropping a
-baseline to flatter a curve is a CLAUDE.md hard-limit violation. From v1.1, also report the real-practice
-heuristic (top beneficial singles → all pairwise, cf. MULTI-evolve) as a fourth comparison; the frozen
-decision rule below still concerns info vs fitness vs random.
+baseline to flatter a curve is a CLAUDE.md hard-limit violation. Also reported at every budget:
+
+- **practice** — the real-practice heuristic (top beneficial singles → all pairwise, cf. MULTI-evolve).
+- **structural-only** — the ablation that isolates what the ESM uncertainty prior actually contributes:
+  the same modular sort with `τ² ≡ const`, so selection ranks purely by `n(v)` (how many loops a variant
+  braces) and the ESM masking-perturbation dispersion plays no role. **If info-optimal ≈ structural-only,
+  the ESM uncertainty prior does nothing to the allocation and must be dropped from the claims; if
+  info-optimal > structural-only, that gap is the contribution.** This must be run and reported before any
+  headline framing.
+
+The frozen decision rule still concerns info vs fitness vs random; practice and structural-only are
+reported companions that determine how the result is framed.
+
+## Headline regime (pre-registered)
+
+The reduced-`--alphabet` fast pass runs in an *exhaustion regime* (small pool, so info-optimal directly
+measures most doubles) and is a smoke test only. The **headline run is frozen to the full 20-letter
+alphabet** (`pool ≫ B`: ~76 singles, ~2,166 doubles, ~27,436 triples), so at B ∈ {48, 96, 192} no method
+can trivially measure the whole map and a win cannot be an artefact of pool exhaustion. The alphabet,
+model (650M), budgets, seed count, and the baseline set above are fixed here **before** the headline
+result exists.
 
 ## Reproducibility
 

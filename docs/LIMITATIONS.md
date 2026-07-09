@@ -101,18 +101,18 @@ Each item states the constraint, its consequence, and how the code/docs handle i
 
 ## 5. Empirical (the current null)
 
-- **35M's uncertainty signal is near-noise.** The de-risk gate showed 35M's ε point estimates are weak
-  (pairwise Spearman ≈ 0.085 vs 0.30 at 650M). The *uncertainty* (`var_delta_g`) is a separate quantity,
-  but there is no reason to expect a weak-signal model to produce well-calibrated uncertainty. So a null
-  on the uncertainty prior at 35M may not transfer to 650M — which is why the uncertainty-prior
-  calibration is run at both sizes.
-
-- **On the 35M smoke, the structural-only baseline beats info-optimal.** Ranking by `n(v)` alone (τ²≡const)
-  recovers the pairwise map *better* than ranking by `var_delta_g·n(v)` (B=96 Spearman 0.97 vs 0.76), and
-  info-optimal never wins on precision. Read literally, **the ESM zero-shot uncertainty prior does not
-  help the allocation — it slightly hurts.** This is a pre-registered ablation result, not a
-  post-hoc excuse. It is likely (not certain) to hold at 650M; confirming it there is compute-bound here,
-  so the mechanistic proxy (does σ² correlate with real prediction error?) stands in for the full run.
+- **The ESM zero-shot uncertainty prior is a confirmed null, at both model sizes.** Two consistent
+  pieces of evidence: (a) on the fast-model smoke, the structural-only baseline (`τ²≡const`, rank by
+  `n(v)`) recovers the pairwise map *better* than info-optimal (`var_delta_g·n(v)`) — B=96 Spearman 0.97
+  vs 0.76 — and info-optimal never wins on precision; (b) the uncertainty-prior calibration shows
+  `var_delta_g` does **not** correlate with the model's actual per-variant prediction error —
+  Spearman(σ², |error|) = **+0.139 at 35M and +0.036 at 650M** (n=150). The masking-perturbation
+  dispersion therefore does not track where the model is wrong, so it cannot be a useful acquisition
+  signal — the mechanistic root of the ablation result. **Moving to 650M does not rescue the prior; if
+  anything the calibration is weaker there.** This is a pre-registered ablation plus a mechanistic
+  calibration, not a post-hoc excuse. Caveat: n=150 for the calibration, and the full 650M `pool ≫ B`
+  ablation is compute-bound (§1) rather than run — but +0.036 is close enough to zero that it is very
+  unlikely to become a usable signal at scale.
 
 ## 6. Statistical power & protocol scope
 

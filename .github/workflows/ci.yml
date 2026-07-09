@@ -1,0 +1,38 @@
+name: ci
+
+# Mirror of the local pre-commit gate (scripts/hooks/pre-commit): the same offline checks, run in the
+# shared GitHub environment so a clone, a --no-verify on another machine, or a contributor cannot land
+# lint/type/test regressions silently. Keep this a MIRROR — the same commands, never a superset — so
+# local and CI cannot diverge. Offline only: no ESM-2 download, no data fetch (the slow/data markers stay
+# excluded, matching the offline-tests skill).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: python -m pip install -e ".[dev]"
+
+      - name: ruff format --check
+        run: ruff format --check src/ tests/
+
+      - name: ruff check
+        run: ruff check src/ tests/
+
+      - name: mypy --strict
+        run: mypy --strict src/
+
+      - name: pytest (offline)
+        run: pytest -q -m "not slow and not data"

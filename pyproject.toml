@@ -23,10 +23,8 @@ keywords = [
 # Runtime dependencies. Pinned loosely; lock in a follow-up once the demo is green.
 dependencies = [
     "numpy>=1.26",
-    "scipy>=1.13",
-    "scikit-learn>=1.5",
-    "pandas>=2.2",
-    "networkx>=3.3",
+    "scipy>=1.13",          # correlations + bootstrap in the validation harness
+    "pandas>=2.2",          # GB1 CSV loading
     "torch>=2.3",           # CPU wheels are fine; no dedicated GPU required
     "transformers>=4.44",   # ESM-2 via facebook/esm2_* checkpoints
     "typer>=0.12",          # CLI
@@ -67,7 +65,7 @@ disallow_any_generics = true
 plugins = ["pydantic.mypy"]
 # Third-party libs without stubs — silence import errors, keep our code strict.
 [[tool.mypy.overrides]]
-module = ["transformers.*", "torch.*", "networkx.*", "sklearn.*", "scipy.*", "matplotlib.*", "pandas.*"]
+module = ["transformers.*", "torch.*", "scipy.*", "matplotlib.*", "pandas.*"]
 ignore_missing_imports = true
 
 [tool.ruff]

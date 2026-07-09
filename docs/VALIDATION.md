@@ -41,28 +41,55 @@ These are the target coefficients the selected experiments must recover.
    sees any measured fitness during selection.
 2. `reveal_measured_fitness(selected)` looks up the true GB1 fitness of exactly those `B` variants
    (this is the simulated wet-lab readout — the only place labels enter).
-3. `infer_epistasis(revealed)` fits the epistasis coefficients from just those `B` measurements
-   (regularised least squares over the interaction basis; optionally cross-checked against a MoCHI-style
-   fit).
+3. `infer_epistasis(revealed)` fits the epistasis coefficients from just those `B` measurements. This
+   precisifies "regularised least squares over the interaction basis" as the closed-form **posterior
+   mean** of the graph.py linear-Gaussian model: a measured variant pins its ΔG; every unmeasured loop
+   member keeps its unit-calibrated ESM prior mean (a Tikhonov estimator with prior mean = the
+   calibrated ESM ΔĜ and precision = 1/`var_delta_g`). This is chosen over a zero-shrinkage ridge on
+   the measured data alone because the frozen `info_gain` weight `τ²·n(v)` front-loads low-order
+   variants (a single sits in ~1140 interaction loops); a zero-shrinkage fit would grade info-optimal's
+   own top picks as recovering nothing (an all-zero, undefined-correlation map). The posterior mean
+   keeps selection and grading on **one coherent model**, and real GB1 fitness stays the external
+   referee, so info-optimal can still lose. The same estimator runs on every method; only `revealed`
+   differs.
 4. `map_recovery(inferred, truth)` = correlation between inferred and true ε over all pairwise +
    third-order terms.
 
 ## Metrics
 
-- **Primary:** Spearman and Pearson correlation between inferred and ground-truth ε coefficients,
-  reported per order (pairwise, third) and pooled, at **B ∈ {48, 96, 192}**.
+- **Primary (frozen):** Spearman and Pearson correlation between inferred and ground-truth ε
+  coefficients, reported per order (pairwise, third) and pooled, at **B ∈ {48, 96, 192}**. Both
+  correlations are always reported (never cherry-pick one). This is the number the decision rule reads.
+- **Companion diagnostics (pre-registered, additive — never a replacement for the primary, never in the
+  decision rule):** at each B, ~0.3–0.6% of third-order terms are informed at these budgets, so the
+  full-set number is real but low-power. Alongside it we report (a) the **informed-union-subset**
+  Spearman/Pearson — the same correlation restricted to terms with `loop(T) ∩ measured ≠ ∅` for at
+  least one of the four methods, a set fixed from the *selections* only (no ground-truth peeking, no
+  per-method cherry-picking, leakage-free); and (b) **`coverage_fraction`** per method/order, so an
+  info-optimal win is auditable as breadth vs precision. We do **not** restrict by `|ε| > threshold`:
+  that builds the evaluation set from the answer key (a p-hacking vector).
+- **Pre-registered expectation:** pairwise (~1,822 terms; each order-2/3 measurement touches ≤3
+  pairwise loop members) is the better-powered, decisive comparison; a third-order null at B ∈ {48, 96}
+  is to be read as *underpowered at this order/budget*, not as "H1 false" (invariant #2).
 - **Secondary:** hit-rate@B (fraction of the true top-fitness variants captured) — to demonstrate that
   chasing epistasis information does not catastrophically forfeit fitness discovery.
 - **Effect size + uncertainty:** for each B, bootstrap the correlation (≥ 1000 resamples) and report the
-  95% CI. Random baseline averaged over ≥ 20 seeds with its own CI.
+  95% CI (`ci_method = "bootstrap-over-terms"` for the deterministic methods). The random baseline is
+  averaged over ≥ 20 seeds with its own CI (`ci_method = "bootstrap-over-seeds"`, its genuine
+  selection variance).
 
 ## Decision rule (frozen)
 
-For H1 to be reported as **supported**, at a majority of the tested budgets:
+The decision reads **one fixed statistic**, named before any result exists: the **pairwise-order
+Spearman AND pairwise-order Pearson** map-recovery correlation. (Pairwise is the better-powered order at
+these budgets; pooling orders can be distorted by between-order separation, so pooled is a companion,
+not the headline.) For H1 to be reported as **supported**, on that statistic, at a majority of the
+tested budgets:
 
-- `map_recovery(info) − map_recovery(fitness) > 0` with non-overlapping bootstrap 95% CIs, **and**
-- `map_recovery(info) > map_recovery(random)` with non-overlapping CIs.
+- `recovery(info) − recovery(fitness) > 0` with non-overlapping bootstrap 95% CIs, **and**
+- `recovery(info) > recovery(random)` with non-overlapping CIs.
 
+Both correlations must move the same way; a split (one supports, one does not) is reported as partial.
 Otherwise the report headline is the observed relationship (partial, null, or negative), stated plainly,
 with the same figures.
 
@@ -76,8 +103,12 @@ decision rule below still concerns info vs fitness vs random.
 ## Reproducibility
 
 - One command: `epibudget validate --dataset gb1_wu2016 --budgets 48,96,192 --seeds 20 --out report/`.
-- The run writes `report/<run_id>/metrics.json` (one row per method × budget, with CIs) plus figures.
-  Every claim in the README or docs must trace to a `metrics.json` that exists — this is the artifact.
+  For a tractable fast-model first pass, `--alphabet` restricts the per-site candidate set (recorded in
+  the report's provenance); the full 20-letter alphabet is the headline.
+- The run writes `report/<run_id>/metrics.json` (one row per method × budget, with per-order
+  correlations, CIs, and coverage) and prints a rich summary; the figures are rendered by
+  `notebooks/gb1_demo.ipynb` from that JSON. Every claim in the README or docs must trace to a
+  `metrics.json` that exists — this is the artifact.
 - Every run embeds `(model_id, seed, config, data checksum)` in the report.
 - CI runs the same pipeline on the **35M** model over a reduced budget grid as a smoke test; the
   headline figure uses **650M**. A reproducible Jupyter notebook (`notebooks/gb1_demo.ipynb`) renders the

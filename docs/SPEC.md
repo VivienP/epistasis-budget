@@ -196,30 +196,29 @@ class EpistasisFactorGraph:
 
 ## 6. Acquisition — `acquisition.py`
 
-Greedy maximisation of expected uncertainty reduction. Under the v1 independent-noise model
-`info_gain` is modular (§5), so greedy is *exactly* optimal for a fixed budget — cheap. The (1 − 1/e)
-submodular bound is only the fallback for a future correlated-prior model.
+Maximisation of expected uncertainty reduction. Under the v1 independent-noise model `info_gain` is
+modular (§5) — the per-candidate weight `info[v] = graph.info_gain(∅, v)` does not depend on what has
+already been selected — so there is no iterative greedy loop: `allocate` is a single stable sort.
 
 ```
-select(graph, candidates, B, lambda_) -> Allocation:
-    measured = {}                      # already-selected variants
-    order    = []
-    gains    = []
-    for _ in range(B):
-        best, best_score = None, -inf
-        for v in candidates - measured:
-            info = graph.info_gain(measured, v)                 # exploration (epistasis info)
-            fit  = normalized_fitness(v)                        # exploitation (predicted ΔG)
-            score = (1 - lambda_) * info + lambda_ * fit
-            if score > best_score: best, best_score = v, score
-        measured.add(best); order.append(best); gains.append(graph.info_gain(prev, best))
-    return Allocation(selected=order, expected_info_gain=gains, ...)
+allocate(graph, candidates, B, lambda_) -> Allocation:
+    info = {v: graph.info_gain(frozenset(), v) for v in candidates}   # fixed, modular
+    if   lambda_ == 1.0: ranked = sort candidates by delta_g        desc   # == fitness_greedy exactly
+    elif lambda_ == 0.0: ranked = sort candidates by info[v]        desc   # pure info-optimal
+    else:                ranked = sort candidates by
+                                  (1-lambda_)·minmax(info) + lambda_·minmax(delta_g) desc
+    selected = ranked[:B]
+    return Allocation(selected=selected,
+                      expected_info_gain=[info[v] for v in selected],   # RAW info_gain, never blended
+                      ...)
 ```
 
-- `lambda_ = 0.0` → pure information-optimal (the thesis).
-- `lambda_ = 1.0` → pure fitness-greedy (the baseline to beat; the current-practice control).
-- Intermediate → the exploitation/exploration slider.
-- Optional lazy-greedy (priority queue on marginal gains) for speed; identical result by submodularity.
+- `lambda_ = 0.0` → pure information-optimal (the thesis); `1.0` → fitness-greedy (the control).
+- The λ∈{0,1} endpoints are special-cased to bypass the min-max normalisation (which is 0/0 when a
+  score is constant across the pool), so `lambda_=1` reproduces `fitness_greedy` as an ordered list.
+- `expected_info_gain` is always the raw `info_gain` of each selected variant, never the blended score.
+- Because `info_gain` is modular, this exact single sort *is* greedy; the (1 − 1/e) submodular bound and
+  the lazy-greedy priority queue are only relevant for a future correlated-prior model.
 
 ---
 
@@ -269,8 +268,9 @@ epibudget score   --fasta FILE --variants variants.csv        # debug: dump conj
 ```
 
 `allocate` prints a rich table (rank, variant, order, ΔG, marginal info gain) and writes
-`Allocation` JSON. `validate` writes `report/<run_id>/metrics.json` (the metric table, one row per
-method × budget) plus figures to the `--out` directory. Any empirical claim must trace to a
+`Allocation` JSON. `validate` writes `report/<run_id>/metrics.json` (one row per method × budget, with
+per-order correlations, CIs, and coverage) and prints a rich summary; the figures are rendered
+separately by `notebooks/gb1_demo.ipynb` from that JSON. Any empirical claim must trace to a
 `metrics.json` written by this command.
 
 ---

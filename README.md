@@ -7,8 +7,8 @@
 fitness landscape. It is zero-shot (ESM-2), runs on a CPU, and is validated end-to-end on the complete
 GB1 landscape.
 
-> Status: initialised — spec and validation protocol frozen, implementation in progress.
-> See [`docs/SPEC.md`](docs/SPEC.md) and [`docs/ROADMAP.md`](docs/ROADMAP.md).
+> Status: de-risk gate passed; scoring, epistasis graph, allocation, and the GB1 harness shipped. The
+> 650M headline recovery run is pending. See [`docs/SPEC.md`](docs/SPEC.md), [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ---
 
@@ -27,9 +27,9 @@ variants to synthesise are the ones that *close epistatic loops* — the double 
 measured effect most tightens the model's uncertainty about the higher-order interaction terms.
 
 `epibudget` builds a factor graph over candidate mutations, seeds each interaction with an
-ESM-2-derived uncertainty, and greedily selects the *B* variants that maximise total expected
-reduction in epistasis uncertainty. A single slider (`--lambda`) trades this exploration against
-plain fitness exploitation.
+ESM-2-derived uncertainty, and ranks the *B* variants by a fixed weight — each variant's ESM
+uncertainty times the number of epistatic loops it braces. A single slider (`--lambda`) trades this
+exploration against plain fitness exploitation.
 
 ## Where it sits (and where it doesn't)
 
@@ -66,6 +66,18 @@ the ground-truth coefficients from the full landscape, at *B* ∈ {48, 96, 192},
 and random baselines. If the effect is weak or absent, the repo says so — it ships as a rigorous audit
 of information-optimal DMS design, not a silent win. See [`docs/VALIDATION.md`](docs/VALIDATION.md).
 
+## Result
+
+**De-risk gate: passed.** On real GB1, ESM-2 conjoint ε correlates with the measured ε (650M model,
+pairwise Spearman ≈ 0.30, third-order ≈ 0.25; [`docs/STEP1_GATE.md`](docs/STEP1_GATE.md)) — the signal
+the method rests on is measured, not assumed.
+
+**Headline recovery comparison: pending.** The frozen run (info-optimal vs fitness-greedy vs random, at
+the full 20-letter alphabet, 650M, *B* ∈ {48, 96, 192}) has not been executed. Its decision rule,
+baselines (including a `structural-only` ablation that isolates what the ESM uncertainty prior actually
+adds), and the breadth-vs-precision reporting are frozen in [`docs/VALIDATION.md`](docs/VALIDATION.md)
+before that run — win or null.
+
 ## How it works (3 steps)
 
 1. **Conjoint ESM-2 scoring.** Each candidate variant is scored by mutating *all* its positions onto
@@ -73,9 +85,10 @@ of information-optimal DMS design, not a silent win. See [`docs/VALIDATION.md`](
    appears (additive per-site scoring would make every interaction term identically zero).
 2. **Epistasis factor graph.** Nodes = candidate mutations, edges = pairs, hyper-edges = triplets. Each
    interaction ε gets an uncertainty seeded from ESM-2 masking-perturbation dispersion.
-3. **Information-optimal allocation.** Greedy submodular selection of the *B* variants that maximise
-   total expected reduction in epistasis uncertainty (a BALD-style, variance-reduction acquisition),
-   optionally blended with fitness via `--lambda`.
+3. **Information-optimal allocation.** Under the v1 independent-noise model the variance-reduction
+   objective is modular, so allocation is an exact sort of the *B* variants by ESM-uncertainty ×
+   loops-braced (the correlated-prior, strictly-submodular form is future work), optionally blended
+   with fitness via `--lambda`.
 
 Full math and pseudocode: [`docs/SPEC.md`](docs/SPEC.md). Background on epistasis, the Walsh-Hadamard
 formalism, and why this is well-posed: [`docs/RESEARCH_EPISTASIS.md`](docs/RESEARCH_EPISTASIS.md).

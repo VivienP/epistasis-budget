@@ -10,6 +10,7 @@ from __future__ import annotations
 
 __version__ = "0.1.0"
 
+from epibudget.acquisition import allocate, fitness_greedy
 from epibudget.epistasis import (
     epsilon_pairwise,
     epsilon_third,
@@ -19,6 +20,7 @@ from epibudget.epistasis import (
 )
 from epibudget.graph import EpistasisFactorGraph
 from epibudget.types import Allocation, Interaction, Mutation, ScoredVariant, Variant
+from epibudget.validate import infer_epistasis, map_recovery, run_validation
 
 __all__ = [
     "Allocation",
@@ -28,9 +30,14 @@ __all__ = [
     "ScoredVariant",
     "Variant",
     "__version__",
+    "allocate",
     "epsilon_pairwise",
     "epsilon_third",
+    "fitness_greedy",
     "ground_truth_epistasis",
+    "infer_epistasis",
+    "map_recovery",
     "predicted_epistasis",
+    "run_validation",
     "wht_spectrum",
 ]

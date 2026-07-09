@@ -6,7 +6,9 @@ input-parsing helpers are, which is where the surprising failure modes (indexing
 
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
+from math import exp
 from pathlib import Path
 
 import pytest
@@ -14,8 +16,16 @@ from typer.testing import CliRunner
 
 from epibudget import scoring
 from epibudget.cli import app, parse_variant, read_fasta_sequence, read_variant_specs
-from epibudget.data import GB1_WT_SEQUENCE
+from epibudget.data import (
+    GB1_SITES,
+    GB1_WT_AT_SITES,
+    GB1_WT_SEQUENCE,
+    apply_mutations,
+    enumerate_candidates,
+)
 from epibudget.types import ScoredVariant, Variant
+
+_ALLOC_BUDGET = 4
 
 
 def test_read_fasta_sequence_concatenates_body_and_drops_header(tmp_path: Path) -> None:
@@ -117,3 +127,84 @@ def test_score_command_runs_offline_with_a_stubbed_scorer(
     assert result.exit_code == 0, result.output
     assert "single" in result.output  # one row per spec, labelled by order
     assert "double" in result.output
+
+
+def test_allocate_command_runs_offline_and_writes_json(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(scoring, "ConjointScorer", _FakeScorer)
+    fasta = tmp_path / "wt.fasta"
+    fasta.write_text(">toy\nADG\n", encoding="utf-8")  # WT residues A/D/G at positions 1..3
+    out = tmp_path / "allocation.json"
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "allocate",
+            "--fasta",
+            str(fasta),
+            "--positions",
+            "1,2,3",
+            "--budget",
+            "4",
+            "--alphabet",
+            "ACG",
+            "--out",
+            str(out),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    written = json.loads(out.read_text(encoding="utf-8"))
+    assert written["budget"] == _ALLOC_BUDGET
+    assert len(written["selected"]) == _ALLOC_BUDGET
+
+
+def _write_gb1_csv(path: Path, variants: list[Variant]) -> None:
+    """Write a minimal GB1-format CSV (protein sequence, label) with a non-additive landscape."""
+
+    def true_dg(variant: Variant) -> float:
+        sites = {pos for pos, _, _ in variant}
+        value = 0.5 * len(sites)
+        if {GB1_SITES[0], GB1_SITES[1]} <= sites:
+            value += 0.8  # a genuine pairwise interaction ⇒ Var[ε] > 0
+        return value
+
+    rows = [(GB1_WT_SEQUENCE, 1.0)]
+    rows += [(apply_mutations(GB1_WT_SEQUENCE, v), exp(true_dg(v))) for v in variants]
+    lines = ["protein,label"] + [f"{seq},{label}" for seq, label in rows]
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def test_validate_command_runs_offline_and_writes_metrics(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(scoring, "ConjointScorer", _FakeScorer)
+    monkeypatch.setattr("epibudget.validate._N_BOOTSTRAP", 30)  # keep the offline run snappy
+
+    candidates = enumerate_candidates(GB1_SITES, GB1_WT_AT_SITES, allowed_aa="AC", max_order=3)
+    csv = tmp_path / "gb1.csv"
+    _write_gb1_csv(csv, candidates)
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "validate",
+            "--data",
+            str(csv),
+            "--alphabet",
+            "AC",
+            "--budgets",
+            "4",
+            "--seeds",
+            "2",
+            "--out",
+            str(tmp_path / "report"),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    runs = list((tmp_path / "report").iterdir())
+    assert len(runs) == 1  # one run directory created
+    written = json.loads((runs[0] / "metrics.json").read_text(encoding="utf-8"))
+    assert written["var_epsilon"] > 0.0
+    assert written["candidate_alphabet"] == "AC"
+    assert {r["method"] for r in written["results"]} == {"info", "fitness", "random", "practice"}

@@ -31,14 +31,16 @@ from epibudget.validate import (
     practice_heuristic,
     random_selection,
     run_validation,
+    structural_graph,
 )
 
 _SITES = (0, 1, 2)
 _ALPHABET = "ACG"  # WT 'A' + two mutants per site
-_N_METHODS = 4
+_N_METHODS = 5  # info, fitness, structural, practice, random
 _RANDOM_B = 5
 _PRACTICE_B = 6
 _PAIR_ORDER = 2
+_TRIPLE_ORDER = 3
 
 
 def _pool() -> list[ScoredVariant]:
@@ -120,7 +122,7 @@ def test_map_recovery_is_perfect_when_inferred_equals_truth() -> None:
     pool = _pool()
     inferred = predicted_epistasis(pool)
     truth = {i.mutations: i.epsilon_hat for i in inferred}  # inferred == truth by construction
-    metrics = map_recovery(inferred, truth, frozenset(), frozenset(truth), with_ci=False)
+    metrics = map_recovery(inferred, truth, frozenset(), with_ci=False)
     pooled = next(m for m in metrics if m.order == "pooled")
     assert pooled.pearson == pytest.approx(1.0)
     assert pooled.spearman == pytest.approx(1.0)
@@ -172,7 +174,7 @@ def test_run_validation_end_to_end_writes_a_real_report(
     assert report.var_epsilon > 0.0  # invariant #1 sanity: the true map is non-additive
     assert len(report.results) == _N_METHODS * len(budgets)
     methods = {r.method for r in report.results}
-    assert methods == {"info", "fitness", "random", "practice"}
+    assert methods == {"info", "fitness", "structural", "random", "practice"}
     for r in report.results:
         assert {m.order for m in r.metrics} == {"pairwise", "third", "pooled"}
         assert 0.0 <= r.hit_rate <= 1.0
@@ -243,7 +245,34 @@ def test_selectors_expose_no_measured_fitness_parameter() -> None:
         assert not (params & {"landscape", "fitness", "labels", "measured"})
 
 
-def test_order_metric_reports_coverage_and_informed_correlation() -> None:
-    # The informed-subset + coverage diagnostics must be present on every OrderMetric.
+def test_order_metric_reports_breadth_and_precision() -> None:
+    # The breadth (coverage / n_pinned) and precision (predicted-term correlation) split must exist.
     fields = set(OrderMetric.model_fields)
-    assert {"coverage_fraction", "pearson_informed", "spearman_informed", "n_informed"} <= fields
+    assert {
+        "coverage_fraction",
+        "n_informed",
+        "n_pinned",
+        "pearson_predicted",
+        "spearman_predicted",
+    } <= fields
+
+
+def test_structural_baseline_ranks_by_loop_count_ignoring_var_delta_g() -> None:
+    # With τ²≡const the structural info-gain is n(v): a single (in ~all loops) outranks a triple.
+    pool = _pool()
+    graph = structural_graph(pool)
+    single = next(sv.variant for sv in pool if len(sv.variant) == 1)
+    triple = next(sv.variant for sv in pool if len(sv.variant) == _TRIPLE_ORDER)
+    assert graph.info_gain(frozenset(), single) > graph.info_gain(frozenset(), triple)
+
+
+def test_breadth_and_precision_split_counts_pinned_vs_predicted() -> None:
+    # A fully-measured pairwise loop pins that term (exact); a partially-touched term is predicted.
+    pool = _pool()
+    mi, mj, mk = (0, "A", "C"), (1, "A", "C"), (2, "A", "C")
+    measured = frozenset({frozenset({mi}), frozenset({mj}), frozenset({mi, mj}), frozenset({mk})})
+    inferred = infer_epistasis({v: 0.5 for v in measured}, pool)
+    truth = {i.mutations: i.epsilon_hat for i in inferred}
+    pairwise = next(m for m in map_recovery(inferred, truth, measured) if m.order == "pairwise")
+    assert pairwise.n_pinned >= 1  # (mi,mj) is fully pinned
+    assert pairwise.n_informed > pairwise.n_pinned  # (mi,mk)/(mj,mk) informed but not pinned

@@ -207,4 +207,10 @@ def test_validate_command_runs_offline_and_writes_metrics(
     written = json.loads((runs[0] / "metrics.json").read_text(encoding="utf-8"))
     assert written["var_epsilon"] > 0.0
     assert written["candidate_alphabet"] == "AC"
-    assert {r["method"] for r in written["results"]} == {"info", "fitness", "random", "practice"}
+    assert {r["method"] for r in written["results"]} == {
+        "info",
+        "fitness",
+        "structural",
+        "random",
+        "practice",
+    }

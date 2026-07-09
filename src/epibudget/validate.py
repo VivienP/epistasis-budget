@@ -47,11 +47,13 @@ Term = tuple[Mutation, ...]
 
 
 class OrderMetric(BaseModel):
-    """Recovery for one interaction order (or pooled): correlations, CIs, coverage.
+    """Recovery for one order (or pooled): the primary correlation plus a breadth/precision split.
 
-    ``coverage_fraction`` / ``n_informed`` count terms this method's selection informs (breadth).
-    ``pearson_informed`` / ``spearman_informed`` are over the *shared* union subset (fixed across
-    methods, so those correlations stay comparable).
+    ``coverage_fraction`` / ``n_informed`` count terms this method's selection touches. ``n_pinned``
+    counts terms whose *entire* loop is measured — recovered exactly (the breadth signal).
+    ``pearson_predicted`` / ``spearman_predicted`` are over terms the method informs but does not
+    fully pin, where it must genuinely predict ε (the precision signal). A non-tautological
+    info-optimal advantage must appear in precision, not only breadth.
     """
 
     order: str  # "pairwise" | "third" | "pooled"
@@ -60,11 +62,11 @@ class OrderMetric(BaseModel):
     spearman: float | None
     pearson_ci95: tuple[float, float] | None
     spearman_ci95: tuple[float, float] | None
-    n_informed: int  # per-method: terms informed by this method's selection
-    coverage_fraction: float  # per-method: n_informed / n_terms
-    n_informed_union: int  # size of the shared informed-union subset (context)
-    pearson_informed: float | None  # over the shared informed-union subset
-    spearman_informed: float | None
+    n_informed: int  # terms this method's selection touches (loop ∩ measured ≠ ∅)
+    coverage_fraction: float  # n_informed / n_terms
+    n_pinned: int  # terms whose full loop is measured (recovered exactly) — breadth
+    pearson_predicted: float | None  # over informed-but-not-pinned terms — precision
+    spearman_predicted: float | None
 
 
 class MethodResult(BaseModel):
@@ -78,9 +80,14 @@ class MethodResult(BaseModel):
 class Report(BaseModel):
     dataset: str
     model_id: str
-    seeds: int
+    seeds: int  # random-baseline seed count
     budgets: list[int]
-    candidate_alphabet: str  # provenance: the per-site alphabet the candidate pool was drawn from
+    # Provenance — every run embeds enough to reproduce it (docs/VALIDATION.md §Reproducibility).
+    candidate_alphabet: str  # the per-site alphabet the candidate pool was drawn from
+    scorer_seed: int  # the ConjointScorer seed (deterministic var_delta_g)
+    n_perturbations: int  # masking passes behind var_delta_g
+    max_order: int
+    data_sha256: str  # checksum of the dataset the landscape/truth came from
     n_candidates: int
     n_truth_terms: int
     var_epsilon: float  # invariant #1 sanity: must be > 0
@@ -190,6 +197,11 @@ def _informed(term: Term, measured: frozenset[Variant]) -> bool:
     return any(member in measured for member in interaction_loop(term))
 
 
+def _pinned(term: Term, measured: frozenset[Variant]) -> bool:
+    """True iff every loop member of ``term`` was measured — its ε is then recovered exactly."""
+    return all(member in measured for member in interaction_loop(term))
+
+
 def _order_label(order: int) -> str:
     return "pairwise" if order == _PAIRWISE_ORDER else "third"
 
@@ -198,22 +210,23 @@ def _order_metric(
     order_name: str,
     rows: list[tuple[Term, float, float]],
     measured: frozenset[Variant],
-    informed_union: frozenset[Term],
     seed: int,
     with_ci: bool,
 ) -> OrderMetric:
-    """Build one OrderMetric from (term, inferred, true) rows for a given order (or pooled)."""
+    """Build one OrderMetric from (term, inferred, true) rows, with the breadth/precision split."""
     pred = np.array([r[1] for r in rows], dtype=np.float64)
     true = np.array([r[2] for r in rows], dtype=np.float64)
     pearson, spearman = _corr(pred, true)
     pearson_ci = _bootstrap_ci(pred, true, "pearson", seed) if with_ci else None
     spearman_ci = _bootstrap_ci(pred, true, "spearman", seed + 1) if with_ci else None
 
-    n_covered = sum(1 for r in rows if _informed(r[0], measured))  # this method's own coverage
-    union_rows = [r for r in rows if r[0] in informed_union]  # the shared comparable subset
-    up = np.array([r[1] for r in union_rows], dtype=np.float64)
-    ut = np.array([r[2] for r in union_rows], dtype=np.float64)
-    pearson_inf, spearman_inf = _corr(up, ut)
+    n_covered = sum(1 for r in rows if _informed(r[0], measured))
+    n_pinned = sum(1 for r in rows if _pinned(r[0], measured))
+    # Precision: terms informed but NOT fully pinned — the method had to predict, not just read off.
+    predicted = [r for r in rows if _informed(r[0], measured) and not _pinned(r[0], measured)]
+    pp = np.array([r[1] for r in predicted], dtype=np.float64)
+    pt = np.array([r[2] for r in predicted], dtype=np.float64)
+    pearson_pred, spearman_pred = _corr(pp, pt)
 
     return OrderMetric(
         order=order_name,
@@ -224,9 +237,9 @@ def _order_metric(
         spearman_ci95=spearman_ci,
         n_informed=n_covered,
         coverage_fraction=n_covered / len(rows) if rows else 0.0,
-        n_informed_union=len(union_rows),
-        pearson_informed=pearson_inf,
-        spearman_informed=spearman_inf,
+        n_pinned=n_pinned,
+        pearson_predicted=pearson_pred,
+        spearman_predicted=spearman_pred,
     )
 
 
@@ -234,14 +247,12 @@ def map_recovery(
     inferred: Sequence[Interaction],
     truth_by_term: Mapping[Term, float],
     measured: frozenset[Variant],
-    informed_union: frozenset[Term],
     seed: int = 0,
     with_ci: bool = True,
 ) -> list[OrderMetric]:
     """Per-order and pooled recovery of inferred ε̂ vs ground-truth ε over the evaluated terms.
 
-    ``measured`` is this method's selection (drives per-method coverage); ``informed_union`` is the
-    shared subset (fixed across methods) for the comparable informed-subset correlation.
+    ``measured`` is this method's (live) selection, driving the per-method breadth/precision split.
     """
     rows_by_order: dict[str, list[tuple[Term, float, float]]] = {"pairwise": [], "third": []}
     for interaction in inferred:
@@ -260,7 +271,7 @@ def map_recovery(
         ("third", rows_by_order["third"]),
         ("pooled", pooled),
     ):
-        metrics.append(_order_metric(name, rows, measured, informed_union, seed, with_ci))
+        metrics.append(_order_metric(name, rows, measured, seed, with_ci))
     return metrics
 
 
@@ -313,6 +324,18 @@ def practice_heuristic(candidates: Sequence[ScoredVariant], budget: int) -> list
     return [frozenset(p) for p in ranked[:budget]]
 
 
+def structural_graph(scored: Sequence[ScoredVariant], max_order: int = 3) -> EpistasisFactorGraph:
+    """A factor graph with τ² ≡ 1, so ``info_gain(∅, v) = n(v)`` — the structural-only ablation.
+
+    Ranking by this weight ignores the ESM masking-perturbation dispersion: it selects by how many
+    interaction loops a variant braces. If info-optimal (which uses the real τ²) does not beat
+    selection by this graph, the ESM uncertainty prior contributes nothing to the allocation.
+    """
+    return EpistasisFactorGraph(
+        predicted_epistasis(scored, max_order), {sv.variant: 1.0 for sv in scored}
+    )
+
+
 def hit_rate(selected: Sequence[Variant], fitness: Mapping[Variant, float], budget: int) -> float:
     """Fraction of the true top-``budget`` fitness variants (over the candidate universe) captured.
 
@@ -351,6 +374,9 @@ def run_validation(
     dataset: str = "gb1_wu2016",
     max_order: int = 3,
     candidate_alphabet: str = "",
+    scorer_seed: int = 0,
+    n_perturbations: int = 0,
+    data_sha256: str = "",
 ) -> Report:
     """Execute the frozen protocol and write ``<out_dir>/metrics.json``. See docs/VALIDATION.md.
 
@@ -370,6 +396,7 @@ def run_validation(
     graph = EpistasisFactorGraph(
         predicted_epistasis(scored, max_order), {sv.variant: sv.var_delta_g for sv in scored}
     )
+    structural = structural_graph(scored, max_order)  # τ² ≡ const ablation
     candidate_fitness = _candidate_fitness(scored, landscape)
 
     results: list[MethodResult] = []
@@ -377,27 +404,15 @@ def run_validation(
         deterministic = {
             "info": allocate(graph, scored, budget, lambda_=0.0).selected,
             "fitness": fitness_greedy(scored, budget),
+            "structural": allocate(structural, scored, budget, lambda_=0.0).selected,
             "practice": practice_heuristic(scored, budget),
         }
         random_sels = [random_selection(scored, budget, s) for s in range(seeds)]
 
-        # "measured" = the LIVE (non-dead) variants a method reveals: what the posterior uses.
-        det_measured = {
-            m: frozenset(_measured_dg(landscape, sel)) for m, sel in deterministic.items()
-        }
-        random_measured = [frozenset(_measured_dg(landscape, sel)) for sel in random_sels]
-        informed_union = frozenset(
-            term
-            for term in term_set
-            if any(_informed(term, m) for m in (*det_measured.values(), *random_measured))
-        )
-
         for method, selected in deterministic.items():
             measured_dg = _measured_dg(landscape, selected)
             inferred = infer_epistasis(measured_dg, scored, max_order)
-            metrics = map_recovery(
-                inferred, truth_by_term, det_measured[method], informed_union, seed=budget
-            )
+            metrics = map_recovery(inferred, truth_by_term, frozenset(measured_dg), seed=budget)
             results.append(
                 MethodResult(
                     method=method,
@@ -410,15 +425,7 @@ def run_validation(
 
         results.append(
             _random_result(
-                random_sels,
-                random_measured,
-                scored,
-                landscape,
-                truth_by_term,
-                informed_union,
-                candidate_fitness,
-                budget,
-                max_order,
+                random_sels, scored, landscape, truth_by_term, candidate_fitness, budget, max_order
             )
         )
 
@@ -428,6 +435,10 @@ def run_validation(
         seeds=seeds,
         budgets=list(budgets),
         candidate_alphabet=candidate_alphabet,
+        scorer_seed=scorer_seed,
+        n_perturbations=n_perturbations,
+        max_order=max_order,
+        data_sha256=data_sha256,
         n_candidates=len(scored),
         n_truth_terms=len(truth_by_term),
         var_epsilon=var_epsilon,
@@ -439,11 +450,9 @@ def run_validation(
 
 def _random_result(
     random_sels: Sequence[Sequence[Variant]],
-    random_measured: Sequence[frozenset[Variant]],
     scored: Sequence[ScoredVariant],
     landscape: Mapping[Variant, float],
     truth_by_term: Mapping[Term, float],
-    informed_union: frozenset[Term],
     candidate_fitness: Mapping[Variant, float],
     budget: int,
     max_order: int,
@@ -453,11 +462,10 @@ def _random_result(
         map_recovery(
             infer_epistasis(_measured_dg(landscape, sel), scored, max_order),
             truth_by_term,
-            measured,
-            informed_union,
+            frozenset(_measured_dg(landscape, sel)),
             with_ci=False,
         )
-        for sel, measured in zip(random_sels, random_measured, strict=True)
+        for sel in random_sels
     ]
     hit = float(np.mean([hit_rate(sel, candidate_fitness, budget) for sel in random_sels]))
 
@@ -474,9 +482,9 @@ def _random_result(
                 spearman_ci95=_seed_ci(per_seed, i, "spearman"),
                 n_informed=round(float(np.mean([s[i].n_informed for s in per_seed]))),
                 coverage_fraction=float(np.mean([s[i].coverage_fraction for s in per_seed])),
-                n_informed_union=template.n_informed_union,
-                pearson_informed=_mean_metric(per_seed, i, "pearson_informed"),
-                spearman_informed=_mean_metric(per_seed, i, "spearman_informed"),
+                n_pinned=round(float(np.mean([s[i].n_pinned for s in per_seed]))),
+                pearson_predicted=_mean_metric(per_seed, i, "pearson_predicted"),
+                spearman_predicted=_mean_metric(per_seed, i, "spearman_predicted"),
             )
         )
     return MethodResult(

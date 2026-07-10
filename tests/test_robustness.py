@@ -27,6 +27,7 @@ from epibudget.robustness import (
     _method_state,
     _MethodState,
     _predicted_terms,
+    _safe_corr,
     _truth_by_term,
     common_precision,
     crossfit_slopes,
@@ -254,6 +255,19 @@ def test_crossfit_slopes_reject_too_few_folds() -> None:
     pool = _pool()
     with pytest.raises(ValueError, match="n_folds must be >= 2"):
         crossfit_slopes(pool, _landscape(pool), 1)
+
+
+def test_safe_corr_and_paired_difference_never_leak_a_nan(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A near-constant resample makes scipy return NaN; it must become None, never reach the CI."""
+    monkeypatch.setattr(
+        "epibudget.robustness._corr", lambda _pred, _true: (float("nan"), float("nan"))
+    )
+    pred = np.array([1.0, 2.0, 3.0, 4.0])
+    true = np.array([1.0, 2.0, 3.0, 4.0])
+    assert _safe_corr(pred, true) == (None, None)
+    delta, ci = paired_difference(pred, pred, true, "spearman", seed=0)
+    assert delta is None
+    assert ci is None
 
 
 _REPRO_SCRIPT = """

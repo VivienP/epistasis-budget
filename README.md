@@ -4,11 +4,13 @@
 
 `epibudget` allocates a fixed experimental budget of *B* wells across candidate protein variants
 (singles, doubles, triples) to **maximally reduce uncertainty about the epistatic structure** of the
-fitness landscape. It is zero-shot (ESM-2), runs on a CPU, and is validated end-to-end on the complete
-GB1 landscape.
+fitness landscape. It is zero-shot (ESM-2), runs on CPU (GPU-optional), and is validated end-to-end on
+the complete GB1 landscape.
 
-> Status: de-risk gate passed; scoring, epistasis graph, allocation, and the GB1 harness shipped. The
-> 650M headline recovery run is pending. See [`docs/SPEC.md`](docs/SPEC.md), [`docs/ROADMAP.md`](docs/ROADMAP.md).
+> Status: de-risk gate passed; scoring (now batched + de-duplicated + GPU-capable), epistasis graph,
+> allocation, and the GB1 harness shipped. The frozen 20-letter 650M headline is deferred to a GPU
+> ([`docs/headline_650m_colab.md`](docs/headline_650m_colab.md)); an in-session 650M supplementary run
+> and uncertainty-prior calibration are in Result. See [`docs/SPEC.md`](docs/SPEC.md), [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ---
 
@@ -72,11 +74,23 @@ of information-optimal DMS design, not a silent win. See [`docs/VALIDATION.md`](
 pairwise Spearman ≈ 0.30, third-order ≈ 0.25; [`docs/STEP1_GATE.md`](docs/STEP1_GATE.md)) — the signal
 the method rests on is measured, not assumed.
 
-**Headline recovery comparison: pending.** The frozen run (info-optimal vs fitness-greedy vs random, at
-the full 20-letter alphabet, 650M, *B* ∈ {48, 96, 192}) has not been executed. Its decision rule,
-baselines (including a `structural-only` ablation that isolates what the ESM uncertainty prior actually
-adds), and the breadth-vs-precision reporting are frozen in [`docs/VALIDATION.md`](docs/VALIDATION.md)
-before that run — win or null.
+**Frozen headline (info-optimal vs fitness-greedy vs random, full 20-letter alphabet, 650M): deferred to
+a GPU.** Its per-candidate uncertainty pass is ~1.39M short forwards — ~8–9 days on this CPU-only host,
+~1–4 h on a free Colab T4. Run it with [`docs/headline_650m_colab.md`](docs/headline_650m_colab.md); the
+decision rule and baselines are frozen in [`docs/VALIDATION.md`](docs/VALIDATION.md) — win or null.
+
+**Supplementary 650M run (full alphabet, `pool ≫ B`, deterministic-only — not the frozen headline;
+info-optimal omitted).** At *B* ∈ {48, 96, 192} the structure-aware baseline (`structural-only`, rank by
+epistatic loops braced) recovers the pairwise map at Spearman **0.48 / 0.46 / 0.50** — well above random
+(0.28) and fitness-greedy (negative). Spending budget on the low-order scaffold beats spending it on
+top-predicted-fitness variants.
+
+**ESM uncertainty prior at 650M: null.** Its masking-perturbation dispersion σ² does **not** track the
+model's real per-variant error — Spearman(σ², |error|) = **−0.113, 95% CI [−0.220, −0.002]**, n=300 — so
+it cannot guide acquisition (the mechanistic reason info-optimal is expected to match, not beat,
+`structural-only`). The honest takeaway is a **clean audit**: a structure-aware allocation recovers the
+epistasis map far better than fitness-greedy, but the ESM zero-shot uncertainty adds nothing on top of
+the loop structure. Details and CIs: [`docs/LIMITATIONS.md §5`](docs/LIMITATIONS.md).
 
 ## How it works (3 steps)
 
@@ -95,7 +109,8 @@ formalism, and why this is well-posed: [`docs/RESEARCH_EPISTASIS.md`](docs/RESEA
 
 ## Constraints
 
-Python 3.12+ · CPU only · public data only (ProteinGym, GB1, UniProt) · `$0` compute.
+Python 3.12+ · CPU-first, GPU-optional (`--device auto|cuda`) · public data only (ProteinGym, GB1,
+UniProt) · `$0` compute.
 
 ## Citation & prior art
 

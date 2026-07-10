@@ -11,22 +11,43 @@ Each item states the constraint, its consequence, and how the code/docs handle i
 
 ## 1. Compute & environment
 
-- **CPU-only, `$0` compute (a design constraint, not an accident).** No GPU, no paid API. Everything
-  runs on a laptop CPU. This is deliberate — it keeps the artifact reproducible by anyone — but it caps
-  the scale of any single run.
+- **Prefer CPU / free tiers, but use available compute.** The default is CPU (`$0`, reproducible by
+  anyone). The tool now also runs on a GPU (`--device auto|cuda`, CPU-fallback, `device` recorded in
+  provenance); GPU changes throughput only, never the numbers (see below).
 
-- **650M scoring is ~20–30× slower than 35M on CPU.** Measured on this machine: `esm2_t12_35M` scores a
-  variant in ~0.4 s (deterministic ΔG) to ~1.1 s (with 16 masking perturbations); `esm2_t33_650M` takes
-  **22 s/variant at 8 perturbations and 32 s/variant at 16**. Consequence: scoring the full four-site,
-  20-letter candidate pool (~29,678 variants) at 650M is **9–20+ hours**, and even a modest `pool ≫ B`
-  pool (~1,500 variants) is **9–13 hours**. The headline 650M run in the frozen protocol therefore
-  **could not be executed in-session**; it needs a machine that can hold a multi-hour job, or a GPU.
+- **Most of the compute cost is implementation, not the method.** `ConjointScorer.score_batch`
+  (+ `scoring_plan.py`) batches masked forwards across variants, de-duplicates identical masked inputs,
+  and tunes `torch` threads — all throughput-only and **bit-exact** to the per-variant reference (measured
+  `delta_g` and `var_delta_g` gap = 0.0 at both 35M and 650M — `report/bench_35M.json`,
+  `report/bench_650m.json`; guarded by `test_optimized_batch_matches_reference`):
+  - **Masked-row de-duplication.** Masking a site erases its residue, so one masked forward yields the
+    conditional distribution for all 19 substitutions there. The full 20-letter deterministic pass is
+    **29,678 → 4,564 unique forwards** (≈6.5× fewer forward *calls*, ≈19× fewer masked *rows*; verified in
+    `tests/test_scoring_plan.py`).
+  - **Cross-variant batching + thread tuning.** `esm2_t33_650M` throughput measured in-session on this
+    12-core CPU (`inference_mode`, 12 threads; reproducible with `scripts/bench_scoring.py` — `report/`
+    is git-ignored, so these figures live on the machine, not in git): **0.66 forward-rows/s at batch 1,
+    1.84 at batch 32** (≈2.8×); the batched 650M path in `report/bench_650m.json` runs at 1.83 rows/s.
 
-- **The fast-model runs use a reduced candidate alphabet for tractability.** The end-to-end and ablation
-  runs on `esm2_t12_35M` restrict the per-site alphabet (e.g. `ADEF`, ~307 candidates) so the pool is
-  scored in minutes. This is recorded as provenance in every `metrics.json` (`candidate_alphabet`,
-  `n_candidates`, `scorer_seed`, `n_perturbations`, `data_sha256`). It is a **smoke test, not the
-  headline** — see the exhaustion caveat in §4.
+- **The residual wall is fundamental to GPU-less hardware, not to the method.** The frozen headline needs
+  `var_delta_g` (16 masking perturbations) on **every** candidate for info-optimal, and those background
+  masks are essentially non-de-dupable — **≈1.39M short forward passes**. At the measured 1.84 rows/s that
+  is **~8–9 days of CPU**. De-dup/batching/threads do not change that (the var pass dominates and de-dups
+  little); only a GPU does. On a free Colab **T4** the same pass is **~1–4 h** (see
+  [`headline_650m_colab.md`](headline_650m_colab.md)). This host has **no GPU** (`torch` CPU build,
+  `cuda_available False`), so the full frozen headline is **deferred to a GPU**, run by that recipe.
+
+- **What was run in-session instead** (both write `report/<run_id>/metrics.json` with full provenance,
+  including `device`): (a) the **supplementary 650M full-alphabet deterministic-only** recovery — the
+  4,564-forward regime above, ~40 min, giving the var-independent methods (fitness / random / practice /
+  structural-only) at `B ∈ {48, 96, 192}`, `pool ≫ B` (`scripts/headline_650m_supplementary.py`); and
+  (b) the **650M uncertainty-prior calibration** (`scripts/calibrate_uncertainty.py`, see §5). The
+  supplementary run is **explicitly not the frozen headline**: info-optimal (which needs the var pass) is
+  omitted and the `VALIDATION.md` decision rule is not evaluated there.
+
+- **The reduced-alphabet 35M runs remain a smoke test, not the headline.** They restrict the per-site
+  alphabet (e.g. `ADEF`, ~307 candidates) so the pool scores in minutes; recorded as provenance in every
+  `metrics.json`. See the exhaustion caveat in §4.
 
 ## 2. Data
 
@@ -101,18 +122,24 @@ Each item states the constraint, its consequence, and how the code/docs handle i
 
 ## 5. Empirical (the current null)
 
-- **The ESM zero-shot uncertainty prior is a confirmed null, at both model sizes.** Two consistent
-  pieces of evidence: (a) on the fast-model smoke, the structural-only baseline (`τ²≡const`, rank by
-  `n(v)`) recovers the pairwise map *better* than info-optimal (`var_delta_g·n(v)`) — B=96 Spearman 0.97
-  vs 0.76 — and info-optimal never wins on precision; (b) the uncertainty-prior calibration shows
-  `var_delta_g` does **not** correlate with the model's actual per-variant prediction error —
-  Spearman(σ², |error|) = **+0.139 at 35M and +0.036 at 650M** (n=150). The masking-perturbation
-  dispersion therefore does not track where the model is wrong, so it cannot be a useful acquisition
-  signal — the mechanistic root of the ablation result. **Moving to 650M does not rescue the prior; if
-  anything the calibration is weaker there.** This is a pre-registered ablation plus a mechanistic
-  calibration, not a post-hoc excuse. Caveat: n=150 for the calibration, and the full 650M `pool ≫ B`
-  ablation is compute-bound (§1) rather than run — but +0.036 is close enough to zero that it is very
-  unlikely to become a usable signal at scale.
+- **The ESM zero-shot uncertainty prior is a confirmed null at both model sizes, now with backing
+  code.** Two consistent pieces of evidence. (a) The structure-aware baseline recovers the pairwise map
+  at least as well as the ESM-uncertainty ranking: on the 35M smoke the structural-only baseline
+  (`τ²≡const`, rank by `n(v)`) *beats* info-optimal (`var_delta_g·n(v)`) at B=96 Spearman 0.97 vs 0.76,
+  info-optimal never winning on precision; and on the 650M full-alphabet `pool ≫ B` supplementary run
+  (§1) structural-only recovers pairwise at Spearman 0.48 / 0.46 / 0.50 (B ∈ {48, 96, 192}), above random
+  (~0.28) and fitness-greedy (negative). (b) The uncertainty-prior calibration
+  (`scripts/calibrate_uncertainty.py`) shows `var_delta_g` does **not** positively track the model's real
+  per-variant prediction error `|b·ΔĜ − ΔG_measured|`: Spearman(σ², |error|) = **+0.042 (95% CI
+  [−0.078, +0.157]) at 35M and −0.113 (95% CI [−0.220, −0.002]) at 650M**, both n=300 (reproducible from
+  the raw pairs in `report/calibration_*/metrics.json`). Both are indistinguishable from — or slightly
+  below — zero: the masking-perturbation dispersion is not larger where the model is more wrong, so it
+  cannot be a useful acquisition signal — the mechanistic root of the ablation. **Moving to 650M does not
+  rescue the prior** (if anything the correlation is marginally negative there). These are pre-registered
+  ablations plus a mechanistic calibration with reported CIs, not post-hoc excuses. Remaining gap: the
+  var-inclusive info-optimal-vs-structural-only comparison at 650M full alphabet is deferred to a GPU
+  (§1, `headline_650m_colab.md`); the calibration already gives the reason it is expected to match, not
+  beat, structural-only.
 
 ## 6. Statistical power & protocol scope
 

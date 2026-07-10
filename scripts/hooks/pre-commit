@@ -30,10 +30,11 @@ if have git; then
   fi
 fi
 
-run "ruff format --check" ruff format --check src/ tests/
-run "ruff check"          ruff check src/ tests/
+run "ruff format --check" ruff format --check src/ tests/ scripts/
+run "ruff check"          ruff check src/ tests/ scripts/
 run "mypy --strict"       mypy --strict src/
 run "pytest (offline)"    pytest -q -m "not slow and not data"
+run "artifact claims"     python scripts/validate_artifacts.py
 
 # Secret scan on staged content (best-effort; blocks on a likely key). The hook scripts are excluded
 # from their own scan — their detection-pattern literals (sk-…, hf_…, BEGIN PRIVATE KEY) would

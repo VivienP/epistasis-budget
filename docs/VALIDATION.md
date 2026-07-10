@@ -146,9 +146,10 @@ result exists.
 
 ## Post-registration robustness analyses — 2026-07-10
 
-**Status: pre-registered plan for a Phase B implementation. None of the three analyses below is
-implemented in `src/` yet, and no number from them exists anywhere in this repo.** They do not alter or
-replace the frozen statistic or decision rule above. This section is written after the Step-1 signal, the
+**Status: implemented in `src/epibudget/robustness.py` (run via `epibudget robustness` on a completed
+scored cache; spec in `docs/specs/robustness.md`). No number from these analyses exists anywhere in this
+repo yet — they wire into public artifacts only after the real 650M run.** They do not alter or replace
+the frozen statistic or decision rule above. This section is written after the Step-1 signal, the
 650M masking-variance calibration, and the 650M deterministic supplementary recovery were already
 computed and committed (`docs/LIMITATIONS.md` §1, §5) — the qualitative shape of those results (the
 uncertainty prior looking unhelpful; structural-only beating random and fitness-greedy) was visible when

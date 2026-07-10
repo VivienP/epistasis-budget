@@ -306,6 +306,81 @@ def validate(
 
 
 @app.command()
+def robustness(
+    scored_cache: str = typer.Option(..., help="Completed JSONL scored-variant cache to analyse."),
+    data: str = typer.Option("data/proteingym/gb1_wu2016.csv", help="Path to the GB1 CSV."),
+    alphabet: str = typer.Option(_AA20, help="Per-site alphabet the cache was scored over."),
+    budgets: str = typer.Option("48,96,192", help="Comma-separated budgets."),
+    seeds: int = typer.Option(20, help="Random-baseline seeds."),
+    max_order: int = typer.Option(3, help="Max interaction order (2 or 3)."),
+    n_folds: int = typer.Option(5, help="Cross-fit folds for the scale-sensitivity analysis."),
+    out: str = typer.Option("report/", help="Report root; a run subdirectory is created."),
+) -> None:
+    """Post-hoc Phase B robustness analyses on a completed run (no GPU); see docs/specs."""
+    from datetime import UTC, datetime  # noqa: PLC0415
+
+    from epibudget.data import (  # noqa: PLC0415
+        GB1_SITES,
+        GB1_WT_AT_SITES,
+        enumerate_candidates,
+        load_gb1,
+    )
+    from epibudget.robustness import robustness_report  # noqa: PLC0415
+    from epibudget.scored_cache import (  # noqa: PLC0415
+        CacheMetadata,
+        cache_metadata_path,
+        load_cache,
+    )
+
+    if n_folds < 2:  # noqa: PLR2004 — >= 2 for out-of-fold cross-fitting
+        raise typer.BadParameter(f"--n-folds must be >= 2, got {n_folds}")
+
+    landscape = load_gb1(Path(data))
+    enumerated = enumerate_candidates(
+        GB1_SITES, GB1_WT_AT_SITES, allowed_aa=alphabet, max_order=max_order
+    )
+    cache = load_cache(Path(scored_cache))
+    missing = [v for v in enumerated if v not in cache]
+    if missing or len(cache) != len(enumerated):
+        extra = len(cache) - (len(enumerated) - len(missing))
+        raise typer.BadParameter(
+            f"scored cache does not match the alphabet {alphabet!r} (max_order={max_order}) "
+            f"candidate universe of {len(enumerated)}: {len(missing)} missing, {extra} unexpected. "
+            "Refusing — a mismatched cache would silently analyse a different universe than scored."
+        )
+    scored = [cache[v] for v in enumerated]  # enumeration order: reproduces the frozen selections
+
+    sidecar = cache_metadata_path(Path(scored_cache))
+    model_id = (
+        CacheMetadata.model_validate_json(sidecar.read_text(encoding="utf-8")).model_id
+        if sidecar.exists()
+        else ""
+    )
+
+    run_dir = Path(out) / datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    report = robustness_report(
+        scored,
+        landscape,
+        budgets=[int(b) for b in budgets.split(",")],
+        seeds=seeds,
+        max_order=max_order,
+        n_folds=n_folds,
+        model_id=model_id,
+        out_dir=run_dir,
+    )
+    console.print(
+        f"[bold]robustness[/] {report.n_candidates} candidates, {n_folds}-fold cross-fit; "
+        f"wrote {run_dir / 'robustness.json'}"
+    )
+    for scale in report.scale_sensitivity:
+        agree = "agrees" if scale.ranking_agrees else "DIFFERS"
+        console.print(
+            f"  {scale.order:<8} global={scale.global_ranking} crossfit={scale.crossfit_ranking} "
+            f"({agree})"
+        )
+
+
+@app.command()
 def score(
     fasta: str = typer.Option(..., help="Path to the wild-type sequence (FASTA)."),
     variants: str = typer.Option(..., help="CSV of variants to score (DMS notation, e.g. V39A)."),

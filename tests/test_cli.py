@@ -112,6 +112,11 @@ class _FakeScorer:
     ) -> None:
         self.model_id = model_id
         self.device = device
+        self.n_perturbations = n_perturbations
+        self.seed = seed
+        self.mask_fraction = 0.15
+        self.batch_size = batch_size
+        self.num_threads = num_threads
 
     def score_batch(self, wt: str, variants: Sequence[Variant]) -> list[ScoredVariant]:
         return [
@@ -193,6 +198,7 @@ def test_validate_command_runs_offline_and_writes_metrics(
     candidates = enumerate_candidates(GB1_SITES, GB1_WT_AT_SITES, allowed_aa="AC", max_order=3)
     csv = tmp_path / "gb1.csv"
     _write_gb1_csv(csv, candidates)
+    scored_cache = tmp_path / "scored.jsonl"
 
     result = CliRunner().invoke(
         app,
@@ -208,6 +214,8 @@ def test_validate_command_runs_offline_and_writes_metrics(
             "2",
             "--out",
             str(tmp_path / "report"),
+            "--scored-cache",
+            str(scored_cache),
         ],
     )
     assert result.exit_code == 0, result.output
@@ -216,6 +224,11 @@ def test_validate_command_runs_offline_and_writes_metrics(
     written = json.loads((runs[0] / "metrics.json").read_text(encoding="utf-8"))
     assert written["var_epsilon"] > 0.0
     assert written["candidate_alphabet"] == "AC"
+    cache_metadata = json.loads(
+        scored_cache.with_name("scored.jsonl.meta.json").read_text(encoding="utf-8")
+    )
+    assert cache_metadata["candidate_count"] == len(candidates)
+    assert cache_metadata["candidate_alphabet"] == "AC"
     assert {r["method"] for r in written["results"]} == {
         "info",
         "fitness",

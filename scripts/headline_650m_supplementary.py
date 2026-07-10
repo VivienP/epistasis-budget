@@ -2,15 +2,14 @@
 
 NOT the frozen headline. With ``n_perturbations=0`` there is no ``var_delta_g`` pass, so the full
 20-letter four-site pool (~29,678 variants) collapses to the ~4,564 de-duplicated deterministic
-forwards and scores in ~40 min on this CPU — versus ~8–9 days for the frozen 16-perturbation run
-(docs/LIMITATIONS.md §1). Because ``var_delta_g`` is absent, **info-optimal is omitted** (it
+forwards. Because ``var_delta_g`` is absent, **info-optimal is omitted** (it
 degenerates at τ²≡0); this run reports only the methods that do not need it: fitness-greedy, random,
 practice, and the structural-only ablation (τ²≡1, rank by loop count).
 
-Why it is worth running: it is the first full-alphabet, ``pool ≫ B`` evidence at 650M — it
-un-tautologises breadth vs precision (docs/LIMITATIONS.md §4), which the reduced-alphabet 35M smoke
-cannot, and it establishes the structural-only recovery line at scale (the baseline the confirmed
-null rests on). The frozen headline (docs/headline_650m_colab.md) later supplies info-optimal to
+This full-alphabet, ``pool ≫ B`` supplementary comparison supports a breadth-versus-precision
+audit that the reduced-alphabet 35M smoke cannot. It establishes the structural-only full-set
+recovery line; common-predicted-term precision remains a separate analysis. The frozen headline
+(docs/headline_650m_colab.md) later supplies info-optimal to
 compare against this same line. Additive evidence, never a substitute for the frozen run (inv. #2).
 
 Usage:
@@ -41,7 +40,7 @@ from epibudget.data import (
     load_gb1,
 )
 from epibudget.epistasis import ground_truth_epistasis
-from epibudget.scored_cache import score_with_cache
+from epibudget.scored_cache import build_cache_metadata, score_with_cache
 from epibudget.scoring import ConjointScorer
 from epibudget.validate import (
     MethodResult,
@@ -102,7 +101,20 @@ def main() -> None:
         num_threads=args.threads if args.threads > 0 else None,
     )
     if args.scored_cache:
-        scored = score_with_cache(scorer, GB1_WT_SEQUENCE, candidates, Path(args.scored_cache))
+        metadata = build_cache_metadata(
+            scorer,
+            GB1_WT_SEQUENCE,
+            candidates,
+            candidate_alphabet=args.alphabet,
+            max_order=args.max_order,
+        )
+        scored = score_with_cache(
+            scorer,
+            GB1_WT_SEQUENCE,
+            candidates,
+            Path(args.scored_cache),
+            metadata=metadata,
+        )
     else:
         scored = scorer.score_batch(GB1_WT_SEQUENCE, candidates)
 

@@ -234,7 +234,7 @@ def validate(
         "", help="JSONL scored-variant cache; resumes a long run after an interruption."
     ),
 ) -> None:
-    """Run the frozen GB1 benchmark (info/fitness/structural/random/practice). See VALIDATION.md."""
+    """Run the GB1 harness; the frozen headline requires every explicit registered setting."""
     import hashlib  # noqa: PLC0415
     from datetime import UTC, datetime  # noqa: PLC0415
 
@@ -245,7 +245,7 @@ def validate(
         enumerate_candidates,
         load_gb1,
     )
-    from epibudget.scored_cache import score_with_cache  # noqa: PLC0415
+    from epibudget.scored_cache import build_cache_metadata, score_with_cache  # noqa: PLC0415
     from epibudget.scoring import ConjointScorer  # noqa: PLC0415
     from epibudget.validate import run_validation  # noqa: PLC0415
 
@@ -269,7 +269,20 @@ def validate(
         num_threads=threads if threads > 0 else None,
     )
     if scored_cache:
-        scored = score_with_cache(scorer, GB1_WT_SEQUENCE, candidates, Path(scored_cache))
+        metadata = build_cache_metadata(
+            scorer,
+            GB1_WT_SEQUENCE,
+            candidates,
+            candidate_alphabet=alphabet,
+            max_order=max_order,
+        )
+        scored = score_with_cache(
+            scorer,
+            GB1_WT_SEQUENCE,
+            candidates,
+            Path(scored_cache),
+            metadata=metadata,
+        )
     else:
         scored = scorer.score_batch(GB1_WT_SEQUENCE, candidates)
 

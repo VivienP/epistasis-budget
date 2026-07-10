@@ -12,10 +12,23 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from epibudget.data import GB1_SITES, GB1_WT_AT_SITES, GB1_WT_SEQUENCE, apply_mutations
+from epibudget.data import (
+    GB1_SITES,
+    GB1_WT_AT_SITES,
+    GB1_WT_SEQUENCE,
+    apply_mutations,
+    enumerate_candidates,
+)
 from epibudget.epistasis import epsilon_pairwise
-from epibudget.scoring import ConjointScorer, additive_delta_g
-from epibudget.types import Mutation, Variant
+from epibudget.scoring import ConjointScorer, additive_delta_g, resolve_device
+from epibudget.types import Mutation, ScoredVariant, Variant
+
+# Max scalar drift tolerated between the batched and reference paths. Both forward the same masked
+# rows; the only possible divergence is CPU-BLAS batch non-invariance (the batched path packs
+# unrelated rows). Measured on this machine: the gap is exactly 0.0 (bit-exact) at both 1 and 12
+# threads (scripts/bench_scoring.py). This tiny tolerance only guards against BLAS variation on
+# other CPUs; on the GPU path (not bit-parity with the CPU oracle) parity is by selection identity.
+_PARITY_ATOL = 1e-6
 
 MUT_I: Mutation = (0, "A", "C")
 MUT_J: Mutation = (1, "D", "E")
@@ -61,6 +74,15 @@ def test_apply_mutations_puts_all_mutations_on_the_background() -> None:
 def test_apply_mutations_rejects_wt_mismatch() -> None:
     with pytest.raises(ValueError, match="WT mismatch"):
         apply_mutations("AD", _v((0, "Q", "C")))  # WT says Q but sequence has A
+
+
+def test_resolve_device_pass_through_and_auto() -> None:
+    """Explicit devices pass through; ``auto`` selects CUDA only when a GPU is present, else CPU."""
+    import torch  # noqa: PLC0415  # offline: only queries cuda availability, no model download
+
+    assert resolve_device("cpu") == "cpu"
+    assert resolve_device("cuda") == "cuda"
+    assert resolve_device("auto") == ("cuda" if torch.cuda.is_available() else "cpu")
 
 
 @pytest.mark.slow
@@ -109,3 +131,74 @@ def test_var_delta_g_is_positive_and_deterministic() -> None:
     assert sv_a.var_delta_g > 0.0  # perturbations genuinely disperse the score
     assert sv_a.var_delta_g == sv_b.var_delta_g  # deterministic given seed
     assert sv_a.delta_g == sv_b.delta_g
+
+
+def _info_selection(scored: list[ScoredVariant], budget: int) -> set[Variant]:
+    """Info-optimal (λ=0) selection from a set of scored variants — the decision-level output."""
+    from epibudget.acquisition import allocate  # noqa: PLC0415
+    from epibudget.epistasis import predicted_epistasis  # noqa: PLC0415
+    from epibudget.graph import EpistasisFactorGraph  # noqa: PLC0415
+
+    graph = EpistasisFactorGraph(
+        predicted_epistasis(scored, max_order=3),
+        {sv.variant: sv.var_delta_g for sv in scored},
+    )
+    return set(allocate(graph, scored, budget, lambda_=0.0).selected)
+
+
+@pytest.mark.slow
+def test_optimized_batch_matches_reference() -> None:
+    """score_batch (de-duped, cross-variant batched) reproduces score (the per-variant reference).
+
+    Throughput-only: on a real GB1 slice with the full ε machinery, the batched delta_g/var_delta_g
+    must equal the per-variant oracle within a tight tolerance, and — the claim that actually
+    matters — the info-optimal and fitness-greedy selections built from either must be identical.
+    Run single-threaded so CPU BLAS is batch-invariant; the only allowed divergence is a residual
+    float gap from packing unrelated rows, which must not move any selection.
+    """
+    import torch  # noqa: PLC0415
+
+    from epibudget.acquisition import fitness_greedy  # noqa: PLC0415
+
+    # A reduced-alphabet slice: cross-variant de-dup is active (shared masked rows) and there are
+    # enough order-2/3 terms to build a real selection. pool = 8 singles + 24 doubles + 32 triples.
+    candidates = enumerate_candidates(GB1_SITES, GB1_WT_AT_SITES, allowed_aa="ACD", max_order=3)
+    scorer = ConjointScorer("facebook/esm2_t12_35M_UR50D", seed=0, n_perturbations=4)
+
+    old_threads = torch.get_num_threads()
+    torch.set_num_threads(1)
+    try:
+        reference = [scorer.score(GB1_WT_SEQUENCE, v) for v in candidates]
+        optimized = scorer.score_batch(GB1_WT_SEQUENCE, candidates)
+    finally:
+        torch.set_num_threads(old_threads)
+
+    ref_by = {sv.variant: sv for sv in reference}
+    max_dg = max(abs(o.delta_g - ref_by[o.variant].delta_g) for o in optimized)
+    max_var = max(abs(o.var_delta_g - ref_by[o.variant].var_delta_g) for o in optimized)
+    assert max_dg <= _PARITY_ATOL, f"delta_g drift {max_dg:.2e} exceeds {_PARITY_ATOL:.0e}"
+    assert max_var <= _PARITY_ATOL, f"var_delta_g drift {max_var:.2e} exceeds {_PARITY_ATOL:.0e}"
+
+    for budget in (8, 16):
+        assert _info_selection(reference, budget) == _info_selection(optimized, budget)
+        assert set(fitness_greedy(reference, budget)) == set(fitness_greedy(optimized, budget))
+
+
+@pytest.mark.slow
+def test_score_batch_is_deterministic() -> None:
+    """Two score_batch runs at a fixed thread count give identical numbers (seeded determinism)."""
+    import torch  # noqa: PLC0415
+
+    candidates = enumerate_candidates(GB1_SITES, GB1_WT_AT_SITES, allowed_aa="AC", max_order=2)
+    scorer = ConjointScorer("facebook/esm2_t12_35M_UR50D", seed=0, n_perturbations=4)
+    old_threads = torch.get_num_threads()
+    torch.set_num_threads(1)
+    try:
+        first = scorer.score_batch(GB1_WT_SEQUENCE, candidates)
+        second = scorer.score_batch(GB1_WT_SEQUENCE, candidates)
+    finally:
+        torch.set_num_threads(old_threads)
+    assert all(
+        x.delta_g == y.delta_g and x.var_delta_g == y.var_delta_g
+        for x, y in zip(first, second, strict=True)
+    )

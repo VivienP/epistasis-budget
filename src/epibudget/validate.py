@@ -86,6 +86,7 @@ class Report(BaseModel):
     candidate_alphabet: str  # the per-site alphabet the candidate pool was drawn from
     scorer_seed: int  # the ConjointScorer seed (deterministic var_delta_g)
     n_perturbations: int  # masking passes behind var_delta_g
+    device: str  # the resolved compute device the scoring ran on (cpu / cuda)
     max_order: int
     data_sha256: str  # checksum of the dataset the landscape/truth came from
     n_candidates: int
@@ -376,6 +377,7 @@ def run_validation(
     candidate_alphabet: str = "",
     scorer_seed: int = 0,
     n_perturbations: int = 0,
+    device: str = "cpu",
     data_sha256: str = "",
 ) -> Report:
     """Execute the frozen protocol and write ``<out_dir>/metrics.json``. See docs/VALIDATION.md.
@@ -437,6 +439,7 @@ def run_validation(
         candidate_alphabet=candidate_alphabet,
         scorer_seed=scorer_seed,
         n_perturbations=n_perturbations,
+        device=device,
         max_order=max_order,
         data_sha256=data_sha256,
         n_candidates=len(scored),

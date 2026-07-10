@@ -161,6 +161,8 @@ def allocate(
     alphabet: str = typer.Option(_AA20, help="Per-site candidate alphabet."),
     n_perturbations: int = typer.Option(16, help="Masking passes for var[ΔG] (the info prior)."),
     seed: int = typer.Option(0),
+    device: str = typer.Option("cpu", help="Compute device: cpu, cuda, or auto (GPU if present)."),
+    threads: int = typer.Option(0, help="torch CPU threads; 0 = library default."),
     out: str = typer.Option("allocation.json"),
 ) -> None:
     """Rank the B most epistasis-informative variants for a target."""
@@ -175,8 +177,16 @@ def allocate(
     wt_at = tuple(wt[p] for p in sites)
     candidates = enumerate_candidates(sites, wt_at, allowed_aa=alphabet, max_order=max_order)
 
-    console.print(f"[bold]allocate[/] scoring {len(candidates)} candidates with {model} …")
-    scorer = ConjointScorer(_resolve_model_id(model), n_perturbations=n_perturbations, seed=seed)
+    console.print(
+        f"[bold]allocate[/] scoring {len(candidates)} candidates with {model} on {device} …"
+    )
+    scorer = ConjointScorer(
+        _resolve_model_id(model),
+        device=device,
+        n_perturbations=n_perturbations,
+        seed=seed,
+        num_threads=threads if threads > 0 else None,
+    )
     scored = scorer.score_batch(wt, candidates)
     graph = EpistasisFactorGraph(
         predicted_epistasis(scored, max_order), {sv.variant: sv.var_delta_g for sv in scored}
@@ -217,6 +227,12 @@ def validate(
     ),
     n_perturbations: int = typer.Option(16, help="Masking passes for var[ΔG] (the info prior)."),
     max_order: int = typer.Option(3, help="Max interaction order (2 or 3)."),
+    device: str = typer.Option("cpu", help="Compute device: cpu, cuda, or auto (GPU if present)."),
+    threads: int = typer.Option(0, help="torch CPU threads; 0 = library default."),
+    batch_size: int = typer.Option(32, help="Scoring batch size (throughput only)."),
+    scored_cache: str = typer.Option(
+        "", help="JSONL scored-variant cache; resumes a long run after an interruption."
+    ),
 ) -> None:
     """Run the frozen GB1 benchmark (info/fitness/structural/random/practice). See VALIDATION.md."""
     import hashlib  # noqa: PLC0415
@@ -229,6 +245,7 @@ def validate(
         enumerate_candidates,
         load_gb1,
     )
+    from epibudget.scored_cache import score_with_cache  # noqa: PLC0415
     from epibudget.scoring import ConjointScorer  # noqa: PLC0415
     from epibudget.validate import run_validation  # noqa: PLC0415
 
@@ -240,13 +257,21 @@ def validate(
     )
     console.print(
         f"[bold]validate[/] scoring {len(candidates)} candidates "
-        f"(alphabet={alphabet!r}) with {model} …"
+        f"(alphabet={alphabet!r}) with {model} on {device} …"
     )
     scorer_seed = 0
     scorer = ConjointScorer(
-        _resolve_model_id(model), n_perturbations=n_perturbations, seed=scorer_seed
+        _resolve_model_id(model),
+        device=device,
+        n_perturbations=n_perturbations,
+        seed=scorer_seed,
+        batch_size=batch_size,
+        num_threads=threads if threads > 0 else None,
     )
-    scored = scorer.score_batch(GB1_WT_SEQUENCE, candidates)
+    if scored_cache:
+        scored = score_with_cache(scorer, GB1_WT_SEQUENCE, candidates, Path(scored_cache))
+    else:
+        scored = scorer.score_batch(GB1_WT_SEQUENCE, candidates)
 
     run_dir = Path(out) / datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     report = run_validation(
@@ -261,6 +286,7 @@ def validate(
         candidate_alphabet=alphabet,
         scorer_seed=scorer_seed,
         n_perturbations=n_perturbations,
+        device=scorer.device,
         data_sha256=data_sha256,
     )
     _print_validation_report(report, run_dir)

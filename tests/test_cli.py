@@ -101,8 +101,17 @@ def test_read_variant_specs_headerless(tmp_path: Path) -> None:
 class _FakeScorer:
     """Stand-in for ConjointScorer: no ESM-2 forward pass, deterministic stub scores."""
 
-    def __init__(self, model_id: str, n_perturbations: int = 16, seed: int = 0) -> None:
+    def __init__(
+        self,
+        model_id: str,
+        device: str = "cpu",
+        n_perturbations: int = 16,
+        seed: int = 0,
+        batch_size: int = 32,
+        num_threads: int | None = None,
+    ) -> None:
         self.model_id = model_id
+        self.device = device
 
     def score_batch(self, wt: str, variants: Sequence[Variant]) -> list[ScoredVariant]:
         return [

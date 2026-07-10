@@ -1,4 +1,4 @@
-"""Tests for the GB1 validation harness (ROADMAP Step 3): inference, recovery, baselines, isolation.
+"""Tests for the GB1 validation harness: inference, recovery, baselines, isolation.
 
 All offline: a synthetic candidate pool + a toy landscape stand in for ESM scoring and real GB1. The
 inference round-trips (empty reveal ⇒ ESM prior; full-loop reveal ⇒ true ε) pin the estimator; the
@@ -184,6 +184,17 @@ def test_run_validation_end_to_end_writes_a_real_report(
     written = json.loads((tmp_path / "metrics.json").read_text(encoding="utf-8"))
     assert written["dataset"] == "gb1_wu2016"
     assert written["n_truth_terms"] > 0
+
+
+def test_run_validation_never_overwrites_an_existing_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("epibudget.validate._N_BOOTSTRAP", 10)
+    pool = _pool()
+    run_validation(pool, _landscape(pool), [4], seeds=2, model_id="toy", out_dir=tmp_path)
+
+    with pytest.raises(FileExistsError):
+        run_validation(pool, _landscape(pool), [4], seeds=2, model_id="toy", out_dir=tmp_path)
 
 
 def _pooled(report: object, method: str, budget: int) -> OrderMetric:

@@ -1,0 +1,181 @@
+{
+  "schema_version": 1,
+  "generated_at_utc": "2026-07-10T14:29:28.074202Z",
+  "provisional": true,
+  "requires_remanifest_after_commit": true,
+  "artifacts": [
+    {
+      "path": "artifacts/dataset_gb1.json",
+      "sha256": "cd478b83f87c9e876eeea21e0e4e079ff8a133c9cab7bb95929649ce43ebe462",
+      "source_run_id": "data-provenance-20260710",
+      "generation_command": "python scripts/build_public_artifacts.py",
+      "base_commit_sha": "5bff99123d8ddf36905f2e40fc7e99f60b52a2ea",
+      "code_state": "dirty",
+      "code_diff_sha256": "057c46cdc4f7fc6a650e24694531815c89c80fc8aecbc8484d970337be946f08",
+      "model_id": null,
+      "data_sha256": "2f115d4eaf03b6083dcc22f7451b3ddfad41c9d8e519286c4e69b6d06db78f1c",
+      "configuration": {
+        "theoretical_alphabet_size": 20,
+        "sites": 4
+      },
+      "status": "primary",
+      "evidence_classification": "reproduced"
+    },
+    {
+      "path": "artifacts/step1_signal_650m.json",
+      "sha256": "e623e2b3e64ce1c610815f73f4474a5bccbe1d8b2a84acfea3c91cd166f853bb",
+      "source_run_id": "spike_gb1_650M",
+      "generation_command": "python scripts/spike_gb1_epistasis.py --model facebook/esm2_t33_650M_UR50D --seed 0 --out report/spike_gb1_650M.json",
+      "base_commit_sha": "5bff99123d8ddf36905f2e40fc7e99f60b52a2ea",
+      "code_state": "dirty",
+      "code_diff_sha256": "057c46cdc4f7fc6a650e24694531815c89c80fc8aecbc8484d970337be946f08",
+      "model_id": "facebook/esm2_t33_650M_UR50D",
+      "data_sha256": "2f115d4eaf03b6083dcc22f7451b3ddfad41c9d8e519286c4e69b6d06db78f1c",
+      "configuration": {
+        "seed": 0,
+        "n_perturbations": 0
+      },
+      "status": "supplementary",
+      "evidence_classification": "traceable_not_rerun"
+    },
+    {
+      "path": "artifacts/smoke_recovery_35m.json",
+      "sha256": "1030ed4fd8ce336f7b6a7195eeccada0d3024f406a05f1ab06bee418a10e1e1c",
+      "source_run_id": "20260709T105647Z",
+      "generation_command": "epibudget validate --model esm2_t12_35M --alphabet ADEF --budgets 48,96 --seeds 20 --n-perturbations 16 --device cpu",
+      "base_commit_sha": "5bff99123d8ddf36905f2e40fc7e99f60b52a2ea",
+      "code_state": "dirty",
+      "code_diff_sha256": "057c46cdc4f7fc6a650e24694531815c89c80fc8aecbc8484d970337be946f08",
+      "model_id": "facebook/esm2_t12_35M_UR50D",
+      "data_sha256": "2f115d4eaf03b6083dcc22f7451b3ddfad41c9d8e519286c4e69b6d06db78f1c",
+      "configuration": {
+        "alphabet": "ADEF",
+        "budgets": [
+          48,
+          96
+        ],
+        "seeds": 20,
+        "n_perturbations": 16
+      },
+      "status": "smoke_test",
+      "evidence_classification": "traceable_not_rerun"
+    },
+    {
+      "path": "artifacts/calibration_35m.json",
+      "sha256": "0c3a0e8c68aa35c736952db69f7c175f62a58b421356ba437a520fca811cfc76",
+      "source_run_id": "calibration_20260710T121638Z",
+      "generation_command": "python scripts/calibrate_uncertainty.py --model esm2_t12_35M --n 300 --n-perturbations 16 --alphabet ACDEFGHIKLMNPQRSTVWY --seed 0 --device cpu",
+      "base_commit_sha": "5bff99123d8ddf36905f2e40fc7e99f60b52a2ea",
+      "code_state": "dirty",
+      "code_diff_sha256": "057c46cdc4f7fc6a650e24694531815c89c80fc8aecbc8484d970337be946f08",
+      "model_id": "facebook/esm2_t12_35M_UR50D",
+      "data_sha256": "2f115d4eaf03b6083dcc22f7451b3ddfad41c9d8e519286c4e69b6d06db78f1c",
+      "configuration": {
+        "n": 300,
+        "seed": 0,
+        "n_perturbations": 16,
+        "alphabet": "ACDEFGHIKLMNPQRSTVWY"
+      },
+      "status": "smoke_test",
+      "evidence_classification": "traceable_not_rerun"
+    },
+    {
+      "path": "artifacts/calibration_650m.json",
+      "sha256": "3c724642c295ab8b6932823db48e9563d1da3c8b4c6a43de2056011ca8cfab5e",
+      "source_run_id": "calibration_20260710T120730Z",
+      "generation_command": "python scripts/calibrate_uncertainty.py --model esm2_t33_650M --n 300 --n-perturbations 16 --alphabet ACDEFGHIKLMNPQRSTVWY --seed 0 --device cpu",
+      "base_commit_sha": "5bff99123d8ddf36905f2e40fc7e99f60b52a2ea",
+      "code_state": "dirty",
+      "code_diff_sha256": "057c46cdc4f7fc6a650e24694531815c89c80fc8aecbc8484d970337be946f08",
+      "model_id": "facebook/esm2_t33_650M_UR50D",
+      "data_sha256": "2f115d4eaf03b6083dcc22f7451b3ddfad41c9d8e519286c4e69b6d06db78f1c",
+      "configuration": {
+        "n": 300,
+        "seed": 0,
+        "n_perturbations": 16,
+        "alphabet": "ACDEFGHIKLMNPQRSTVWY"
+      },
+      "status": "supplementary",
+      "evidence_classification": "traceable_not_rerun"
+    },
+    {
+      "path": "artifacts/supplementary_recovery_650m.json",
+      "sha256": "508dd43335256a2c40ea17070c838e13ca6eea9f7032e5f01a944902e897b220",
+      "source_run_id": "20260710T101945Z",
+      "generation_command": "python scripts/headline_650m_supplementary.py --model esm2_t33_650M --alphabet ACDEFGHIKLMNPQRSTVWY --budgets 48,96,192 --seeds 20 --device cpu",
+      "base_commit_sha": "5bff99123d8ddf36905f2e40fc7e99f60b52a2ea",
+      "code_state": "dirty",
+      "code_diff_sha256": "057c46cdc4f7fc6a650e24694531815c89c80fc8aecbc8484d970337be946f08",
+      "model_id": "facebook/esm2_t33_650M_UR50D",
+      "data_sha256": "2f115d4eaf03b6083dcc22f7451b3ddfad41c9d8e519286c4e69b6d06db78f1c",
+      "configuration": {
+        "alphabet": "ACDEFGHIKLMNPQRSTVWY",
+        "budgets": [
+          48,
+          96,
+          192
+        ],
+        "seeds": 20,
+        "n_perturbations": 0
+      },
+      "status": "supplementary",
+      "evidence_classification": "traceable_not_rerun"
+    },
+    {
+      "path": "artifacts/bench_35m.json",
+      "sha256": "de4b55ad113316828e2b3e1434de29737f68cd7e3318f2798f54d297c13f369b",
+      "source_run_id": "bench_35M",
+      "generation_command": "python scripts/bench_scoring.py --model esm2_t12_35M --alphabet ACD --n-perturbations 4 --batch-size 32 --threads 12 --device cpu --seed 0",
+      "base_commit_sha": "5bff99123d8ddf36905f2e40fc7e99f60b52a2ea",
+      "code_state": "dirty",
+      "code_diff_sha256": "057c46cdc4f7fc6a650e24694531815c89c80fc8aecbc8484d970337be946f08",
+      "model_id": "facebook/esm2_t12_35M_UR50D",
+      "data_sha256": null,
+      "configuration": {
+        "alphabet": "ACD",
+        "n_perturbations": 4,
+        "batch_size": 32,
+        "threads": 12,
+        "seed": 0
+      },
+      "status": "benchmark",
+      "evidence_classification": "traceable_not_rerun"
+    },
+    {
+      "path": "artifacts/bench_650m.json",
+      "sha256": "ef1eba642633b23cddcd8e12ff25ea0efc15eb6b20e33647931151b59598b30d",
+      "source_run_id": "bench_650m",
+      "generation_command": "python scripts/bench_scoring.py --model esm2_t33_650M --alphabet AC --n-perturbations 4 --batch-size 32 --threads 12 --device cpu --seed 0",
+      "base_commit_sha": "5bff99123d8ddf36905f2e40fc7e99f60b52a2ea",
+      "code_state": "dirty",
+      "code_diff_sha256": "057c46cdc4f7fc6a650e24694531815c89c80fc8aecbc8484d970337be946f08",
+      "model_id": "facebook/esm2_t33_650M_UR50D",
+      "data_sha256": null,
+      "configuration": {
+        "alphabet": "AC",
+        "n_perturbations": 4,
+        "batch_size": 32,
+        "threads": 12,
+        "seed": 0
+      },
+      "status": "benchmark",
+      "evidence_classification": "traceable_not_rerun"
+    },
+    {
+      "path": "artifacts/claim_map.json",
+      "sha256": "2258894417bd86a83356be481023b2cb834f3b067eb83248b092f3202b5b364c",
+      "source_run_id": "claim-map-v1",
+      "generation_command": "maintained with README.md; validated by python scripts/validate_artifacts.py",
+      "base_commit_sha": "5bff99123d8ddf36905f2e40fc7e99f60b52a2ea",
+      "code_state": "dirty",
+      "code_diff_sha256": "057c46cdc4f7fc6a650e24694531815c89c80fc8aecbc8484d970337be946f08",
+      "model_id": null,
+      "data_sha256": null,
+      "configuration": {
+        "schema_version": 1
+      },
+      "status": "primary",
+      "evidence_classification": "reproduced"
+    }
+  ]
+}

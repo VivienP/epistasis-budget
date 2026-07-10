@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "provenance": {
+    "source_path": "report/bench_35M.json",
+    "source_run_id": "bench_35M",
+    "source_sha256": "0ff37088422376d5ca387ea62abe2d17b54b19fc6395a6457c75b0a1a1d414fa",
+    "evidence_classification": "traceable_not_rerun"
+  },
+  "result": {
+    "model_id": "facebook/esm2_t12_35M_UR50D",
+    "device": "cpu",
+    "alphabet": "ACD",
+    "max_order": 3,
+    "n_perturbations": 4,
+    "batch_size": 32,
+    "num_threads": 12,
+    "n_variants": 137,
+    "planned_rows": 1720,
+    "unique_rows": 1503,
+    "dedup_ratio": 1.144,
+    "reference_seconds": 84.203,
+    "optimized_seconds": 53.719,
+    "reference_variants_per_s": 1.627,
+    "optimized_variants_per_s": 2.55,
+    "speedup": 1.567,
+    "max_abs_delta_g_gap": 0.0,
+    "max_abs_var_delta_g_gap": 0.0
+  }
+}

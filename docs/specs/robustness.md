@@ -41,9 +41,10 @@ Inputs (all already available post-run):
 - `landscape: Mapping[Variant, float]` — full GB1 `{variant → fitness}` from `data.load_gb1`.
 - `budgets`, `seeds`, `max_order` — the frozen grid.
 
-The module recomputes each method's selection deterministically from `scored` (reusing `allocate`,
-`fitness_greedy`, `structural_graph`, `practice_heuristic`, `random_selection`) — identical to
-`run_validation`, so the analysed selections are the frozen ones. Truth terms come from
+The module recomputes each analysed method's selection deterministically from `scored` (reusing
+`allocate`, `fitness_greedy`, `structural_graph`, `random_selection`) — identical to `run_validation`,
+so the analysed selections are the frozen ones. The pairs analysed are info/fitness/structural/random;
+`practice_heuristic` is a `run_validation` companion not carried into Phase B. Truth terms come from
 `ground_truth_epistasis` restricted to `_candidate_terms(scored, max_order)`, exactly as
 `run_validation` builds `truth_by_term`.
 
@@ -56,7 +57,7 @@ From `validate.py`: `_calibrate_slope`, `infer_epistasis`, `_informed`, `_pinned
 (`map_recovery` is intentionally NOT reused: A1/A2/A3 need paired / cross-fitted / per-order-intersection
 statistics that `map_recovery`'s per-method aggregate does not expose, so the per-order correlation is
 computed directly via `_corr`.) From `acquisition.py`: `allocate`, `fitness_greedy`. From
-`validate.py` baselines: `random_selection`, `practice_heuristic`. From `epistasis.py`:
+`validate.py` baselines: `random_selection`. From `epistasis.py`:
 `interaction_loop`, `epsilon_pairwise`, `epsilon_third`, `ground_truth_epistasis`,
 `predicted_epistasis`. From `scoring_plan.py`: `variant_key` (the single stable, salt-free integer key
 — reused for deterministic fold assignment so fold membership is reproducible across processes). From

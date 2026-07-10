@@ -231,13 +231,13 @@ Every reported comparison includes all three, at each `B`:
 3. **random** — uniform sample of `B` candidates (averaged over ≥ 20 seeds).
 4. **practice heuristic** (v1.1, additional) — top beneficial singles then all their pairwise
    combinations (the real-world design, cf. MULTI-evolve). Reported as a fourth comparison; not part of the
-   frozen decision rule, which stays on info vs fitness vs random. See `docs/ROADMAP.md`.
+   frozen decision rule, which stays on info vs fitness vs random. See `docs/VALIDATION.md`.
 
 ### Validation pipeline
 
 ```
 validate(dataset, budgets, model_id, seeds) -> Report:
-    load complete GB1 four-site landscape (data.py)
+    load measured GB1 four-site rows (data.py)
     truth = ground_truth_epistasis(full landscape)          # via WHT / inclusion-exclusion
     for B in budgets:
         for method in {info, fitness, random}:
@@ -308,9 +308,9 @@ Deterministic given `(model_id, seed, config)`. Every output embeds the resolved
 
 - Background-averaged (ensemble) epistasis (v1 is WT-referenced). Promotion path: it is the bridge to
   inference tools like MoCHI — promote to the v1.1 ambition layer *only if* the MoCHI integration is
-  pursued (see `docs/ROADMAP.md` and `docs/RESEARCH_EPISTASIS.md#3`).
+  pursued (see `docs/RESEARCH_EPISTASIS.md#3`).
 - Orders > 3.
 - Multi-round / sequential design (v1 is single-shot budget allocation at round 0).
 - Any GPU-specific path.
 - A second PLM or a learned surrogate — the uncertainty prior is ESM-2 zero-shot by design.
-- Any web API / hosted service — v1 is a CPU-only CLI + library.
+- Any web API / hosted service — v1 is a CPU-first, GPU-capable CLI + library.

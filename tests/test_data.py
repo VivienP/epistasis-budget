@@ -139,8 +139,8 @@ def test_load_gb1_requires_wild_type_row(tmp_path: Path) -> None:
 
 
 @pytest.mark.data
-def test_gb1_loads_complete_landscape() -> None:
-    """Real-data gate: the fetched GB1 four-site landscape loads and the WT residues assert.
+def test_gb1_loads_measured_landscape() -> None:
+    """Real-data gate: the fetched GB1 measured rows load and the WT residues assert.
 
     Requires ``python scripts/fetch_gb1.py`` to have populated data/proteingym/.
     """

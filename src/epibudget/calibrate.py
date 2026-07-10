@@ -3,8 +3,9 @@
 Separated from the scoring so it is offline-testable without an ESM-2 forward pass. Given a set of
 per-variant ESM scores (ΔĜ), their masking-perturbation dispersions (σ²), and the measured ΔG, it
 puts ΔĜ on the measured scale with the through-origin slope (reusing the validation harness's
-calibration), forms the absolute prediction error, and correlates σ² against it — with a bootstrap
-95% CI so a near-zero result is reported as a *powered* null rather than missing data.
+calibration), forms the absolute prediction error, and correlates σ² against it with a bootstrap
+95% CI. The interval is reported without converting a near-zero or weakly negative result into a
+stronger calibration claim.
 """
 
 from __future__ import annotations

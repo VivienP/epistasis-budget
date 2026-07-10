@@ -17,18 +17,20 @@ legitimate, publishable audit and a perfectly good portfolio artifact. It is *no
 
 ## Dataset
 
-- **GB1 four-site landscape**, Wu, Olson, Fowler & Sun 2016, *eLife* — the complete 20⁴ = 160,000
-  combinatorial landscape at positions **V39, D40, G41, V54** of protein G domain B1. Contains every
-  single, double, triple and quadruple mutant with a measured fitness (binding/stability enrichment).
+- **Factual correction (2026-07-10; the decision rule is unchanged).** The four-site genotype space at
+  **V39, D40, G41, V54** contains 20⁴ = 160,000 theoretical genotypes. The local public-data artifact
+  contains 149,361 measured rows: 119,884 with positive fitness, 29,477 dead rows with fitness zero,
+  and 10,639 genotypes absent from the artifact.
 - Access via **ProteinGym** (substitution DMS assays include GB1) and/or the original supplementary
   data. Fetching is explicit and lives in `scripts/fetch_gb1.py`; data is **never committed** (see
   `.gitignore`). The script records a checksum of the downloaded file.
-- Why this dataset: it is the only public landscape with *complete* higher-order ground truth, so we can
-  compute true ε terms and simulate any budgeted experiment exactly (§Simulation).
+- Ground-truth ε is computed only when every required loop member is present and has positive,
+  log-transformable fitness. Results are therefore conditional on a measurable positive-fitness subset,
+  not representative of the entire theoretical genotype space.
 
 ## Ground truth
 
-`ground_truth_epistasis(full_landscape)` computes, from the measured fitnesses:
+`ground_truth_epistasis(measured_live_landscape)` computes, from positive measured fitnesses:
 
 - all pairwise ε(i,j) and third-order ε(i,j,k) terms (WT-referenced, inclusion–exclusion), and
 - the multiallelic Walsh–Hadamard spectrum (variance explained by order) for context.
@@ -128,9 +130,11 @@ result exists.
 
 ## Reproducibility
 
-- One command: `epibudget validate --dataset gb1_wu2016 --budgets 48,96,192 --seeds 20 --out report/`.
-  For a tractable fast-model first pass, `--alphabet` restricts the per-site candidate set (recorded in
-  the report's provenance); the full 20-letter alphabet is the headline.
+- The frozen run requires all scientific settings explicitly:
+  `epibudget validate --dataset gb1_wu2016 --model esm2_t33_650M --alphabet
+  ACDEFGHIKLMNPQRSTVWY --budgets 48,96,192 --seeds 20 --n-perturbations 16 --device cuda --out
+  report/`. A reduced model, alphabet, budget grid, perturbation count, or baseline set is a smoke or
+  supplementary run, never the headline.
 - The run writes `report/<run_id>/metrics.json` (one row per method × budget, with per-order
   correlations, CIs, and coverage) and prints a rich summary; the figures are rendered by
   `notebooks/gb1_demo.ipynb` from that JSON. Every claim in the README or docs must trace to a
@@ -139,6 +143,48 @@ result exists.
 - CI runs the same pipeline on the **35M** model over a reduced budget grid as a smoke test; the
   headline figure uses **650M**. A reproducible Jupyter notebook (`notebooks/gb1_demo.ipynb`) renders the
   headline figure from the saved report.
+
+## Post-registration robustness analyses — 2026-07-10
+
+**Status: pre-registered plan for a Phase B implementation. None of the three analyses below is
+implemented in `src/` yet, and no number from them exists anywhere in this repo.** They do not alter or
+replace the frozen statistic or decision rule above. This section is written after the Step-1 signal, the
+650M masking-variance calibration, and the 650M deterministic supplementary recovery were already
+computed and committed (`docs/LIMITATIONS.md` §1, §5) — the qualitative shape of those results (the
+uncertainty prior looking unhelpful; structural-only beating random and fitness-greedy) was visible when
+these three devices were chosen. So this section cannot claim the bias-protection of a blind
+pre-registration; it only fixes the method before its own numbers exist, which still blocks tuning the
+method to a specific number once computed.
+
+- **Common identities.** Full-set correlations use the same complete-loop truth terms for every method.
+  Method-specific precision remains descriptive because its eligible terms differ. Direct precision
+  comparisons use only the intersection of terms for which both methods produce an informed,
+  non-pinned prediction. Terms without an informed prediction contribute to coverage counts only; no
+  Pearson or Spearman correlation is computed for them. Caveat: this intersection is not a neutral
+  subsample — a term is informed more easily the larger its loop (7 members at third order vs. 3 at
+  pairwise, `interaction_loop`), and info-optimal's `n(v)`-driven hub bias and fitness-greedy/practice's
+  high-ΔG bias both concentrate coverage on the same popular positions, so "both methods inform it"
+  correlates with a term's loop size and structural popularity, not only with predictive skill.
+- **Method-independent scale sensitivity.** A deterministic five-fold partition is defined from variant
+  identities before any labels enter analysis. Fold-specific through-origin slopes are fit from positive,
+  log-transformable fitness values outside the held-out fold and reused identically for all methods; a
+  multi-member term (e.g. a third-order loop) converts each member with that member's own fold's slope,
+  not one slope for the whole loop. These labels and live/dead states are post-selection analysis inputs
+  and are never available to a selector. Results using them are explicitly conditional on positive
+  measurable fitness. Constraint this assumes (stated, not argued): sharing one slope across methods
+  removes a per-method small-sample calibration confound, but assumes the ESM-to-measured-fitness linear
+  relationship is homogeneous across whatever subpopulation each method's selection happens to leave
+  unmeasured — the same kind of assumption `_calibrate_slope` already states explicitly as a constraint
+  for its own through-origin convention.
+- **Paired differences.** Correlation differences are bootstrapped on identical terms. Random comparisons
+  report term resampling, seed resampling, and a hierarchical bootstrap that draws a fresh term-resample
+  for each resampled seed (seed variance nested outside term variance). This inherits the leverage-
+  concentration caveat already stated for term bootstraps (`docs/LIMITATIONS.md`, "Confidence intervals
+  measure two different things"): nesting seeds and terms does not make the terms independent. Separate
+  confidence intervals are never treated as a test of a
+  direct difference — a stricter standard than the frozen decision rule's own non-overlapping-CI
+  criterion above; that rule remains the frozen bar for H1, and this stricter standard applies only to
+  these companion analyses, not to it.
 
 ## Threats to validity (and mitigations)
 

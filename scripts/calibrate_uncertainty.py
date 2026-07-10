@@ -8,9 +8,10 @@ directly at a given model size: for a seeded sample of covered variants it compu
 through-origin ΔG-scale slope; ``ΔG_measured = ln fitness``), then reports Spearman/Pearson(σ²,
 |error|) with a bootstrap 95% CI.
 
-Measured fitness enters here for the *error* term only — post-hoc analysis, never selection, so no
-label reaches the acquisition path (docs/skills/no-label-leakage). A near-zero, tight-CI correlation
-is a powered null: the prior does not track error and cannot help acquisition.
+Measured fitness enters here for the *error* term only after the sample is fixed — never selection.
+No label or live/dead status reaches the acquisition path. Because only positive-fitness rows are
+log-transformable, the analysis is conditional on measurable positive fitness. Correlations and
+their intervals do not convert a near-zero estimate into proof of calibration or anti-calibration.
 
 Usage:
     python scripts/calibrate_uncertainty.py --model esm2_t33_650M --n 300 --n-perturbations 16 \

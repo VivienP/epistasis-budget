@@ -1,4 +1,4 @@
-"""Tests for greedy budget allocation and the no-label-leakage boundary (ROADMAP Step 3).
+"""Tests for greedy budget allocation and the no-label-leakage boundary.
 
 The exit criteria exercised here: ``allocate(lambda_=1)`` reproduces ``fitness_greedy`` exactly, and
 selection is provably blind to measured fitness — it ranks only on the ESM-predicted ``delta_g`` and

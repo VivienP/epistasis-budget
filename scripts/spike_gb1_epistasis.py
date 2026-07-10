@@ -1,7 +1,7 @@
 """Step 1 de-risk spike: does ESM-2 conjoint scoring carry GB1 epistasis signal?
 
-Answers the two gate questions of docs/ROADMAP.md Step 1, on real data, before anything is built on
-top:
+Answers the two pre-allocation gate questions in docs/STEP1_GATE.md, on real data, before anything
+is built on top:
 
   1. Is Var[ε_pred] > 0 (conjoint scoring is genuinely non-additive — invariant #1)?
   2. Does ESM-predicted ε correlate with measured ε (Spearman ≳ 0.2)?

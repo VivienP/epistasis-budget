@@ -1,4 +1,4 @@
-"""Fetch the complete GB1 four-site landscape (Wu et al. 2016, eLife) for validation.
+"""Fetch the measured GB1 four-site dataset (Wu et al. 2016, eLife) for validation.
 
 Data is written to data/ (git-ignored) and NEVER committed. This script records provenance: source
 URL, download date, sha256 checksum, row count, WT sequence, and the mutation-order composition of
@@ -7,8 +7,8 @@ the landscape. See docs/VALIDATION.md.
 Usage:
     python scripts/fetch_gb1.py [--out data/proteingym]
 
-Source. The complete four-site GB1 landscape (all singles/doubles/triples/quadruples at
-V39/D40/G41/V54, 149,361 measured genotypes of the 20^4 combinatorial space) is mirrored on the
+Source. A 149,361-genotype measured subset of the theoretical 20^4 four-site space at
+V39/D40/G41/V54 is mirrored on the
 Hugging Face Hub as ``SaProtHub/Dataset-GB1-fitness`` (a faithful redistribution of Wu-2016; label =
 fitness relative to the wild type, WT = 1.0). Variants are stored as full 56-residue sequences, so
 the genotype is recovered by diffing each sequence against the wild type — robust to any

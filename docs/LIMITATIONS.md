@@ -3,7 +3,8 @@
 An honest register of the constraints that bound this project and the limitations they impose on what
 can be claimed. It exists because the credibility of `epibudget` rests on a rigorous null-tolerant audit
 (invariant #2): a reader must be able to see exactly where the walls are. Pairs with
-[`VALIDATION.md`](VALIDATION.md) (the frozen protocol) and [`ROADMAP.md`](ROADMAP.md) (the plan).
+[`VALIDATION.md`](VALIDATION.md), which contains the frozen protocol and the separately labelled
+post-registration robustness analyses.
 
 Each item states the constraint, its consequence, and how the code/docs handle it honestly.
 
@@ -11,9 +12,9 @@ Each item states the constraint, its consequence, and how the code/docs handle i
 
 ## 1. Compute & environment
 
-- **Prefer CPU / free tiers, but use available compute.** The default is CPU (`$0`, reproducible by
-  anyone). The tool now also runs on a GPU (`--device auto|cuda`, CPU-fallback, `device` recorded in
-  provenance); GPU changes throughput only, never the numbers (see below).
+- **CPU-capable, GPU-capable.** CPU is the default and remains covered by tests. GPU execution is
+  supported with `--device auto|cuda`, and the resolved device is recorded in provenance. The complete
+  650M variance-inclusive benchmark is not claimed to be practically CPU-tractable.
 
 - **Most of the compute cost is implementation, not the method.** `ConjointScorer.score_batch`
   (+ `scoring_plan.py`) batches masked forwards across variants, de-duplicates identical masked inputs,
@@ -24,22 +25,20 @@ Each item states the constraint, its consequence, and how the code/docs handle i
     conditional distribution for all 19 substitutions there. The full 20-letter deterministic pass is
     **29,678 → 4,564 unique forwards** (≈6.5× fewer forward *calls*, ≈19× fewer masked *rows*; verified in
     `tests/test_scoring_plan.py`).
-  - **Cross-variant batching + thread tuning.** `esm2_t33_650M` throughput measured in-session on this
-    12-core CPU (`inference_mode`, 12 threads; reproducible with `scripts/bench_scoring.py` — `report/`
-    is git-ignored, so these figures live on the machine, not in git): **0.66 forward-rows/s at batch 1,
-    1.84 at batch 32** (≈2.8×); the batched 650M path in `report/bench_650m.json` runs at 1.83 rows/s.
+  - **Measured benchmark scope.** The provisional 650M benchmark uses alphabet `AC`, 64 variants,
+    four perturbations, batch size 32 and 12 CPU threads. It reports 0.127 reference variants/s,
+    0.171 optimized variants/s and a 1.341× speed-up with zero recorded score gap
+    ([artifact](../artifacts/bench_650m.json)). It does not support the earlier undocumented batch-1
+    comparison, which is excluded from public claims.
 
-- **The residual wall is fundamental to GPU-less hardware, not to the method.** The frozen headline needs
-  `var_delta_g` (16 masking perturbations) on **every** candidate for info-optimal, and those background
-  masks are essentially non-de-dupable — **≈1.39M short forward passes**. At the measured 1.84 rows/s that
-  is **~8–9 days of CPU**. De-dup/batching/threads do not change that (the var pass dominates and de-dups
-  little); only a GPU does. On a free Colab **T4** the same pass is **~1–4 h** (see
-  [`headline_650m_colab.md`](headline_650m_colab.md)). This host has **no GPU** (`torch` CPU build,
-  `cuda_available False`), so the full frozen headline is **deferred to a GPU**, run by that recipe.
+- **The residual compute requirement is not yet benchmarked end to end.** The frozen headline needs
+  `var_delta_g` from 16 perturbations for every candidate. A GPU is the recommended execution path, but
+  neither a complete CPU duration nor a Colab duration is published without a matching run artifact.
+  [`headline_650m_colab.md`](headline_650m_colab.md) is a reproducible recipe, not a runtime promise.
 
 - **What was run in-session instead** (both write `report/<run_id>/metrics.json` with full provenance,
   including `device`): (a) the **supplementary 650M full-alphabet deterministic-only** recovery — the
-  4,564-forward regime above, ~40 min, giving the var-independent methods (fitness / random / practice /
+  deterministic regime above, giving the var-independent methods (fitness / random / practice /
   structural-only) at `B ∈ {48, 96, 192}`, `pool ≫ B` (`scripts/headline_650m_supplementary.py`); and
   (b) the **650M uncertainty-prior calibration** (`scripts/calibrate_uncertainty.py`, see §5). The
   supplementary run is **explicitly not the frozen headline**: info-optimal (which needs the var pass) is
@@ -51,10 +50,10 @@ Each item states the constraint, its consequence, and how the code/docs handle i
 
 ## 2. Data
 
-- **GB1/Wu-2016 has only four positions.** Statistical power comes from the ~20³ amino-acid
-  instantiations per position-triplet, not from many positions. The claim is framed as *principle
-  validation on a complete higher-order landscape*, never as a whole-protein positional map — no public
-  higher-order dataset supports the latter.
+- **GB1/Wu-2016 has only four positions and an incomplete measured grid.** The theoretical space contains
+  160,000 genotypes; the local artifact contains 149,361 measured rows. Statistical replication comes
+  from amino-acid instantiations, not from many independently sampled positions. The claim is therefore
+  scoped to this measured four-site system, never a whole-protein positional map.
 
 - **~25% of the ΔG grid is unusable.** Of the 160,000 possible four-site genotypes, 149,361 are present;
   29,477 of those are dead (fitness 0 → `ln` undefined), and ~10,639 are genuinely absent. Dead/missing
@@ -108,38 +107,31 @@ Each item states the constraint, its consequence, and how the code/docs handle i
   measures a large fraction of it, so "measure the low-order scaffold broadly" wins trivially (e.g. the
   structural baseline pins 57/58 pairwise terms at B=96). The exhaustion regime **cannot** distinguish
   breadth from precision; only a `pool ≫ B` regime (full alphabet, §1) can — which is exactly the run
-  that is compute-bound here.
+  needed for a meaningful comparison.
 
 - **Confidence intervals measure two different things.** The deterministic methods' CI is bootstrapped
   over the evaluated ε terms — it reflects leverage concentration of the correlation, **not** "would a
   repeated wet-lab budget give a similar number." Only the random baseline's over-seeds CI captures
   genuine selection variance. Both are labelled with `ci_method` so they are not conflated.
 
-- **A shared "informed-union" subset is deliberately not used.** Restricting the correlation to terms
-  informed by *any* method collapses to the full term set — the union over the random baseline's seeds
-  touches every term — so it cannot separate breadth from precision. The per-method breadth/precision
-  split above is used instead.
+- **Method-specific precision correlations are not directly comparable.** They use different informed,
+  non-pinned term identities. Post-registration direct comparisons therefore restrict precision to the
+  intersection of terms predicted by both methods. Non-informed terms are reported only through coverage;
+  they are not assigned a precision correlation.
 
-## 5. Empirical (the current null)
+## 5. Empirical evidence and unresolved interpretation
 
-- **The ESM zero-shot uncertainty prior is a confirmed null at both model sizes, now with backing
-  code.** Two consistent pieces of evidence. (a) The structure-aware baseline recovers the pairwise map
-  at least as well as the ESM-uncertainty ranking: on the 35M smoke the structural-only baseline
-  (`τ²≡const`, rank by `n(v)`) *beats* info-optimal (`var_delta_g·n(v)`) at B=96 Spearman 0.97 vs 0.76,
-  info-optimal never winning on precision; and on the 650M full-alphabet `pool ≫ B` supplementary run
-  (§1) structural-only recovers pairwise at Spearman 0.48 / 0.46 / 0.50 (B ∈ {48, 96, 192}), above random
-  (~0.28) and fitness-greedy (negative). (b) The uncertainty-prior calibration
-  (`scripts/calibrate_uncertainty.py`) shows `var_delta_g` does **not** positively track the model's real
-  per-variant prediction error `|b·ΔĜ − ΔG_measured|`: Spearman(σ², |error|) = **+0.042 (95% CI
-  [−0.078, +0.157]) at 35M and −0.113 (95% CI [−0.220, −0.002]) at 650M**, both n=300 (reproducible from
-  the raw pairs in `report/calibration_*/metrics.json`). Both are indistinguishable from — or slightly
-  below — zero: the masking-perturbation dispersion is not larger where the model is more wrong, so it
-  cannot be a useful acquisition signal — the mechanistic root of the ablation. **Moving to 650M does not
-  rescue the prior** (if anything the correlation is marginally negative there). These are pre-registered
-  ablations plus a mechanistic calibration with reported CIs, not post-hoc excuses. Remaining gap: the
-  var-inclusive info-optimal-vs-structural-only comparison at 650M full alphabet is deferred to a GPU
-  (§1, `headline_650m_colab.md`); the calibration already gives the reason it is expected to match, not
-  beat, structural-only.
+- **Conjoint scores and masking variance are separate claims.** The 650M conjoint-score spike contains
+  positive epistatic signal. The masking-variance calibration does not show positive association with
+  absolute error: Spearman is −0.113 with 95% CI [−0.220, −0.002], while Pearson is −0.100 with 95% CI
+  [−0.198, 0.003] ([artifact](../artifacts/calibration_650m.json)). This supports a weak negative rank
+  association but not a general anti-calibration claim. At 35M, both intervals include zero
+  ([artifact](../artifacts/calibration_35m.json)).
+- **The structural result is supplementary.** The full-alphabet deterministic 650M report gives stronger
+  full-set pairwise correlations for structural-only than the reported random and fitness-greedy
+  baselines ([artifact](../artifacts/supplementary_recovery_650m.json)). It does not include
+  info-optimal, and the direct common-predicted-term analysis remains pending. The evidence does not yet
+  distinguish an unseen-term precision effect from broader direct loop coverage.
 
 ## 6. Statistical power & protocol scope
 
@@ -148,9 +140,9 @@ Each item states the constraint, its consequence, and how the code/docs handle i
   Pairwise is the better-powered, decisive order.
 
 - **The frozen protocol is only partially exercised.** The headline requires 650M, the full alphabet,
-  B ∈ {48, 96, 192}, and ≥ 20 seeds with bootstrap CIs. What has run is the 35M reduced-alphabet smoke and
-  the structural-only ablation; the 650M headline and the uncertainty-prior calibration at scale remain
-  compute-bound.
+  B ∈ {48, 96, 192}, and ≥ 20 seeds with bootstrap CIs. What has run is a 35M reduced-alphabet smoke, a
+  deterministic 650M supplementary comparison, and 35M/650M calibration samples. The variance-inclusive
+  650M headline remains unexecuted.
 
 ## 7. Not yet done (scope, not failure)
 

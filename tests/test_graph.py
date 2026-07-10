@@ -1,4 +1,4 @@
-"""Tests for the linear-Gaussian epistasis factor graph (docs/SPEC.md#5, ROADMAP Step 2).
+"""Tests for the linear-Gaussian epistasis factor graph (docs/SPEC.md#5).
 
 The exit criteria for the graph: ``total_uncertainty`` is non-increasing in the measured set, and
 ``info_gain`` is submodular on a toy. Under the v1 independent-noise model info_gain is in fact

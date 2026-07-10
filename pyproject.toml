@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "epibudget"
 version = "0.1.0"
-description = "Information-optimal experimental budget allocation for mapping protein epistasis (zero-shot, ESM-2)."
+description = "Budgeted experimental design for mapping protein epistasis with conjoint ESM-2 scores."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
@@ -25,7 +25,7 @@ dependencies = [
     "numpy>=1.26",
     "scipy>=1.13",          # correlations + bootstrap in the validation harness
     "pandas>=2.2",          # GB1 CSV loading
-    "torch>=2.3",           # CPU wheels are fine; no dedicated GPU required
+    "torch>=2.3",           # CPU and GPU execution are supported; CPU remains the default
     "transformers>=4.44",   # ESM-2 via facebook/esm2_* checkpoints
     "typer>=0.12",          # CLI
     "pydantic>=2.7",        # typed config

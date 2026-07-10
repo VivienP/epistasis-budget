@@ -4,13 +4,15 @@
 
 `epibudget` allocates a fixed experimental budget of *B* wells across candidate protein variants
 (singles, doubles, triples) to **maximally reduce uncertainty about the epistatic structure** of the
-fitness landscape. It is zero-shot (ESM-2), runs on CPU (GPU-optional), and is validated end-to-end on
-the complete GB1 landscape.
+fitness landscape. It is zero-shot (ESM-2), CPU-first and GPU-capable, and is evaluated on the measured,
+viable subset of the public GB1 four-site landscape. The frozen variance-inclusive
+650M comparison has not yet run.
 
 > Status: de-risk gate passed; scoring (now batched + de-duplicated + GPU-capable), epistasis graph,
 > allocation, and the GB1 harness shipped. The frozen 20-letter 650M headline is deferred to a GPU
 > ([`docs/headline_650m_colab.md`](docs/headline_650m_colab.md)); an in-session 650M supplementary run
-> and uncertainty-prior calibration are in Result. See [`docs/SPEC.md`](docs/SPEC.md), [`docs/ROADMAP.md`](docs/ROADMAP.md).
+> and uncertainty-prior calibration are reported below. See [`docs/SPEC.md`](docs/SPEC.md) and
+> [`docs/VALIDATION.md`](docs/VALIDATION.md).
 
 ---
 
@@ -60,7 +62,7 @@ epibudget validate --dataset gb1_wu2016 --budgets 48,96,192
 ## The claim we test (and will report either way)
 
 > At equal budget *B*, variants selected by `epibudget` recover the ground-truth epistasis map of GB1
-> (Wu et al. 2016, complete 20⁴ landscape) **better** than the same budget spent on the highest
+> (Wu et al. 2016, 149,361 measured genotypes from a theoretical 20⁴ space) **better** than the same budget spent on the highest
 > predicted-fitness variants, and better than random.
 
 Metric: correlation between the epistasis coefficients inferred from the *B* selected measurements and
@@ -70,27 +72,39 @@ of information-optimal DMS design, not a silent win. See [`docs/VALIDATION.md`](
 
 ## Result
 
-**De-risk gate: passed.** On real GB1, ESM-2 conjoint ε correlates with the measured ε (650M model,
-pairwise Spearman ≈ 0.30, third-order ≈ 0.25; [`docs/STEP1_GATE.md`](docs/STEP1_GATE.md)) — the signal
-the method rests on is measured, not assumed.
+<!-- artifact-claims:start -->
+**Conjoint-score signal.** On the viable GB1 terms available in the local public-data artifact,
+ESM-2 650M conjoint ε has pairwise Spearman **0.302** and third-order Spearman **0.249**
+([provisional artifact](artifacts/step1_signal_650m.json)). This supports an epistatic signal in the
+scores; it does not validate the masking-variance uncertainty prior.
 
 **Frozen headline (info-optimal vs fitness-greedy vs random, full 20-letter alphabet, 650M): deferred to
-a GPU.** Its per-candidate uncertainty pass is ~1.39M short forwards — ~8–9 days on this CPU-only host,
-~1–4 h on a free Colab T4. Run it with [`docs/headline_650m_colab.md`](docs/headline_650m_colab.md); the
-decision rule and baselines are frozen in [`docs/VALIDATION.md`](docs/VALIDATION.md) — win or null.
+a GPU.** The package remains CPU-capable, but no complete CPU or GPU runtime has been measured for this
+exact run. The explicit recipe is in [`docs/headline_650m_colab.md`](docs/headline_650m_colab.md); the
+decision rule and baselines remain frozen in [`docs/VALIDATION.md`](docs/VALIDATION.md).
 
 **Supplementary 650M run (full alphabet, `pool ≫ B`, deterministic-only — not the frozen headline;
 info-optimal omitted).** At *B* ∈ {48, 96, 192} the structure-aware baseline (`structural-only`, rank by
-epistatic loops braced) recovers the pairwise map at Spearman **0.48 / 0.46 / 0.50** — well above random
-(0.28) and fitness-greedy (negative). Spending budget on the low-order scaffold beats spending it on
-top-predicted-fitness variants.
+epistatic loops braced) has full-set pairwise Spearman **0.484 / 0.460 / 0.504**, versus
+**0.279 / 0.280 / 0.287** for random and **−0.259 / −0.247 / −0.134** for fitness-greedy
+([provisional artifact](artifacts/supplementary_recovery_650m.json)). These are correlations over the
+full eligible truth set. A common-predicted-term analysis is still required before attributing the
+difference to unseen-term precision rather than direct loop coverage.
 
-**ESM uncertainty prior at 650M: null.** Its masking-perturbation dispersion σ² does **not** track the
-model's real per-variant error — Spearman(σ², |error|) = **−0.113, 95% CI [−0.220, −0.002]**, n=300 — so
-it cannot guide acquisition (the mechanistic reason info-optimal is expected to match, not beat,
-`structural-only`). The honest takeaway is a **clean audit**: a structure-aware allocation recovers the
-epistasis map far better than fitness-greedy, but the ESM zero-shot uncertainty adds nothing on top of
-the loop structure. Details and CIs: [`docs/LIMITATIONS.md §5`](docs/LIMITATIONS.md).
+**Masking-variance calibration.** At 650M, Spearman(σ², |error|) is **−0.113, 95% CI
+[−0.220, −0.002]** and Pearson is **−0.100, 95% CI [−0.198, 0.003]**, n=300
+([provisional artifact](artifacts/calibration_650m.json)). This is weak negative rank association, not
+evidence of positive uncertainty calibration; Pearson remains compatible with zero, so it is not a
+general claim of anti-calibration. At 35M, Spearman is **+0.042, 95% CI [−0.078, +0.157]** and Pearson
+is **+0.049, 95% CI [−0.083, +0.180]**, n=300
+([provisional artifact](artifacts/calibration_35m.json)). Cross-fitted and order-stratified analyses are
+pending.
+<!-- artifact-claims:end -->
+
+The defensible current position is narrower: conjoint ESM-2 scores contain epistatic signal, and a
+supplementary structural allocation has stronger full-set recovery than the reported baselines.
+Masking-perturbation variance has not demonstrated positive calibration. The frozen variance-inclusive
+headline remains pending.
 
 ## How it works (3 steps)
 
@@ -109,8 +123,8 @@ formalism, and why this is well-posed: [`docs/RESEARCH_EPISTASIS.md`](docs/RESEA
 
 ## Constraints
 
-Python 3.12+ · CPU-first, GPU-optional (`--device auto|cuda`) · public data only (ProteinGym, GB1,
-UniProt) · `$0` compute.
+Python 3.12+ · CPU-first, GPU-capable (`--device auto|cuda`) · public data only (GB1, UniProt) · no
+claim that the full 650M variance-inclusive run is practically CPU-tractable.
 
 ## Citation & prior art
 

@@ -77,7 +77,7 @@ def variant_from_sequence(seq: str, wt: str = GB1_WT_SEQUENCE) -> Variant:
 
 
 def load_gb1(path: Path, sites: Sequence[int] = GB1_SITES) -> dict[Variant, float]:
-    """Load the complete GB1 four-site landscape as {Variant -> measured fitness}.
+    """Load the measured GB1 four-site rows as {Variant -> measured fitness}.
 
     Expects the SaProtHub/Wu-2016 schema (columns ``protein`` = full 56-residue sequence, ``label``
     = fitness relative to WT). Genotypes are recovered by diffing each sequence against

@@ -4,14 +4,13 @@ The frozen headline (`docs/VALIDATION.md`) scores the full 20-letter, four-site 
 variants) with `esm2_t33_650M` at `n_perturbations=16`. Its cost is dominated by the `var_delta_g`
 pass — **~1.39M short forward passes** — which the info-optimal method needs on every candidate.
 
-On this project's CPU-only host that pass is **~8–9 days** (measured 1.84 forward-rows/s; see
-`docs/LIMITATIONS.md §1`). On a free Colab **T4** GPU the same pass runs in roughly **1–4 hours** at
-FP32 (throughput varies with the assigned GPU and Colab load). This is not "minutes": budget an
-afternoon, and use the resumable cache below so a session timeout never restarts the run.
+The package can execute this configuration on CPU, but no complete CPU duration is published for the
+exact frozen run. A GPU is recommended. Colab is one available environment, not a throughput or runtime
+guarantee; assigned hardware and load vary. Use the resumable cache below so an interruption does not
+discard completed variant scores.
 
-The scoring is device-agnostic — `--device cuda` changes throughput only, not the numbers (the CPU
-parity oracle guarantees the batched path; GPU FP32 output matches within float tolerance and does not
-move any selection). Provenance records `device` in `metrics.json`.
+The same scoring algorithm supports CPU and GPU. Provenance records the resolved `device`; optimized and
+reference CPU scoring are parity-tested, while cross-device floating-point identity is not assumed.
 
 ## Cells
 
@@ -63,8 +62,10 @@ from google.colab import files; files.download(path)
 ## Notes
 
 - **Resumability.** The cache is write-through per chunk; an interruption loses at most one chunk. The
-  cached values are the exact scorer output, so a resumed run is identical to an uninterrupted one.
+  JSONL cache is bound to an immutable metadata sidecar containing the model, candidate-universe
+  checksum, seed, perturbation count, device and scorer settings. A mismatched or legacy cache is rejected.
 - **Do not reduce `--n-perturbations` or the alphabet** to go faster — that changes the numbers and
   breaks the frozen protocol (`docs/VALIDATION.md`, invariant #2). Speed comes from `--device cuda`
   and `--batch-size` only.
-- **Larger GPU.** On an A100 (Colab Pro) the same run is well under an hour; the command is unchanged.
+- **GPU choice.** The command is unchanged across compatible CUDA devices; runtime must be measured and
+  recorded for the assigned hardware rather than inferred from a device name.

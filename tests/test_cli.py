@@ -101,8 +101,22 @@ def test_read_variant_specs_headerless(tmp_path: Path) -> None:
 class _FakeScorer:
     """Stand-in for ConjointScorer: no ESM-2 forward pass, deterministic stub scores."""
 
-    def __init__(self, model_id: str, n_perturbations: int = 16, seed: int = 0) -> None:
+    def __init__(
+        self,
+        model_id: str,
+        device: str = "cpu",
+        n_perturbations: int = 16,
+        seed: int = 0,
+        batch_size: int = 32,
+        num_threads: int | None = None,
+    ) -> None:
         self.model_id = model_id
+        self.device = device
+        self.n_perturbations = n_perturbations
+        self.seed = seed
+        self.mask_fraction = 0.15
+        self.batch_size = batch_size
+        self.num_threads = num_threads
 
     def score_batch(self, wt: str, variants: Sequence[Variant]) -> list[ScoredVariant]:
         return [
@@ -184,6 +198,7 @@ def test_validate_command_runs_offline_and_writes_metrics(
     candidates = enumerate_candidates(GB1_SITES, GB1_WT_AT_SITES, allowed_aa="AC", max_order=3)
     csv = tmp_path / "gb1.csv"
     _write_gb1_csv(csv, candidates)
+    scored_cache = tmp_path / "scored.jsonl"
 
     result = CliRunner().invoke(
         app,
@@ -199,6 +214,8 @@ def test_validate_command_runs_offline_and_writes_metrics(
             "2",
             "--out",
             str(tmp_path / "report"),
+            "--scored-cache",
+            str(scored_cache),
         ],
     )
     assert result.exit_code == 0, result.output
@@ -207,6 +224,11 @@ def test_validate_command_runs_offline_and_writes_metrics(
     written = json.loads((runs[0] / "metrics.json").read_text(encoding="utf-8"))
     assert written["var_epsilon"] > 0.0
     assert written["candidate_alphabet"] == "AC"
+    cache_metadata = json.loads(
+        scored_cache.with_name("scored.jsonl.meta.json").read_text(encoding="utf-8")
+    )
+    assert cache_metadata["candidate_count"] == len(candidates)
+    assert cache_metadata["candidate_alphabet"] == "AC"
     assert {r["method"] for r in written["results"]} == {
         "info",
         "fitness",
@@ -214,3 +236,69 @@ def test_validate_command_runs_offline_and_writes_metrics(
         "random",
         "practice",
     }
+
+
+def _build_scored_cache(path: Path, variants: list[Variant]) -> None:
+    """Write a complete JSONL scored cache with deterministic non-degenerate stub scores."""
+    from epibudget.scored_cache import append_cache  # noqa: PLC0415
+
+    scored = [
+        ScoredVariant(variant=v, delta_g=float(i) - 5.0, var_delta_g=0.1 + 0.01 * i)
+        for i, v in enumerate(variants)
+    ]
+    append_cache(path, scored)
+
+
+def test_robustness_command_writes_report(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("epibudget.robustness._N_BOOTSTRAP", 30)  # keep the offline run snappy
+    candidates = enumerate_candidates(GB1_SITES, GB1_WT_AT_SITES, allowed_aa="AC", max_order=3)
+    csv = tmp_path / "gb1.csv"
+    _write_gb1_csv(csv, candidates)
+    cache = tmp_path / "scored.jsonl"
+    _build_scored_cache(cache, candidates)
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "robustness",
+            "--scored-cache",
+            str(cache),
+            "--data",
+            str(csv),
+            "--alphabet",
+            "AC",
+            "--budgets",
+            "4",
+            "--seeds",
+            "2",
+            "--n-folds",
+            "3",
+            "--out",
+            str(tmp_path / "report"),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    runs = list((tmp_path / "report").iterdir())
+    assert len(runs) == 1
+    report = json.loads((runs[0] / "robustness.json").read_text(encoding="utf-8"))
+    assert report["n_candidates"] == len(candidates)
+    assert "does not alter the frozen decision rule" in report["note"]
+    assert report["scale_sensitivity"]  # at least the pairwise order was analysed
+
+
+def test_robustness_command_rejects_a_partial_cache(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("epibudget.robustness._N_BOOTSTRAP", 30)
+    candidates = enumerate_candidates(GB1_SITES, GB1_WT_AT_SITES, allowed_aa="AC", max_order=3)
+    csv = tmp_path / "gb1.csv"
+    _write_gb1_csv(csv, candidates)
+    cache = tmp_path / "scored.jsonl"
+    _build_scored_cache(cache, candidates[:-1])  # one candidate missing (a truncated run)
+
+    result = CliRunner().invoke(
+        app,
+        ["robustness", "--scored-cache", str(cache), "--data", str(csv), "--alphabet", "AC"],
+    )
+    assert result.exit_code != 0
+    assert "missing" in result.output

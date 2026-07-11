@@ -17,18 +17,20 @@ legitimate, publishable audit and a perfectly good portfolio artifact. It is *no
 
 ## Dataset
 
-- **GB1 four-site landscape**, Wu, Olson, Fowler & Sun 2016, *eLife* — the complete 20⁴ = 160,000
-  combinatorial landscape at positions **V39, D40, G41, V54** of protein G domain B1. Contains every
-  single, double, triple and quadruple mutant with a measured fitness (binding/stability enrichment).
+- **Factual correction (2026-07-10; the decision rule is unchanged).** The four-site genotype space at
+  **V39, D40, G41, V54** contains 20⁴ = 160,000 theoretical genotypes. The local public-data artifact
+  contains 149,361 measured rows: 119,884 with positive fitness, 29,477 dead rows with fitness zero,
+  and 10,639 genotypes absent from the artifact.
 - Access via **ProteinGym** (substitution DMS assays include GB1) and/or the original supplementary
   data. Fetching is explicit and lives in `scripts/fetch_gb1.py`; data is **never committed** (see
   `.gitignore`). The script records a checksum of the downloaded file.
-- Why this dataset: it is the only public landscape with *complete* higher-order ground truth, so we can
-  compute true ε terms and simulate any budgeted experiment exactly (§Simulation).
+- Ground-truth ε is computed only when every required loop member is present and has positive,
+  log-transformable fitness. Results are therefore conditional on a measurable positive-fitness subset,
+  not representative of the entire theoretical genotype space.
 
 ## Ground truth
 
-`ground_truth_epistasis(full_landscape)` computes, from the measured fitnesses:
+`ground_truth_epistasis(measured_live_landscape)` computes, from positive measured fitnesses:
 
 - all pairwise ε(i,j) and third-order ε(i,j,k) terms (WT-referenced, inclusion–exclusion), and
 - the multiallelic Walsh–Hadamard spectrum (variance explained by order) for context.
@@ -128,9 +130,11 @@ result exists.
 
 ## Reproducibility
 
-- One command: `epibudget validate --dataset gb1_wu2016 --budgets 48,96,192 --seeds 20 --out report/`.
-  For a tractable fast-model first pass, `--alphabet` restricts the per-site candidate set (recorded in
-  the report's provenance); the full 20-letter alphabet is the headline.
+- The frozen run requires all scientific settings explicitly:
+  `epibudget validate --dataset gb1_wu2016 --model esm2_t33_650M --alphabet
+  ACDEFGHIKLMNPQRSTVWY --budgets 48,96,192 --seeds 20 --n-perturbations 16 --device cuda --out
+  report/`. A reduced model, alphabet, budget grid, perturbation count, or baseline set is a smoke or
+  supplementary run, never the headline.
 - The run writes `report/<run_id>/metrics.json` (one row per method × budget, with per-order
   correlations, CIs, and coverage) and prints a rich summary; the figures are rendered by
   `notebooks/gb1_demo.ipynb` from that JSON. Every claim in the README or docs must trace to a
@@ -139,6 +143,97 @@ result exists.
 - CI runs the same pipeline on the **35M** model over a reduced budget grid as a smoke test; the
   headline figure uses **650M**. A reproducible Jupyter notebook (`notebooks/gb1_demo.ipynb`) renders the
   headline figure from the saved report.
+
+## Post-registration robustness analyses — 2026-07-10
+
+**Status: implemented and run.** `epibudget robustness` was executed on the completed 650M scored cache
+(`src/epibudget/robustness.py`; spec in `docs/specs/robustness.md`) and its results are wired into public
+artifacts (`artifacts/robustness_650m.json`, README, and the Outcome section below). They do not alter or
+replace the frozen statistic or decision rule above; the difference CIs are descriptive, not tests. This section is written after the Step-1 signal, the
+650M masking-variance calibration, and the 650M deterministic supplementary recovery were already
+computed and committed (`docs/LIMITATIONS.md` §1, §5) — the qualitative shape of those results (the
+uncertainty prior looking unhelpful; structural-only beating random and fitness-greedy) was visible when
+these three devices were chosen. So this section cannot claim the bias-protection of a blind
+pre-registration; it only fixes the method before its own numbers exist, which still blocks tuning the
+method to a specific number once computed.
+
+- **Common identities.** Full-set correlations use the same complete-loop truth terms for every method.
+  Method-specific precision remains descriptive because its eligible terms differ. Direct precision
+  comparisons use only the intersection of terms for which both methods produce an informed,
+  non-pinned prediction. Terms without an informed prediction contribute to coverage counts only; no
+  Pearson or Spearman correlation is computed for them. Caveat: this intersection is not a neutral
+  subsample — a term is informed more easily the larger its loop (7 members at third order vs. 3 at
+  pairwise, `interaction_loop`), and info-optimal's `n(v)`-driven hub bias and fitness-greedy/practice's
+  high-ΔG bias both concentrate coverage on the same popular positions, so "both methods inform it"
+  correlates with a term's loop size and structural popularity, not only with predictive skill.
+- **Method-independent scale sensitivity.** A deterministic five-fold partition is defined from variant
+  identities before any labels enter analysis. Fold-specific through-origin slopes are fit from positive,
+  log-transformable fitness values outside the held-out fold and reused identically for all methods; a
+  multi-member term (e.g. a third-order loop) converts each member with that member's own fold's slope,
+  not one slope for the whole loop. These labels and live/dead states are post-selection analysis inputs
+  and are never available to a selector. Results using them are explicitly conditional on positive
+  measurable fitness. Constraint this assumes (stated, not argued): sharing one slope across methods
+  removes a per-method small-sample calibration confound, but assumes the ESM-to-measured-fitness linear
+  relationship is homogeneous across whatever subpopulation each method's selection happens to leave
+  unmeasured — the same kind of assumption `_calibrate_slope` already states explicitly as a constraint
+  for its own through-origin convention.
+- **Paired differences.** Correlation differences are bootstrapped on identical terms. Random comparisons
+  report term resampling, seed resampling, and a hierarchical bootstrap that draws a fresh term-resample
+  for each resampled seed (seed variance nested outside term variance). This inherits the leverage-
+  concentration caveat already stated for term bootstraps (`docs/LIMITATIONS.md`, "Confidence intervals
+  measure two different things"): nesting seeds and terms does not make the terms independent. Separate
+  confidence intervals are never treated as a test of a
+  direct difference — a stricter standard than the frozen decision rule's own non-overlapping-CI
+  criterion above; that rule remains the frozen bar for H1, and this stricter standard applies only to
+  these companion analyses, not to it.
+
+## Outcome — frozen 650M headline (2026-07-11)
+
+The frozen run executed on a Colab T4 (`device=cuda`, 29,678 candidates, `n_perturbations=16`, 20 seeds,
+budgets 48/96/192) on the GitHub branch tip `3ba75eb`. Artifacts: `artifacts/headline_650m.json` (recovery
++ CIs) and `artifacts/robustness_650m.json` (post-hoc A1/A2/A3). Verdict, read strictly off the frozen rule
+and its mandatory companions (figures live in the artifacts and the claim-checked README):
+
+- **H1 supported.** On the registered statistic — pairwise Spearman *and* Pearson — information-optimal
+  beats fitness-greedy and random with non-overlapping bootstrap 95% CIs at all three budgets. The frozen
+  bar is met.
+- **The uncertainty prior earns no credit (ablation clause).** The prior-free `structural-only` ablation
+  has the higher pairwise recovery than info-optimal at every budget on both correlations, and the post-hoc
+  paired common-predicted-term precision comparison puts structural ahead of info-optimal with a descriptive
+  difference whose 95% CI excludes zero at all three budgets. Per "Mandatory baselines" above, info-optimal
+  is not `> structural-only`, so the ESM masking-perturbation uncertainty prior is **dropped from the
+  claims**; the allocation's recovery is attributed to the structural `n(v)` loop-coverage sort. The A2
+  cross-fit scale-sensitivity probe agrees (structural > info > fitness at every order and budget).
+- **Framing.** The headline is reported caveat-first (structural-only wins) with H1's formal support stated
+  plainly and all baselines shown together, per invariant #2. The A1/A3 difference CIs are descriptive
+  companions, not hypothesis tests, and do not change the frozen decision.
+
+## Second landscape — TrpB (pre-registered, run DEFERRED)
+
+**Status: protocol frozen here BEFORE any TrpB result exists; the run is deliberately deferred until the
+GB1 headline is interpreted.** Running a second landscape and only then choosing how to report it would
+be landscape / multiple-comparison cherry-picking (invariant #2). This section fixes the protocol first;
+the loader (`epibudget.data.load_trpb`) and fetch (`scripts/fetch_trpb.py`) are implemented, no number is
+computed. The TrpB result will be reported regardless of direction — including if it weakens the GB1
+story.
+
+- **Landscape.** TrpB (Johnston et al. 2024, PNAS 121(32) e2400439121): the combinatorially complete
+  20⁴ = 160,000-variant active-site landscape of the β-subunit of tryptophan synthase. An independent
+  readout from GB1 — enzyme catalysis vs GB1's IgG-Fc binding — so agreement across the two is a genuine
+  generalization, not a re-test of the same assay type. Reference (ε anchor) is the assayed parent
+  **Tm9D8* = VFVS** (residues V/F/V/S at positions 183/184/227/228, 1-indexed), never literal TmTrpB.
+- **Conditioning (stated up front).** ε and calibration use positive-fitness, log-transformable rows with
+  complete loops, exactly as for GB1. Per the paper, **871 of 160,000 fitness values (~0.5%) are imputed,
+  not measured**, and the public mirror does not flag which — any TrpB number must carry that caveat.
+- **Frozen settings (identical shape to the GB1 headline).** `esm2_t33_650M`, full 20-letter alphabet,
+  B ∈ {48, 96, 192}, ≥ 20 seeds, `n_perturbations = 16`; the same decision rule (info-optimal vs
+  fitness-greedy vs random on the pairwise-order Spearman AND Pearson map-recovery, non-overlapping
+  bootstrap 95% CIs), the same mandatory baselines (info / fitness / random, plus practice and
+  structural-only companions), and the same Phase B post-hoc analyses. No setting is chosen after seeing
+  a TrpB number.
+- **Reproducibility.** `python scripts/fetch_trpb.py` writes `data/proteingym/trpb_johnston2024.csv`
+  (git-ignored) with a checksum + provenance; the frozen run is the GB1 `validate` command with
+  `--data data/proteingym/trpb_johnston2024.csv` (and the TrpB sites/reference from `epibudget.data`).
 
 ## Threats to validity (and mitigations)
 
@@ -149,3 +244,4 @@ result exists.
 | GB1 has only 4 positions | claim framed as *principle validation*; power comes from 20³ AA instantiations per triplet, not from many positions (see RESEARCH §4) |
 | Overfitting the metric to one B | report all B; decision rule requires a majority |
 | Inference step does the work, not selection | same `infer_epistasis` used for all three methods; only the *selected set* differs |
+| Second-landscape cherry-picking | the TrpB protocol is frozen before any TrpB number and the run is deferred until GB1 is interpreted; reported regardless of direction |

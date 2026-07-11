@@ -1,0 +1,379 @@
+{
+  "schema_version": 1,
+  "forbidden_literals": [
+    "+0.139",
+    "+0.036",
+    "n=150"
+  ],
+  "claims": [
+    {
+      "id": "dataset.measured_rows",
+      "document": "README.md",
+      "artifact": "artifacts/dataset_gb1.json",
+      "json_pointer": "/measured_rows",
+      "transform": {"name": "grouped"},
+      "rendered": "149,361",
+      "anchor": "149,361 measured genotypes"
+    },
+    {
+      "id": "step1.pairwise_spearman",
+      "document": "README.md",
+      "artifact": "artifacts/step1_signal_650m.json",
+      "json_pointer": "/result/spearman_pairwise",
+      "transform": {"name": "round", "digits": 3},
+      "rendered": "0.302",
+      "anchor": "pairwise Spearman **0.302**"
+    },
+    {
+      "id": "step1.third_spearman",
+      "document": "README.md",
+      "artifact": "artifacts/step1_signal_650m.json",
+      "json_pointer": "/result/spearman_third",
+      "transform": {"name": "round", "digits": 3},
+      "rendered": "0.249",
+      "anchor": "third-order Spearman **0.249**"
+    },
+    {
+      "id": "headline.structural_sp_b48",
+      "document": "README.md",
+      "artifact": "artifacts/headline_650m.json",
+      "json_pointer": "/result/results/2/metrics/0/spearman",
+      "transform": {"name": "round", "digits": 3},
+      "rendered": "0.484",
+      "anchor": "**0.484 / 0.460 / 0.504**"
+    },
+    {
+      "id": "headline.structural_sp_b96",
+      "document": "README.md",
+      "artifact": "artifacts/headline_650m.json",
+      "json_pointer": "/result/results/7/metrics/0/spearman",
+      "transform": {"name": "round", "digits": 3},
+      "rendered": "0.460",
+      "anchor": "**0.484 / 0.460 / 0.504**"
+    },
+    {
+      "id": "headline.structural_sp_b192",
+      "document": "README.md",
+      "artifact": "artifacts/headline_650m.json",
+      "json_pointer": "/result/results/12/metrics/0/spearman",
+      "transform": {"name": "round", "digits": 3},
+      "rendered": "0.504",
+      "anchor": "**0.484 / 0.460 / 0.504**"
+    },
+    {
+      "id": "headline.structural_pe_b48",
+      "document": "README.md",
+      "artifact": "artifacts/headline_650m.json",
+      "json_pointer": "/result/results/2/metrics/0/pearson",
+      "transform": {"name": "round", "digits": 3},
+      "rendered": "0.514",
+      "anchor": "**0.514 / 0.526 / 0.573**"
+    },
+    {
+      "id": "headline.structural_pe_b96",
+      "document": "README.md",
+      "artifact": "artifacts/headline_650m.json",
+      "json_pointer": "/result/results/7/metrics/0/pearson",
+      "transform": {"name": "round", "digits": 3},
+      "rendered": "0.526",
+      "anchor": "**0.514 / 0.526 / 0.573**"
+    },
+    {
+      "id": "headline.structural_pe_b192",
+      "document": "README.md",
+      "artifact": "artifacts/headline_650m.json",
+      "json_pointer": "/result/results/12/metrics/0/pearson",
+      "transform": {"name": "round", "digits": 3},
+      "rendered": "0.573",
+      "anchor": "**0.514 / 0.526 / 0.573**"
+    },
+    {
+      "id": "headline.info_sp_b48",
+      "document": "README.md",
+      "artifact": "artifacts/headline_650m.json",
+      "json_pointer": "/result/results/0/metrics/0/spearman",
+      "transform": {"name": "round", "digits": 3},
+      "rendered": "0.408",
+      "anchor": "**0.408 / 0.418 / 0.443**"
+    },
+    {
+      "id": "headline.info_sp_b96",
+      "document": "README.md",
+      "artifact": "artifacts/headline_650m.json",
+      "json_pointer": "/result/results/5/metrics/0/spearman",
+      "transform": {"name": "round", "digits": 3},
+      "rendered": "0.418",
+      "anchor": "**0.408 / 0.418 / 0.443**"
+    },
+    {
+      "id": "headline.info_sp_b192",
+      "document": "README.md",
+      "artifact": "artifacts/headline_650m.json",
+      "json_pointer": "/result/results/10/metrics/0/spearman",
+      "transform": {"name": "round", "digits": 3},
+      "rendered": "0.443",
+      "anchor": "**0.408 / 0.418 / 0.443**"
+    },
+    {
+      "id": "headline.info_pe_b48",
+      "document": "README.md",
+      "artifact": "artifacts/headline_650m.json",
+      "json_pointer": "/result/results/0/metrics/0/pearson",
+      "transform": {"name": "round", "digits": 3},
+      "rendered": "0.458",
+      "anchor": "**0.458 / 0.479 / 0.504**"
+    },
+    {
+      "id": "headline.info_pe_b96",
+      "document": "README.md",
+      "artifact": "artifacts/headline_650m.json",
+      "json_pointer": "/result/results/5/metrics/0/pearson",
+      "transform": {"name": "round", "digits": 3},
+      "rendered": "0.479",
+      "anchor": "**0.458 / 0.479 / 0.504**"
+    },
+    {
+      "id": "headline.info_pe_b192",
+      "document": "README.md",
+      "artifact": "artifacts/headline_650m.json",
+      "json_pointer": "/result/results/10/metrics/0/pearson",
+      "transform": {"name": "round", "digits": 3},
+      "rendered": "0.504",
+      "anchor": "**0.458 / 0.479 / 0.504**"
+    },
+    {
+      "id": "headline.fitness_sp_b48",
+      "document": "README.md",
+      "artifact": "artifacts/headline_650m.json",
+      "json_pointer": "/result/results/1/metrics/0/spearman",
+      "transform": {"name": "round", "digits": 3, "unicode_minus": true},
+      "rendered": "−0.259",
+      "anchor": "**−0.259 / −0.247 / −0.134**"
+    },
+    {
+      "id": "headline.fitness_sp_b96",
+      "document": "README.md",
+      "artifact": "artifacts/headline_650m.json",
+      "json_pointer": "/result/results/6/metrics/0/spearman",
+      "transform": {"name": "round", "digits": 3, "unicode_minus": true},
+      "rendered": "−0.247",
+      "anchor": "**−0.259 / −0.247 / −0.134**"
+    },
+    {
+      "id": "headline.fitness_sp_b192",
+      "document": "README.md",
+      "artifact": "artifacts/headline_650m.json",
+      "json_pointer": "/result/results/11/metrics/0/spearman",
+      "transform": {"name": "round", "digits": 3, "unicode_minus": true},
+      "rendered": "−0.134",
+      "anchor": "**−0.259 / −0.247 / −0.134**"
+    },
+    {
+      "id": "headline.random_sp_b48",
+      "document": "README.md",
+      "artifact": "artifacts/headline_650m.json",
+      "json_pointer": "/result/results/4/metrics/0/spearman",
+      "transform": {"name": "round", "digits": 3},
+      "rendered": "0.279",
+      "anchor": "**0.279 / 0.280 / 0.287**"
+    },
+    {
+      "id": "headline.random_sp_b96",
+      "document": "README.md",
+      "artifact": "artifacts/headline_650m.json",
+      "json_pointer": "/result/results/9/metrics/0/spearman",
+      "transform": {"name": "round", "digits": 3},
+      "rendered": "0.280",
+      "anchor": "**0.279 / 0.280 / 0.287**"
+    },
+    {
+      "id": "headline.random_sp_b192",
+      "document": "README.md",
+      "artifact": "artifacts/headline_650m.json",
+      "json_pointer": "/result/results/14/metrics/0/spearman",
+      "transform": {"name": "round", "digits": 3},
+      "rendered": "0.287",
+      "anchor": "**0.279 / 0.280 / 0.287**"
+    },
+    {
+      "id": "precision.info_sp",
+      "document": "README.md",
+      "artifact": "artifacts/robustness_650m.json",
+      "json_pointer": "/result/common_precision/1/spearman_a",
+      "transform": {"name": "round", "digits": 3},
+      "rendered": "0.452",
+      "anchor": "Spearman **0.452** vs **0.537**"
+    },
+    {
+      "id": "precision.structural_sp",
+      "document": "README.md",
+      "artifact": "artifacts/robustness_650m.json",
+      "json_pointer": "/result/common_precision/1/spearman_b",
+      "transform": {"name": "round", "digits": 3},
+      "rendered": "0.537",
+      "anchor": "Spearman **0.452** vs **0.537**"
+    },
+    {
+      "id": "precision.delta",
+      "document": "README.md",
+      "artifact": "artifacts/robustness_650m.json",
+      "json_pointer": "/result/common_precision/1/difference/delta",
+      "transform": {"name": "round", "digits": 3, "unicode_minus": true},
+      "rendered": "−0.085",
+      "anchor": "Δ −0.085, 95% CI [−0.125, −0.047]"
+    },
+    {
+      "id": "precision.delta_ci_lo",
+      "document": "README.md",
+      "artifact": "artifacts/robustness_650m.json",
+      "json_pointer": "/result/common_precision/1/difference/delta_ci95/0",
+      "transform": {"name": "round", "digits": 3, "unicode_minus": true},
+      "rendered": "−0.125",
+      "anchor": "Δ −0.085, 95% CI [−0.125, −0.047]"
+    },
+    {
+      "id": "precision.delta_ci_hi",
+      "document": "README.md",
+      "artifact": "artifacts/robustness_650m.json",
+      "json_pointer": "/result/common_precision/1/difference/delta_ci95/1",
+      "transform": {"name": "round", "digits": 3, "unicode_minus": true},
+      "rendered": "−0.047",
+      "anchor": "Δ −0.085, 95% CI [−0.125, −0.047]"
+    },
+    {
+      "id": "precision.n_common",
+      "document": "README.md",
+      "artifact": "artifacts/robustness_650m.json",
+      "json_pointer": "/result/common_precision/1/n_common",
+      "transform": {"name": "grouped"},
+      "rendered": "1,511",
+      "anchor": "n = 1,511 matched pairwise terms"
+    },
+    {
+      "id": "calibration650.spearman",
+      "document": "README.md",
+      "artifact": "artifacts/calibration_650m.json",
+      "json_pointer": "/result/spearman_sigma2_abserror",
+      "transform": {"name": "round", "digits": 3, "unicode_minus": true},
+      "rendered": "−0.113",
+      "anchor": "Spearman(σ², |error|) is **−0.113"
+    },
+    {
+      "id": "calibration650.spearman_ci_lo",
+      "document": "README.md",
+      "artifact": "artifacts/calibration_650m.json",
+      "json_pointer": "/result/spearman_ci95/0",
+      "transform": {"name": "round", "digits": 3, "unicode_minus": true},
+      "rendered": "−0.220",
+      "anchor": "[−0.220, −0.002]"
+    },
+    {
+      "id": "calibration650.spearman_ci_hi",
+      "document": "README.md",
+      "artifact": "artifacts/calibration_650m.json",
+      "json_pointer": "/result/spearman_ci95/1",
+      "transform": {"name": "round", "digits": 3, "unicode_minus": true},
+      "rendered": "−0.002",
+      "anchor": "[−0.220, −0.002]"
+    },
+    {
+      "id": "calibration650.pearson",
+      "document": "README.md",
+      "artifact": "artifacts/calibration_650m.json",
+      "json_pointer": "/result/pearson_sigma2_abserror",
+      "transform": {"name": "round", "digits": 3, "unicode_minus": true},
+      "rendered": "−0.100",
+      "anchor": "Pearson is **−0.100"
+    },
+    {
+      "id": "calibration650.pearson_ci_lo",
+      "document": "README.md",
+      "artifact": "artifacts/calibration_650m.json",
+      "json_pointer": "/result/pearson_ci95/0",
+      "transform": {"name": "round", "digits": 3, "unicode_minus": true},
+      "rendered": "−0.198",
+      "anchor": "[−0.198, 0.003]"
+    },
+    {
+      "id": "calibration650.pearson_ci_hi",
+      "document": "README.md",
+      "artifact": "artifacts/calibration_650m.json",
+      "json_pointer": "/result/pearson_ci95/1",
+      "transform": {"name": "round", "digits": 3},
+      "rendered": "0.003",
+      "anchor": "[−0.198, 0.003]"
+    },
+    {
+      "id": "calibration650.n",
+      "document": "README.md",
+      "artifact": "artifacts/calibration_650m.json",
+      "json_pointer": "/result/n",
+      "transform": {"name": "identity"},
+      "rendered": "300",
+      "anchor": "n=300"
+    },
+    {
+      "id": "calibration35.spearman",
+      "document": "README.md",
+      "artifact": "artifacts/calibration_35m.json",
+      "json_pointer": "/result/spearman_sigma2_abserror",
+      "transform": {"name": "round", "digits": 3, "show_plus": true},
+      "rendered": "+0.042",
+      "anchor": "Spearman is **+0.042"
+    },
+    {
+      "id": "calibration35.spearman_ci_lo",
+      "document": "README.md",
+      "artifact": "artifacts/calibration_35m.json",
+      "json_pointer": "/result/spearman_ci95/0",
+      "transform": {"name": "round", "digits": 3, "unicode_minus": true},
+      "rendered": "−0.078",
+      "anchor": "[−0.078, +0.157]"
+    },
+    {
+      "id": "calibration35.spearman_ci_hi",
+      "document": "README.md",
+      "artifact": "artifacts/calibration_35m.json",
+      "json_pointer": "/result/spearman_ci95/1",
+      "transform": {"name": "round", "digits": 3, "show_plus": true},
+      "rendered": "+0.157",
+      "anchor": "[−0.078, +0.157]"
+    },
+    {
+      "id": "calibration35.pearson",
+      "document": "README.md",
+      "artifact": "artifacts/calibration_35m.json",
+      "json_pointer": "/result/pearson_sigma2_abserror",
+      "transform": {"name": "round", "digits": 3, "show_plus": true},
+      "rendered": "+0.049",
+      "anchor": "**+0.049, 95% CI"
+    },
+    {
+      "id": "calibration35.pearson_ci_lo",
+      "document": "README.md",
+      "artifact": "artifacts/calibration_35m.json",
+      "json_pointer": "/result/pearson_ci95/0",
+      "transform": {"name": "round", "digits": 3, "unicode_minus": true},
+      "rendered": "−0.083",
+      "anchor": "[−0.083, +0.180]"
+    },
+    {
+      "id": "calibration35.pearson_ci_hi",
+      "document": "README.md",
+      "artifact": "artifacts/calibration_35m.json",
+      "json_pointer": "/result/pearson_ci95/1",
+      "transform": {"name": "round", "digits": 3, "show_plus": true},
+      "rendered": "+0.180",
+      "anchor": "[−0.083, +0.180]"
+    },
+    {
+      "id": "calibration35.n",
+      "document": "README.md",
+      "artifact": "artifacts/calibration_35m.json",
+      "json_pointer": "/result/n",
+      "transform": {"name": "identity"},
+      "rendered": "300",
+      "anchor": "n=300"
+    }
+  ]
+}

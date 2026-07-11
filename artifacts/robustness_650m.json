@@ -1,0 +1,953 @@
+{
+  "schema_version": 1,
+  "provenance": {
+    "source_path": "report/20260711T102440Z/robustness.json",
+    "source_run_id": "20260711T102440Z",
+    "source_sha256": "9b26914c86ec1cd8cd3fde26e7e3f90bee9a417c447b274a1239f20559c1a17c",
+    "evidence_classification": "traceable_not_rerun"
+  },
+  "result": {
+    "dataset": "gb1_wu2016",
+    "model_id": "facebook/esm2_t33_650M_UR50D",
+    "budgets": [
+      48,
+      96,
+      192
+    ],
+    "seeds": 20,
+    "max_order": 3,
+    "n_candidates": 29678,
+    "n_folds": 5,
+    "note": "post-hoc, descriptive; does not alter the frozen decision rule; difference CIs are not hypothesis tests; A2 crossfit numbers are non-operational robustness probes",
+    "common_precision": [
+      {
+        "method_a": "info",
+        "method_b": "fitness",
+        "order": "pairwise",
+        "n_common": 101,
+        "spearman_a": 0.10951659871869537,
+        "spearman_b": -0.018241118229470003,
+        "pearson_a": 0.15031600391383967,
+        "pearson_b": -0.029584003544394284,
+        "mean_informed_fraction_a": 0.47194719471947194,
+        "mean_informed_fraction_b": 0.36303630363036316,
+        "difference": {
+          "method_a": "info",
+          "method_b": "fitness",
+          "order": "pairwise",
+          "statistic": "spearman",
+          "delta": 0.12775771694816537,
+          "delta_ci95": [
+            -0.2072224022272926,
+            0.42566969641597074
+          ],
+          "excludes_zero": false,
+          "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+        }
+      },
+      {
+        "method_a": "info",
+        "method_b": "structural",
+        "order": "pairwise",
+        "n_common": 1511,
+        "spearman_a": 0.4517827706319605,
+        "spearman_b": 0.5368065351791755,
+        "pearson_a": 0.4785181047548268,
+        "pearson_b": 0.5541175317426127,
+        "mean_informed_fraction_a": 0.45929847782925215,
+        "mean_informed_fraction_b": 0.46018089565409226,
+        "difference": {
+          "method_a": "info",
+          "method_b": "structural",
+          "order": "pairwise",
+          "statistic": "spearman",
+          "delta": -0.08502376454721505,
+          "delta_ci95": [
+            -0.12512120143926123,
+            -0.04653629719151313
+          ],
+          "excludes_zero": true,
+          "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+        }
+      },
+      {
+        "method_a": "info",
+        "method_b": "fitness",
+        "order": "third",
+        "n_common": 1546,
+        "spearman_a": 0.09243528607514297,
+        "spearman_b": -0.1648385422647109,
+        "pearson_a": 0.07804190081271885,
+        "pearson_b": -0.16307390638131036,
+        "mean_informed_fraction_a": 0.28857882092034737,
+        "mean_informed_fraction_b": 0.17649233043799661,
+        "difference": {
+          "method_a": "info",
+          "method_b": "fitness",
+          "order": "third",
+          "statistic": "spearman",
+          "delta": 0.25727382833985385,
+          "delta_ci95": [
+            0.1772681570273152,
+            0.32753269259383405
+          ],
+          "excludes_zero": true,
+          "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+        }
+      },
+      {
+        "method_a": "info",
+        "method_b": "structural",
+        "order": "third",
+        "n_common": 15379,
+        "spearman_a": 0.1504351278503861,
+        "spearman_b": 0.21592552933366868,
+        "pearson_a": 0.15476994373940745,
+        "pearson_b": 0.23478821728999935,
+        "mean_informed_fraction_a": 0.26866877838982645,
+        "mean_informed_fraction_b": 0.2855470818277242,
+        "difference": {
+          "method_a": "info",
+          "method_b": "structural",
+          "order": "third",
+          "statistic": "spearman",
+          "delta": -0.06549040148328258,
+          "delta_ci95": [
+            -0.08030076135864868,
+            -0.04972767957185908
+          ],
+          "excludes_zero": true,
+          "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+        }
+      },
+      {
+        "method_a": "info",
+        "method_b": "fitness",
+        "order": "pairwise",
+        "n_common": 175,
+        "spearman_a": 0.10313927451858487,
+        "spearman_b": -0.04721674876847291,
+        "pearson_a": 0.1504263212370124,
+        "pearson_b": -0.10396441354883589,
+        "mean_informed_fraction_a": 0.6342857142857142,
+        "mean_informed_fraction_b": 0.36952380952380964,
+        "difference": {
+          "method_a": "info",
+          "method_b": "fitness",
+          "order": "pairwise",
+          "statistic": "spearman",
+          "delta": 0.15035602328705777,
+          "delta_ci95": [
+            -0.07886340888670243,
+            0.36886766642242264
+          ],
+          "excludes_zero": false,
+          "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+        }
+      },
+      {
+        "method_a": "info",
+        "method_b": "structural",
+        "order": "pairwise",
+        "n_common": 1762,
+        "spearman_a": 0.4206325263818929,
+        "spearman_b": 0.4537548484150674,
+        "pearson_a": 0.4794194444070951,
+        "pearson_b": 0.5201710247143939,
+        "mean_informed_fraction_a": 0.5855088914112749,
+        "mean_informed_fraction_b": 0.6666666666666666,
+        "difference": {
+          "method_a": "info",
+          "method_b": "structural",
+          "order": "pairwise",
+          "statistic": "spearman",
+          "delta": -0.0331223220331745,
+          "delta_ci95": [
+            -0.048480600115639795,
+            -0.01748885796585604
+          ],
+          "excludes_zero": true,
+          "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+        }
+      },
+      {
+        "method_a": "info",
+        "method_b": "fitness",
+        "order": "third",
+        "n_common": 2491,
+        "spearman_a": 0.18281375581422635,
+        "spearman_b": -0.2719224300017144,
+        "pearson_a": 0.17070036944684353,
+        "pearson_b": -0.2631757028143922,
+        "mean_informed_fraction_a": 0.3972587027585019,
+        "mean_informed_fraction_b": 0.17887251247347588,
+        "difference": {
+          "method_a": "info",
+          "method_b": "fitness",
+          "order": "third",
+          "statistic": "spearman",
+          "delta": 0.4547361858159408,
+          "delta_ci95": [
+            0.3975937806397163,
+            0.5148348408075112
+          ],
+          "excludes_zero": true,
+          "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+        }
+      },
+      {
+        "method_a": "info",
+        "method_b": "structural",
+        "order": "third",
+        "n_common": 15945,
+        "spearman_a": 0.11942524139874065,
+        "spearman_b": 0.17006381846670598,
+        "pearson_a": 0.14215655162047436,
+        "pearson_b": 0.19205622192461302,
+        "mean_informed_fraction_a": 0.3746270662545356,
+        "mean_informed_fraction_b": 0.4306141647628007,
+        "difference": {
+          "method_a": "info",
+          "method_b": "structural",
+          "order": "third",
+          "statistic": "spearman",
+          "delta": -0.05063857706796533,
+          "delta_ci95": [
+            -0.057957999315584145,
+            -0.04306145283409932
+          ],
+          "excludes_zero": true,
+          "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+        }
+      },
+      {
+        "method_a": "info",
+        "method_b": "fitness",
+        "order": "pairwise",
+        "n_common": 470,
+        "spearman_a": 0.22972903858151025,
+        "spearman_b": 0.38715475340468014,
+        "pearson_a": 0.27820584265064663,
+        "pearson_b": 0.41092324736597474,
+        "mean_informed_fraction_a": 0.5950354609929077,
+        "mean_informed_fraction_b": 0.35106382978723405,
+        "difference": {
+          "method_a": "info",
+          "method_b": "fitness",
+          "order": "pairwise",
+          "statistic": "spearman",
+          "delta": -0.1574257148231699,
+          "delta_ci95": [
+            -0.2847085236403607,
+            -0.02262061529082343
+          ],
+          "excludes_zero": true,
+          "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+        }
+      },
+      {
+        "method_a": "info",
+        "method_b": "structural",
+        "order": "pairwise",
+        "n_common": 1627,
+        "spearman_a": 0.45736168990092063,
+        "spearman_b": 0.5029442185709692,
+        "pearson_a": 0.5132850284464704,
+        "pearson_b": 0.5656929895135632,
+        "mean_informed_fraction_a": 0.6287645974185617,
+        "mean_informed_fraction_b": 0.6666666666666665,
+        "difference": {
+          "method_a": "info",
+          "method_b": "structural",
+          "order": "pairwise",
+          "statistic": "spearman",
+          "delta": -0.04558252867004853,
+          "delta_ci95": [
+            -0.057090604681768437,
+            -0.034697202899947
+          ],
+          "excludes_zero": true,
+          "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+        }
+      },
+      {
+        "method_a": "info",
+        "method_b": "fitness",
+        "order": "third",
+        "n_common": 6388,
+        "spearman_a": 0.2788686061525867,
+        "spearman_b": 0.05674933477440554,
+        "pearson_a": 0.2853925720576668,
+        "pearson_b": 0.10501885488098352,
+        "mean_informed_fraction_a": 0.3997674210573396,
+        "mean_informed_fraction_b": 0.19462832095894086,
+        "difference": {
+          "method_a": "info",
+          "method_b": "fitness",
+          "order": "third",
+          "statistic": "spearman",
+          "delta": 0.22211927137818116,
+          "delta_ci95": [
+            0.1846155558223821,
+            0.25829034587907335
+          ],
+          "excludes_zero": true,
+          "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+        }
+      },
+      {
+        "method_a": "info",
+        "method_b": "structural",
+        "order": "third",
+        "n_common": 15958,
+        "spearman_a": 0.1468963136469119,
+        "spearman_b": 0.24747504171311135,
+        "pearson_a": 0.17325555791437156,
+        "pearson_b": 0.26746750100930083,
+        "mean_informed_fraction_a": 0.42029971532415444,
+        "mean_informed_fraction_b": 0.45178414767335684,
+        "difference": {
+          "method_a": "info",
+          "method_b": "structural",
+          "order": "third",
+          "statistic": "spearman",
+          "delta": -0.10057872806619944,
+          "delta_ci95": [
+            -0.10791086370528405,
+            -0.09250034574725666
+          ],
+          "excludes_zero": true,
+          "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+        }
+      }
+    ],
+    "scale_sensitivity": [
+      {
+        "order": "pairwise",
+        "n_folds": 5,
+        "global_ranking": [
+          "structural",
+          "info",
+          "fitness"
+        ],
+        "crossfit_ranking": [
+          "structural",
+          "info",
+          "fitness"
+        ],
+        "ranking_agrees": true,
+        "per_method_spearman_global": {
+          "info": 0.4081551885629586,
+          "fitness": -0.2590490176916245,
+          "structural": 0.48448676698450566
+        },
+        "per_method_spearman_crossfit": {
+          "info": 0.4310916213667159,
+          "fitness": 0.27064968031596065,
+          "structural": 0.5038868114479711
+        },
+        "caveat": "cross-fitted on full-landscape labels (more label information than an operational run); a robustness probe of the frozen ranking, NOT an operational recovery number; never quote as a headline figure and never adopt crossfit_ranking as the reported method order"
+      },
+      {
+        "order": "third",
+        "n_folds": 5,
+        "global_ranking": [
+          "structural",
+          "info",
+          "fitness"
+        ],
+        "crossfit_ranking": [
+          "structural",
+          "info",
+          "fitness"
+        ],
+        "ranking_agrees": true,
+        "per_method_spearman_global": {
+          "info": 0.15133428654052936,
+          "fitness": -0.08719467901430193,
+          "structural": 0.22032955876875343
+        },
+        "per_method_spearman_crossfit": {
+          "info": 0.19891935230422858,
+          "fitness": 0.09379319756920328,
+          "structural": 0.26278408073018705
+        },
+        "caveat": "cross-fitted on full-landscape labels (more label information than an operational run); a robustness probe of the frozen ranking, NOT an operational recovery number; never quote as a headline figure and never adopt crossfit_ranking as the reported method order"
+      },
+      {
+        "order": "pairwise",
+        "n_folds": 5,
+        "global_ranking": [
+          "structural",
+          "info",
+          "fitness"
+        ],
+        "crossfit_ranking": [
+          "structural",
+          "info",
+          "fitness"
+        ],
+        "ranking_agrees": true,
+        "per_method_spearman_global": {
+          "info": 0.41826570123426604,
+          "fitness": -0.2471501239015881,
+          "structural": 0.4601914797445085
+        },
+        "per_method_spearman_crossfit": {
+          "info": 0.4440717162190072,
+          "fitness": 0.27275606688211246,
+          "structural": 0.47274255977993573
+        },
+        "caveat": "cross-fitted on full-landscape labels (more label information than an operational run); a robustness probe of the frozen ranking, NOT an operational recovery number; never quote as a headline figure and never adopt crossfit_ranking as the reported method order"
+      },
+      {
+        "order": "third",
+        "n_folds": 5,
+        "global_ranking": [
+          "structural",
+          "info",
+          "fitness"
+        ],
+        "crossfit_ranking": [
+          "structural",
+          "info",
+          "fitness"
+        ],
+        "ranking_agrees": true,
+        "per_method_spearman_global": {
+          "info": 0.11956752826728997,
+          "fitness": -0.10563785045470948,
+          "structural": 0.170503786616093
+        },
+        "per_method_spearman_crossfit": {
+          "info": 0.1688518999565789,
+          "fitness": 0.08999601892559139,
+          "structural": 0.19603078877175595
+        },
+        "caveat": "cross-fitted on full-landscape labels (more label information than an operational run); a robustness probe of the frozen ranking, NOT an operational recovery number; never quote as a headline figure and never adopt crossfit_ranking as the reported method order"
+      },
+      {
+        "order": "pairwise",
+        "n_folds": 5,
+        "global_ranking": [
+          "structural",
+          "info",
+          "fitness"
+        ],
+        "crossfit_ranking": [
+          "structural",
+          "info",
+          "fitness"
+        ],
+        "ranking_agrees": true,
+        "per_method_spearman_global": {
+          "info": 0.4430593471954884,
+          "fitness": -0.1342133819845606,
+          "structural": 0.5041874729834025
+        },
+        "per_method_spearman_crossfit": {
+          "info": 0.4743796806385253,
+          "fitness": 0.34894392613360015,
+          "structural": 0.4998992333989908
+        },
+        "caveat": "cross-fitted on full-landscape labels (more label information than an operational run); a robustness probe of the frozen ranking, NOT an operational recovery number; never quote as a headline figure and never adopt crossfit_ranking as the reported method order"
+      },
+      {
+        "order": "third",
+        "n_folds": 5,
+        "global_ranking": [
+          "structural",
+          "info",
+          "fitness"
+        ],
+        "crossfit_ranking": [
+          "structural",
+          "info",
+          "fitness"
+        ],
+        "ranking_agrees": true,
+        "per_method_spearman_global": {
+          "info": 0.14689569181769713,
+          "fitness": 0.04729500145862971,
+          "structural": 0.24754550498734532
+        },
+        "per_method_spearman_crossfit": {
+          "info": 0.2060134048959323,
+          "fitness": 0.10944393984093533,
+          "structural": 0.23130163001556917
+        },
+        "caveat": "cross-fitted on full-landscape labels (more label information than an operational run); a robustness probe of the frozen ranking, NOT an operational recovery number; never quote as a headline figure and never adopt crossfit_ranking as the reported method order"
+      }
+    ],
+    "pair_differences": [
+      {
+        "method_a": "info",
+        "method_b": "fitness",
+        "order": "pairwise",
+        "statistic": "spearman",
+        "delta": 0.6672042062545831,
+        "delta_ci95": [
+          0.5945825557171036,
+          0.7377226825093771
+        ],
+        "excludes_zero": true,
+        "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+      },
+      {
+        "method_a": "info",
+        "method_b": "fitness",
+        "order": "pairwise",
+        "statistic": "pearson",
+        "delta": 0.7286981107940258,
+        "delta_ci95": [
+          0.6491671928852825,
+          0.802083915789489
+        ],
+        "excludes_zero": true,
+        "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+      },
+      {
+        "method_a": "info",
+        "method_b": "structural",
+        "order": "pairwise",
+        "statistic": "spearman",
+        "delta": -0.07633157842154703,
+        "delta_ci95": [
+          -0.11768230883511525,
+          -0.03843608154584099
+        ],
+        "excludes_zero": true,
+        "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+      },
+      {
+        "method_a": "info",
+        "method_b": "structural",
+        "order": "pairwise",
+        "statistic": "pearson",
+        "delta": -0.056426542879066566,
+        "delta_ci95": [
+          -0.09038310177036893,
+          -0.02394120721844248
+        ],
+        "excludes_zero": true,
+        "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+      },
+      {
+        "method_a": "info",
+        "method_b": "random",
+        "order": "pairwise",
+        "statistic": "spearman",
+        "delta": 0.1290554216960263,
+        "delta_ci95": [
+          0.1173320270069355,
+          0.14118191994670054
+        ],
+        "excludes_zero": true,
+        "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+      },
+      {
+        "method_a": "info",
+        "method_b": "random",
+        "order": "pairwise",
+        "statistic": "pearson",
+        "delta": 0.14662686535002573,
+        "delta_ci95": [
+          0.13368935793582462,
+          0.15883331099398967
+        ],
+        "excludes_zero": true,
+        "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+      },
+      {
+        "method_a": "info",
+        "method_b": "fitness",
+        "order": "third",
+        "statistic": "spearman",
+        "delta": 0.23852896555483127,
+        "delta_ci95": [
+          0.21545006754310397,
+          0.2625118784956809
+        ],
+        "excludes_zero": true,
+        "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+      },
+      {
+        "method_a": "info",
+        "method_b": "fitness",
+        "order": "third",
+        "statistic": "pearson",
+        "delta": 0.21946948521786763,
+        "delta_ci95": [
+          0.19782032440348246,
+          0.24215245546385647
+        ],
+        "excludes_zero": true,
+        "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+      },
+      {
+        "method_a": "info",
+        "method_b": "structural",
+        "order": "third",
+        "statistic": "spearman",
+        "delta": -0.06899527222822407,
+        "delta_ci95": [
+          -0.0836956534242121,
+          -0.0545547649889517
+        ],
+        "excludes_zero": true,
+        "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+      },
+      {
+        "method_a": "info",
+        "method_b": "structural",
+        "order": "third",
+        "statistic": "pearson",
+        "delta": -0.08294615851256396,
+        "delta_ci95": [
+          -0.09634935578010981,
+          -0.06970264043994565
+        ],
+        "excludes_zero": true,
+        "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+      },
+      {
+        "method_a": "info",
+        "method_b": "random",
+        "order": "third",
+        "statistic": "spearman",
+        "delta": 0.06800013970954595,
+        "delta_ci95": [
+          0.06264536428117434,
+          0.07355404783768078
+        ],
+        "excludes_zero": true,
+        "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+      },
+      {
+        "method_a": "info",
+        "method_b": "random",
+        "order": "third",
+        "statistic": "pearson",
+        "delta": 0.06917025002956549,
+        "delta_ci95": [
+          0.06051862533017837,
+          0.0801427433224371
+        ],
+        "excludes_zero": true,
+        "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+      },
+      {
+        "method_a": "info",
+        "method_b": "fitness",
+        "order": "pairwise",
+        "statistic": "spearman",
+        "delta": 0.6654158251358542,
+        "delta_ci95": [
+          0.5965889052410815,
+          0.7323216165617785
+        ],
+        "excludes_zero": true,
+        "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+      },
+      {
+        "method_a": "info",
+        "method_b": "fitness",
+        "order": "pairwise",
+        "statistic": "pearson",
+        "delta": 0.7421920789040648,
+        "delta_ci95": [
+          0.6735249804018906,
+          0.8102642093965047
+        ],
+        "excludes_zero": true,
+        "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+      },
+      {
+        "method_a": "info",
+        "method_b": "structural",
+        "order": "pairwise",
+        "statistic": "spearman",
+        "delta": -0.041925778510242484,
+        "delta_ci95": [
+          -0.059207103888874645,
+          -0.024411980616955344
+        ],
+        "excludes_zero": true,
+        "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+      },
+      {
+        "method_a": "info",
+        "method_b": "structural",
+        "order": "pairwise",
+        "statistic": "pearson",
+        "delta": -0.047335937861155475,
+        "delta_ci95": [
+          -0.05996789006644285,
+          -0.03552226701677287
+        ],
+        "excludes_zero": true,
+        "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+      },
+      {
+        "method_a": "info",
+        "method_b": "random",
+        "order": "pairwise",
+        "statistic": "spearman",
+        "delta": 0.13871738046901777,
+        "delta_ci95": [
+          0.12742874745531313,
+          0.15022092691907055
+        ],
+        "excludes_zero": true,
+        "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+      },
+      {
+        "method_a": "info",
+        "method_b": "random",
+        "order": "pairwise",
+        "statistic": "pearson",
+        "delta": 0.16804735384491543,
+        "delta_ci95": [
+          0.1554794205061377,
+          0.18039945429870605
+        ],
+        "excludes_zero": true,
+        "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+      },
+      {
+        "method_a": "info",
+        "method_b": "fitness",
+        "order": "third",
+        "statistic": "spearman",
+        "delta": 0.22520537872199947,
+        "delta_ci95": [
+          0.20193432307921336,
+          0.2495489977499241
+        ],
+        "excludes_zero": true,
+        "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+      },
+      {
+        "method_a": "info",
+        "method_b": "fitness",
+        "order": "third",
+        "statistic": "pearson",
+        "delta": 0.23002703831691057,
+        "delta_ci95": [
+          0.20596848882385527,
+          0.25468221793816187
+        ],
+        "excludes_zero": true,
+        "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+      },
+      {
+        "method_a": "info",
+        "method_b": "structural",
+        "order": "third",
+        "statistic": "spearman",
+        "delta": -0.050936258348803026,
+        "delta_ci95": [
+          -0.05765586481090418,
+          -0.04317829303379072
+        ],
+        "excludes_zero": true,
+        "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+      },
+      {
+        "method_a": "info",
+        "method_b": "structural",
+        "order": "third",
+        "statistic": "pearson",
+        "delta": -0.05015414841439414,
+        "delta_ci95": [
+          -0.05705407443393966,
+          -0.043625682177007276
+        ],
+        "excludes_zero": true,
+        "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+      },
+      {
+        "method_a": "info",
+        "method_b": "random",
+        "order": "third",
+        "statistic": "spearman",
+        "delta": 0.03452762879390864,
+        "delta_ci95": [
+          0.029746822008342024,
+          0.03930662154349207
+        ],
+        "excludes_zero": true,
+        "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+      },
+      {
+        "method_a": "info",
+        "method_b": "random",
+        "order": "third",
+        "statistic": "pearson",
+        "delta": 0.05933660755056579,
+        "delta_ci95": [
+          0.051958622171578116,
+          0.06670844255563388
+        ],
+        "excludes_zero": true,
+        "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+      },
+      {
+        "method_a": "info",
+        "method_b": "fitness",
+        "order": "pairwise",
+        "statistic": "spearman",
+        "delta": 0.577272729180049,
+        "delta_ci95": [
+          0.5068122115424023,
+          0.6477820072806673
+        ],
+        "excludes_zero": true,
+        "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+      },
+      {
+        "method_a": "info",
+        "method_b": "fitness",
+        "order": "pairwise",
+        "statistic": "pearson",
+        "delta": 0.6479947469548973,
+        "delta_ci95": [
+          0.575236931883267,
+          0.7234839179763222
+        ],
+        "excludes_zero": true,
+        "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+      },
+      {
+        "method_a": "info",
+        "method_b": "structural",
+        "order": "pairwise",
+        "statistic": "spearman",
+        "delta": -0.0611281257879141,
+        "delta_ci95": [
+          -0.07756892458115332,
+          -0.04526672529345586
+        ],
+        "excludes_zero": true,
+        "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+      },
+      {
+        "method_a": "info",
+        "method_b": "structural",
+        "order": "pairwise",
+        "statistic": "pearson",
+        "delta": -0.06867726877057168,
+        "delta_ci95": [
+          -0.08087756666377474,
+          -0.05610271683675055
+        ],
+        "excludes_zero": true,
+        "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+      },
+      {
+        "method_a": "info",
+        "method_b": "random",
+        "order": "pairwise",
+        "statistic": "spearman",
+        "delta": 0.15557114561134583,
+        "delta_ci95": [
+          0.14119269012950694,
+          0.16873564987035705
+        ],
+        "excludes_zero": true,
+        "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+      },
+      {
+        "method_a": "info",
+        "method_b": "random",
+        "order": "pairwise",
+        "statistic": "pearson",
+        "delta": 0.18720082560344903,
+        "delta_ci95": [
+          0.16800574464335732,
+          0.20402943157633666
+        ],
+        "excludes_zero": true,
+        "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+      },
+      {
+        "method_a": "info",
+        "method_b": "fitness",
+        "order": "third",
+        "statistic": "spearman",
+        "delta": 0.09960069035906742,
+        "delta_ci95": [
+          0.07708236195994993,
+          0.12430580290521762
+        ],
+        "excludes_zero": true,
+        "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+      },
+      {
+        "method_a": "info",
+        "method_b": "fitness",
+        "order": "third",
+        "statistic": "pearson",
+        "delta": 0.12218707140357508,
+        "delta_ci95": [
+          0.09792884680280352,
+          0.1435668899983256
+        ],
+        "excludes_zero": true,
+        "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+      },
+      {
+        "method_a": "info",
+        "method_b": "structural",
+        "order": "third",
+        "statistic": "spearman",
+        "delta": -0.10064981316964819,
+        "delta_ci95": [
+          -0.10878913660539974,
+          -0.09257195267117654
+        ],
+        "excludes_zero": true,
+        "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+      },
+      {
+        "method_a": "info",
+        "method_b": "structural",
+        "order": "third",
+        "statistic": "pearson",
+        "delta": -0.09426665921020483,
+        "delta_ci95": [
+          -0.10186832490237785,
+          -0.08673151806735797
+        ],
+        "excludes_zero": true,
+        "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+      },
+      {
+        "method_a": "info",
+        "method_b": "random",
+        "order": "third",
+        "statistic": "spearman",
+        "delta": 0.0522953030510008,
+        "delta_ci95": [
+          0.04238505077517121,
+          0.060811727953352775
+        ],
+        "excludes_zero": true,
+        "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+      },
+      {
+        "method_a": "info",
+        "method_b": "random",
+        "order": "third",
+        "statistic": "pearson",
+        "delta": 0.08378053350423012,
+        "delta_ci95": [
+          0.0661469062243968,
+          0.09851233443986243
+        ],
+        "excludes_zero": true,
+        "interpretation": "descriptive difference on matched terms; NOT a hypothesis test"
+      }
+    ]
+  }
+}

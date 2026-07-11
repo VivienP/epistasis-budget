@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "provenance": {
+    "source_path": "report/bench_650m.json",
+    "source_run_id": "bench_650m",
+    "source_sha256": "c5c5476a1cb9a277564c1f911fe2ac9a3b73ee57d761149966ff7933b8de5a84",
+    "evidence_classification": "traceable_not_rerun"
+  },
+  "result": {
+    "model_id": "facebook/esm2_t33_650M_UR50D",
+    "device": "cpu",
+    "alphabet": "AC",
+    "max_order": 3,
+    "n_perturbations": 4,
+    "batch_size": 32,
+    "num_threads": 12,
+    "n_variants": 64,
+    "planned_rows": 760,
+    "unique_rows": 684,
+    "dedup_ratio": 1.111,
+    "reference_seconds": 502.574,
+    "optimized_seconds": 374.65,
+    "reference_variants_per_s": 0.127,
+    "optimized_variants_per_s": 0.171,
+    "speedup": 1.341,
+    "max_abs_delta_g_gap": 0.0,
+    "max_abs_var_delta_g_gap": 0.0
+  }
+}

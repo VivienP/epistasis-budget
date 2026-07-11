@@ -42,7 +42,8 @@ loop-closure / BALD-style acquisition.
    under masking perturbations — no wet-lab data required at round 0.
 3. **An open-source, practitioner-facing design tool** that outputs a ranked shortlist of B variants
    with expected information gain, and slots in front of inference tools like MoCHI.
-4. **A validated, honest benchmark** on the complete GB1 landscape: does information-optimal selection
+4. **A null-tolerant benchmark** on the measurable, complete-loop subset of the GB1 four-site dataset:
+   does information-optimal selection
    recover the epistasis map better than fitness-greedy and random at equal B? Reported either way.
 
 ## Sibling ideas we rejected after the same novelty check (for the record)

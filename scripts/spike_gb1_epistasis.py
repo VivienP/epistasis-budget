@@ -1,7 +1,7 @@
 """Step 1 de-risk spike: does ESM-2 conjoint scoring carry GB1 epistasis signal?
 
-Answers the two gate questions of docs/ROADMAP.md Step 1, on real data, before anything is built on
-top:
+Answers the two pre-allocation gate questions in docs/STEP1_GATE.md, on real data, before anything
+is built on top:
 
   1. Is Var[ε_pred] > 0 (conjoint scoring is genuinely non-additive — invariant #1)?
   2. Does ESM-predicted ε correlate with measured ε (Spearman ≳ 0.2)?
@@ -167,7 +167,7 @@ def main() -> None:
         # sub-terms make instances non-independent). Pooled is context only, never the headline.
         "spearman_pairwise": rho_pair,
         "spearman_third": rho_third,
-        "spearman_pooled_context_only": _spearman(pooled_pred, pooled_true),
+        "spearman_pooled": _spearman(pooled_pred, pooled_true),
     }
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
@@ -181,7 +181,7 @@ def main() -> None:
         f"pairwise={_fmt(rho_pair)} (n={result['n_pairwise']}) "
         f"third={_fmt(rho_third)} (n={result['n_third']})  [target: each order >~ 0.2]"
     )
-    print(f"  context  pooled Spearman         : {_fmt(result['spearman_pooled_context_only'])}")
+    print(f"  context  pooled Spearman         : {_fmt(result['spearman_pooled'])}")
     print(f"  written to {args.out}")
 
 

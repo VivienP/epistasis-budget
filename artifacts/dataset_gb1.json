@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "dataset": "gb1_wu2016",
+  "source_path": "data/proteingym/gb1_wu2016.csv",
+  "data_sha256": "2f115d4eaf03b6083dcc22f7451b3ddfad41c9d8e519286c4e69b6d06db78f1c",
+  "theoretical_genotypes": 160000,
+  "measured_rows": 149361,
+  "live_rows": 119884,
+  "dead_rows": 29477,
+  "missing_rows": 10639,
+  "by_order": {
+    "0": {
+      "theoretical": 1,
+      "live": 1,
+      "dead": 0,
+      "missing": 0
+    },
+    "1": {
+      "theoretical": 76,
+      "live": 76,
+      "dead": 0,
+      "missing": 0
+    },
+    "2": {
+      "theoretical": 2166,
+      "live": 1822,
+      "dead": 269,
+      "missing": 75
+    },
+    "3": {
+      "theoretical": 27436,
+      "live": 21940,
+      "dead": 4079,
+      "missing": 1417
+    },
+    "4": {
+      "theoretical": 130321,
+      "live": 96045,
+      "dead": 25129,
+      "missing": 9147
+    }
+  },
+  "conditioning": "Calibration and real-valued epistasis truth use positive-fitness, log-transformable rows with complete loops."
+}

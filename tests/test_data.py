@@ -16,9 +16,14 @@ from epibudget.data import (
     GB1_SITES,
     GB1_WT_AT_SITES,
     GB1_WT_SEQUENCE,
+    TRPB_SITES,
+    TRPB_WT_AT_SITES,
+    TRPB_WT_SEQUENCE,
+    _load_landscape,
     apply_mutations,
     enumerate_candidates,
     load_gb1,
+    load_trpb,
     variant_from_sequence,
     variant_order_composition,
 )
@@ -32,6 +37,7 @@ _N_ORDER_1 = 76
 _N_ORDER_2 = 2166
 _N_ORDER_3 = 27436
 _GB1_LANDSCAPE_MIN_ROWS = 100_000  # ~149k measured of the 160k possible four-site variants
+_TRPB_LANDSCAPE_ROWS = 160_000  # full 20^4 combinatorial space (159,129 measured + 871 imputed)
 
 
 def _order(v: Variant) -> int:
@@ -134,13 +140,55 @@ def test_load_gb1_requires_wild_type_row(tmp_path: Path) -> None:
     single = apply_mutations(GB1_WT_SEQUENCE, frozenset({(38, "V", "A")}))
     csv = tmp_path / "nowt.csv"
     _write_csv(csv, [(single, 0.5)])
-    with pytest.raises(ValueError, match="wild type"):
+    with pytest.raises(ValueError, match="reference"):
         load_gb1(csv)
 
 
+def test_load_trpb_parses_sequences_into_variants(tmp_path: Path) -> None:
+    wt = TRPB_WT_SEQUENCE
+    p0, p1 = TRPB_SITES[0], TRPB_SITES[1]
+    f_wt, f_single, f_double = 0.41, 0.5, 0.2
+    single = frozenset({(p0, wt[p0], "A")})
+    double = frozenset({(p0, wt[p0], "A"), (p1, wt[p1], "C")})
+    csv = tmp_path / "trpb_toy.csv"
+    _write_csv(
+        csv,
+        [
+            (wt, f_wt),
+            (apply_mutations(wt, single), f_single),
+            (apply_mutations(wt, double), f_double),
+        ],
+    )
+
+    landscape = load_trpb(csv)
+    assert landscape[frozenset()] == f_wt  # the Tm9D8* reference (order-0 genotype)
+    assert landscape[single] == f_single
+    assert landscape[double] == f_double
+
+
+def test_load_trpb_rejects_off_site_mutation(tmp_path: Path) -> None:
+    off_pos = 5  # outside the four TrpB sites
+    off_site = apply_mutations(
+        TRPB_WT_SEQUENCE, frozenset({(off_pos, TRPB_WT_SEQUENCE[off_pos], "A")})
+    )
+    csv = tmp_path / "trpb_bad.csv"
+    _write_csv(csv, [(TRPB_WT_SEQUENCE, 0.41), (off_site, 0.5)])
+    with pytest.raises(ValueError, match="off-target"):
+        load_trpb(csv)
+
+
+def test_load_landscape_asserts_reference_residues(tmp_path: Path) -> None:
+    # A wt_at_sites that disagrees with the sequence at a site is a wrong construct — fail loudly.
+    csv = tmp_path / "trpb_wt.csv"
+    _write_csv(csv, [(TRPB_WT_SEQUENCE, 0.41)])
+    wrong = ("A", *TRPB_WT_AT_SITES[1:])  # claim 'A' where the parent has 'V'
+    with pytest.raises(ValueError, match="reference residue at site"):
+        _load_landscape(csv, TRPB_WT_SEQUENCE, TRPB_SITES, wrong)
+
+
 @pytest.mark.data
-def test_gb1_loads_complete_landscape() -> None:
-    """Real-data gate: the fetched GB1 four-site landscape loads and the WT residues assert.
+def test_gb1_loads_measured_landscape() -> None:
+    """Real-data gate: the fetched GB1 measured rows load and the WT residues assert.
 
     Requires ``python scripts/fetch_gb1.py`` to have populated data/proteingym/.
     """
@@ -148,3 +196,14 @@ def test_gb1_loads_complete_landscape() -> None:
     assert len(landscape) > _GB1_LANDSCAPE_MIN_ROWS
     wt = frozenset()  # the wild type is the empty variant
     assert wt in landscape
+
+
+@pytest.mark.data
+def test_trpb_loads_complete_landscape() -> None:
+    """Real-data gate: the fetched TrpB landscape loads and the Tm9D8* reference asserts.
+
+    Requires ``python scripts/fetch_trpb.py`` to have populated data/proteingym/.
+    """
+    landscape = load_trpb(Path("data/proteingym/trpb_johnston2024.csv"))
+    assert len(landscape) == _TRPB_LANDSCAPE_ROWS  # full 20^4 combinatorial space
+    assert frozenset() in landscape  # the Tm9D8* parent is the empty variant

@@ -98,7 +98,7 @@ def predicted_epistasis(scored: Sequence[ScoredVariant], max_order: int = 3) -> 
     inclusion–exclusion coefficients are all ±1, coefficient² = 1 and the propagated variance is the
     plain sum. The direction of the bias from real (correlated) score noise is not derivable from
     the ±1 structure, so this is a first approximation, not claimed conservative; it is checked
-    empirically by the uncertainty-prior calibration (docs/ROADMAP.md), not by argument.
+    empirically by the uncertainty-prior calibration (docs/VALIDATION.md), not by argument.
     """
     dg = {sv.variant: sv.delta_g for sv in scored}
     var = {sv.variant: sv.var_delta_g for sv in scored}

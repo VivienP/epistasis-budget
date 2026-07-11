@@ -1,8 +1,8 @@
 """GB1 validation harness. Frozen protocol in docs/VALIDATION.md.
 
-Compares four methods at each budget — info-optimal, fitness-greedy, random, practice-heuristic — on
-epistasis-map recovery against the full GB1 ground truth. The first three are the frozen decision
-rule; the practice heuristic is a companion.
+Compares five methods at each budget: info-optimal, fitness-greedy, structural-only, random, and
+practice. Recovery is evaluated against eligible GB1 ground-truth terms. Info, fitness, and random
+form the frozen decision rule; structural and practice are companions.
 
 Isolation. The SAME ``infer_epistasis`` runs per method; only the *selected set* differs, so the
 comparison isolates selection, not inference. Selection is zero-shot (ESM predictions + the factor
@@ -37,6 +37,7 @@ from epibudget.epistasis import (
     predicted_epistasis,
 )
 from epibudget.graph import EpistasisFactorGraph
+from epibudget.provenance import write_json_exclusive
 from epibudget.types import Interaction, Mutation, ScoredVariant, Variant
 
 _PAIRWISE_ORDER = 2
@@ -86,6 +87,7 @@ class Report(BaseModel):
     candidate_alphabet: str  # the per-site alphabet the candidate pool was drawn from
     scorer_seed: int  # the ConjointScorer seed (deterministic var_delta_g)
     n_perturbations: int  # masking passes behind var_delta_g
+    device: str  # the resolved compute device the scoring ran on (cpu / cuda)
     max_order: int
     data_sha256: str  # checksum of the dataset the landscape/truth came from
     n_candidates: int
@@ -376,6 +378,7 @@ def run_validation(
     candidate_alphabet: str = "",
     scorer_seed: int = 0,
     n_perturbations: int = 0,
+    device: str = "cpu",
     data_sha256: str = "",
 ) -> Report:
     """Execute the frozen protocol and write ``<out_dir>/metrics.json``. See docs/VALIDATION.md.
@@ -437,6 +440,7 @@ def run_validation(
         candidate_alphabet=candidate_alphabet,
         scorer_seed=scorer_seed,
         n_perturbations=n_perturbations,
+        device=device,
         max_order=max_order,
         data_sha256=data_sha256,
         n_candidates=len(scored),
@@ -523,5 +527,4 @@ def _seed_ci(
 
 def _write_report(report: Report, out_dir: Path) -> None:
     """Write metrics.json under ``out_dir`` (which is treated as the run directory)."""
-    out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "metrics.json").write_text(report.model_dump_json(indent=2), encoding="utf-8")
+    write_json_exclusive(out_dir / "metrics.json", report.model_dump(mode="json"))

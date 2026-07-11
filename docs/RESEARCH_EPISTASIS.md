@@ -118,14 +118,14 @@ higher-order epistasis because two complementary complete datasets exist:
   entire protein domain*, Current Biology): all single and **double** mutants across 55 positions
   (~536,000 variants) — the reference map of pairwise epistasis.
 - **Wu, Olson, Fowler & Sun 2016** (*Adaptation in protein fitness landscapes is facilitated by indirect
-  paths*, eLife): the **complete** combinatorial landscape at four epistatically-coupled sites in the
-  β1–β2 loop — **V39, D40, G41, V54** — i.e. all 20⁴ = 160,000 variants, including every single,
-  double, triple and quadruple.
+  paths*, eLife): a dense measured subset of the theoretical combinatorial landscape at four epistatically-coupled sites in the
+  β1–β2 loop — **V39, D40, G41, V54**. The theoretical space contains 20⁴ = 160,000 variants; the
+  local public-data artifact contains 149,361 measured rows across all four mutation orders.
 
-The Wu 2016 four-site block is what makes `epibudget` validatable: it contains the *complete*
-higher-order ground truth (all triples and their lower orders), so we can (a) compute the true
-epistasis coefficients, and (b) *simulate* any budgeted experiment by revealing the measured fitness of
-the selected variants and checking how well the recovered epistasis map matches the truth. GB1 is also
+The Wu 2016 four-site block makes `epibudget` testable on every positive-fitness interaction whose full
+inclusion–exclusion loop is measured. Terms with a dead or absent member are excluded rather than
+imputed. Within this conditional domain, we can (a) compute true epistasis coefficients and (b)
+*simulate* a budgeted experiment by revealing the measured fitness of selected variants. GB1 is also
 where ESM-2's landscape is reported to be dominated by pairwise and third-order interactions (§5),
 which is exactly the regime `epibudget` reasons about.
 
@@ -207,8 +207,8 @@ engine in [`SPEC.md#acquisition`](SPEC.md).
 | Additive scoring ⇒ ε ≡ 0 (§5) | conjoint conditional scoring is mandatory; guarded by a unit test |
 | Biochemical vs ensemble epistasis (§3) | v1 targets WT-referenced (biochemical) epistasis; matches ESM conditional scoring |
 | HOE declines with order but has large exceptions (§2) | value = *uncertainty* of a term, not its expected magnitude — chase the exceptions |
-| WHT partitions variance by order (§3) | ground-truth ε for validation computed via the multiallelic WHT on GB1 |
-| GB1/Wu-2016 is the only complete higher-order set (§4) | it is the validation substrate; scope framed as principle-validation |
+| WHT partitions variance by order (§3) | WHT is used only on complete synthetic grids; real-GB1 truth uses WT-referenced complete loops |
+| GB1/Wu-2016 provides dense higher-order measurements (§4) | it is the validation substrate; scope is conditional on complete positive-fitness loops |
 | Uncertainty reduction is submodular (§6) | greedy allocation, CPU-tractable, near-optimal |
 | MoCHI infers, doesn't design (§6, PRIOR_ART) | `epibudget` is the design front-end that feeds inference tools |
 
@@ -227,7 +227,7 @@ engine in [`SPEC.md#acquisition`](SPEC.md).
 5. Poelwijk, Krishna, Ranganathan. *The Context-Dependence of Mutations: A Linkage of Formalisms.*
    PLOS Computational Biology, 2016.
 6. Wu, Olson, Fowler, Sun. *Adaptation in protein fitness landscapes is facilitated by indirect paths.*
-   eLife, 2016. (The complete four-site GB1 landscape.)
+   eLife, 2016. (The four-site GB1 combinatorial landscape.)
 7. Sailer, Harms. *Detecting High-Order Epistasis in Nonlinear Genotype-Phenotype Maps.* Genetics, 2017.
 8. Poelwijk, Socolich, Ranganathan. *Learning the pattern of epistasis linking genotype and phenotype in
    a protein.* Nature Communications, 2019.

@@ -26,6 +26,21 @@ GB1_WT_AT_SITES: tuple[str, ...] = ("V", "D", "G", "V")
 # asserts this against the fetched data's reference so a wrong construct cannot slip through.
 GB1_WT_SEQUENCE: str = "MTYKLILNGKTLKGETTTEAVDAATAEKVFKQYANDNGVDGEWTYDDATKTFTVTE"
 
+# TrpB (Johnston et al. 2024, PNAS 2400439121): four-site combinatorially complete landscape at the
+# active site of the thermostable β-subunit of tryptophan synthase. The parent enzyme is Tm9D8*
+# ("VFVS") — residues V/F/V/S at target positions 183/184/227/228 (1-indexed; 0-indexed below). ε is
+# referenced to this parent, as GB1's is to its WT. A SECOND, independently-motivated landscape
+# (enzyme catalysis vs GB1's binding) — see docs/VALIDATION.md for the deferred protocol.
+TRPB_SITES: tuple[int, ...] = (182, 183, 226, 227)  # 183/184/227/228 in 1-indexed paper numbering
+TRPB_WT_AT_SITES: tuple[str, ...] = ("V", "F", "V", "S")  # Tm9D8* parent = VFVS
+TRPB_WT_SEQUENCE: str = (
+    "MKGYFGPYGGQYVPEILMGALEELEAAYEGIMKDESFWKEFNDLLRDYAGRPTPLYFARRLSEKYGARVYLKREDLLHTGAHKINNAIGQVL"
+    "LAKLMGKTRIIAETGAGQHGVATATAAALFGMECVIYMGEEDTIRQKLNVERMKLLGAKVVPVKSGSRTLKDAIDEALRDWITNLQTTYYVF"
+    "GSVVGPHPYPIIVRNFQKVIGEETKKQIPEKEGRLPDYIVACVSGGSNAAGIFYPFIDSGVKLIGVEAGGEGLETGKHAASLLKGKIGYLHGS"
+    "KTFVLQDDWGQVQVSHSVSAGLDYSGVGPEHAYWRETGKVLYDAVTDEEALDAFIELSRLEGIIPALESSHALAYLKKINIKGKVVVVNLSGR"
+    "GDKDLESVLNHPYVRERIRLEHHHHHH"
+)
+
 
 def enumerate_candidates(
     positions: Sequence[int],
@@ -76,21 +91,23 @@ def variant_from_sequence(seq: str, wt: str = GB1_WT_SEQUENCE) -> Variant:
     )
 
 
-def load_gb1(path: Path, sites: Sequence[int] = GB1_SITES) -> dict[Variant, float]:
-    """Load the complete GB1 four-site landscape as {Variant -> measured fitness}.
+def _load_landscape(
+    path: Path, wt_sequence: str, sites: Sequence[int], wt_at_sites: Sequence[str]
+) -> dict[Variant, float]:
+    """Load a four-site DMS landscape as {Variant -> fitness}, ε-referenced to ``wt_sequence``.
 
-    Expects the SaProtHub/Wu-2016 schema (columns ``protein`` = full 56-residue sequence, ``label``
-    = fitness relative to WT). Genotypes are recovered by diffing each sequence against
-    ``GB1_WT_SEQUENCE``. Two layers of guard, any failure meaning a wrong construct / off-by-one
-    that would corrupt every ε:
-      1. static self-consistency: GB1_WT_AT_SITES must match GB1_WT_SEQUENCE at ``sites``;
-      2. fetched-data validation: the wild type (order-0 genotype) must be present, and no variant
-         may differ from the WT outside ``sites``.
+    Expects the ProteinGym/SaProtHub schema (column ``protein`` = full-length sequence, ``label`` =
+    fitness; extra columns like ``stage`` are ignored). Genotypes are recovered by diffing each
+    sequence against ``wt_sequence``. Two layers of guard, any failure meaning a wrong construct /
+    off-by-one that would corrupt every ε:
+      1. static self-consistency: ``wt_at_sites`` must match ``wt_sequence`` at ``sites``;
+      2. fetched-data validation: the reference (order-0 genotype) must be present, and no variant
+         may differ from the reference outside ``sites``.
     """
-    for site, expected in zip(sites, GB1_WT_AT_SITES, strict=True):
-        if GB1_WT_SEQUENCE[site] != expected:
+    for site, expected in zip(sites, wt_at_sites, strict=True):
+        if wt_sequence[site] != expected:
             raise ValueError(
-                f"WT residue at site {site} is {GB1_WT_SEQUENCE[site]!r}, expected {expected!r}"
+                f"reference residue at site {site} is {wt_sequence[site]!r}, expected {expected!r}"
             )
 
     df = pd.read_csv(path)
@@ -102,7 +119,7 @@ def load_gb1(path: Path, sites: Sequence[int] = GB1_SITES) -> dict[Variant, floa
     site_set = set(sites)
     landscape: dict[Variant, float] = {}
     for seq, label in zip(df["protein"].astype(str), df["label"].astype(float), strict=True):
-        variant = variant_from_sequence(seq)
+        variant = variant_from_sequence(seq, wt_sequence)
         off_site = [pos for pos, _, _ in variant if pos not in site_set]
         if off_site:
             raise ValueError(
@@ -111,8 +128,18 @@ def load_gb1(path: Path, sites: Sequence[int] = GB1_SITES) -> dict[Variant, floa
         landscape[variant] = float(label)
 
     if frozenset() not in landscape:
-        raise ValueError(f"wild type (order-0 genotype) absent from {path}")
+        raise ValueError(f"reference (order-0 genotype) absent from {path}")
     return landscape
+
+
+def load_gb1(path: Path, sites: Sequence[int] = GB1_SITES) -> dict[Variant, float]:
+    """Load the measured GB1 four-site rows (Wu 2016), ε-referenced to ``GB1_WT_SEQUENCE``."""
+    return _load_landscape(path, GB1_WT_SEQUENCE, sites, GB1_WT_AT_SITES)
+
+
+def load_trpb(path: Path, sites: Sequence[int] = TRPB_SITES) -> dict[Variant, float]:
+    """Load the measured TrpB four-site rows (Johnston 2024), ε-referenced to the Tm9D8* parent."""
+    return _load_landscape(path, TRPB_WT_SEQUENCE, sites, TRPB_WT_AT_SITES)
 
 
 def variant_order_composition(landscape: dict[Variant, float]) -> dict[int, int]:

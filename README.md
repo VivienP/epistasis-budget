@@ -4,11 +4,16 @@
 
 `epibudget` allocates a fixed experimental budget of *B* wells across candidate protein variants
 (singles, doubles, triples) to **maximally reduce uncertainty about the epistatic structure** of the
-fitness landscape. It is zero-shot (ESM-2), runs on a CPU, and is validated end-to-end on the complete
-GB1 landscape.
+fitness landscape. It is zero-shot (ESM-2), CPU-first and GPU-capable, and is evaluated on the measured,
+viable subset of the public GB1 four-site landscape. The frozen variance-inclusive 650M comparison has now
+run: the prior-free structural baseline outperforms information-optimal, so the ESM uncertainty prior is
+dropped from the claims.
 
-> Status: de-risk gate passed; scoring, epistasis graph, allocation, and the GB1 harness shipped. The
-> 650M headline recovery run is pending. See [`docs/SPEC.md`](docs/SPEC.md), [`docs/ROADMAP.md`](docs/ROADMAP.md).
+> Status: de-risk gate passed; scoring (now batched + de-duplicated + GPU-capable), epistasis graph,
+> allocation, and the GB1 harness shipped. The frozen 20-letter 650M headline has now run on a GPU
+> (Colab T4) and is reported below, with a post-hoc robustness/precision analysis; uncertainty-prior
+> calibration is also reported. See [`docs/SPEC.md`](docs/SPEC.md) and
+> [`docs/VALIDATION.md`](docs/VALIDATION.md).
 
 ---
 
@@ -58,7 +63,7 @@ epibudget validate --dataset gb1_wu2016 --budgets 48,96,192
 ## The claim we test (and will report either way)
 
 > At equal budget *B*, variants selected by `epibudget` recover the ground-truth epistasis map of GB1
-> (Wu et al. 2016, complete 20⁴ landscape) **better** than the same budget spent on the highest
+> (Wu et al. 2016, 149,361 measured genotypes from a theoretical 20⁴ space) **better** than the same budget spent on the highest
 > predicted-fitness variants, and better than random.
 
 Metric: correlation between the epistasis coefficients inferred from the *B* selected measurements and
@@ -68,15 +73,44 @@ of information-optimal DMS design, not a silent win. See [`docs/VALIDATION.md`](
 
 ## Result
 
-**De-risk gate: passed.** On real GB1, ESM-2 conjoint ε correlates with the measured ε (650M model,
-pairwise Spearman ≈ 0.30, third-order ≈ 0.25; [`docs/STEP1_GATE.md`](docs/STEP1_GATE.md)) — the signal
-the method rests on is measured, not assumed.
+<!-- artifact-claims:start -->
+**Conjoint-score signal.** On the viable GB1 terms available in the local public-data artifact,
+ESM-2 650M conjoint ε has pairwise Spearman **0.302** and third-order Spearman **0.249**
+([provisional artifact](artifacts/step1_signal_650m.json)). This supports an epistatic signal in the
+scores; it does not validate the masking-variance uncertainty prior.
 
-**Headline recovery comparison: pending.** The frozen run (info-optimal vs fitness-greedy vs random, at
-the full 20-letter alphabet, 650M, *B* ∈ {48, 96, 192}) has not been executed. Its decision rule,
-baselines (including a `structural-only` ablation that isolates what the ESM uncertainty prior actually
-adds), and the breadth-vs-precision reporting are frozen in [`docs/VALIDATION.md`](docs/VALIDATION.md)
-before that run — win or null.
+**Frozen headline (variance-inclusive, full 20-letter alphabet, 650M, *B* ∈ {48, 96, 192}, 20 seeds, run
+on a Colab T4) — the prior-free sort wins, so the uncertainty prior is dropped.** The prior-free ablation
+`structural-only` (`τ² ≡ const`, ranking purely by loop coverage `n(v)`) has the **higher** full-set
+pairwise recovery at every budget — Spearman **0.484 / 0.460 / 0.504**, Pearson **0.514 / 0.526 / 0.573** —
+than information-optimal, whose pairwise recovery is Spearman **0.408 / 0.418 / 0.443**, Pearson
+**0.458 / 0.479 / 0.504** ([provisional artifact](artifacts/headline_650m.json)). A post-hoc paired analysis
+over the terms both methods predict but neither pins (*B* = 48, n = 1,511 matched pairwise terms) puts
+structural ahead on precision too — Spearman **0.452** vs **0.537** for info-optimal and structural, a
+descriptive Δ −0.085, 95% CI [−0.125, −0.047] that excludes zero (and excludes zero at all three budgets;
+[provisional artifact](artifacts/robustness_650m.json)). **There is therefore no evidence that the ESM
+masking-variance uncertainty prior improves allocation** — the recovery is carried by the structural `n(v)`
+loop-coverage sort — so per [`docs/VALIDATION.md`](docs/VALIDATION.md) the uncertainty prior is dropped from
+the claims. The registered decision rule (info vs fitness vs random) is nonetheless **formally supported at
+all three budgets**: information-optimal beats fitness-greedy **−0.259 / −0.247 / −0.134** and random
+**0.279 / 0.280 / 0.287** on pairwise Spearman *and* Pearson with non-overlapping bootstrap 95% CIs. A
+cross-fit scale-sensitivity probe agrees (structural > info > fitness at every order and budget).
+
+**Masking-variance calibration.** At 650M, Spearman(σ², |error|) is **−0.113, 95% CI
+[−0.220, −0.002]** and Pearson is **−0.100, 95% CI [−0.198, 0.003]**, n=300
+([provisional artifact](artifacts/calibration_650m.json)). This is weak negative rank association, not
+evidence of positive uncertainty calibration; Pearson remains compatible with zero, so it is not a
+general claim of anti-calibration. At 35M, Spearman is **+0.042, 95% CI [−0.078, +0.157]** and Pearson
+is **+0.049, 95% CI [−0.083, +0.180]**, n=300
+([provisional artifact](artifacts/calibration_35m.json)). Cross-fitted and order-stratified analyses are
+pending.
+<!-- artifact-claims:end -->
+
+The defensible current position: conjoint ESM-2 scores contain epistatic signal, and the frozen 650M
+headline is formally supported under the registered rule (info-optimal beats fitness-greedy and random) —
+but the prior-free structural allocation outperforms information-optimal on both full-set recovery and
+matched precision, so the masking-variance uncertainty prior is dropped from the claims.
+Masking-perturbation variance has not demonstrated positive calibration.
 
 ## How it works (3 steps)
 
@@ -95,7 +129,8 @@ formalism, and why this is well-posed: [`docs/RESEARCH_EPISTASIS.md`](docs/RESEA
 
 ## Constraints
 
-Python 3.12+ · CPU only · public data only (ProteinGym, GB1, UniProt) · `$0` compute.
+Python 3.12+ · CPU-first, GPU-capable (`--device auto|cuda`) · public data only (GB1, UniProt) · no
+claim that the full 650M variance-inclusive run is practically CPU-tractable.
 
 ## Citation & prior art
 

@@ -1,7 +1,7 @@
 # Step 1 — de-risk gate result
 
-Records the outcome of the Step 1 gate from [`ROADMAP.md`](ROADMAP.md): *does ESM-2 conjoint scoring
-carry usable GB1 epistasis signal, before anything is built on top?* Reproduce with
+Records the pre-allocation gate: *does ESM-2 conjoint scoring carry usable GB1 epistasis signal before
+anything is built on top?* Reproduce with
 `python scripts/fetch_gb1.py` then `python scripts/spike_gb1_epistasis.py --model <checkpoint>`.
 
 ## The gate (both must hold)
@@ -14,11 +14,12 @@ carry usable GB1 epistasis signal, before anything is built on top?* Reproduce w
 
 ## Data
 
-`SaProtHub/Dataset-GB1-fitness` — the complete four-site GB1 landscape of Wu et al. 2016
-(eLife 5:e16965), 149,361 measured genotypes at V39/D40/G41/V54 (0-indexed 38/39/40/53 = V/D/G/V),
+`SaProtHub/Dataset-GB1-fitness` — 149,361 measured genotypes from the theoretical 160,000-genotype
+four-site GB1 space of Wu et al. 2016 (eLife 5:e16965), at V39/D40/G41/V54 (0-indexed 38/39/40/53 = V/D/G/V),
 `label` = fitness relative to the wild type (WT = 1.0). Verified on download: WT present, every variant
 mutates only the four target sites, and all orders are represented — 76 singles, 2,091 doubles, 26,019
-triples, 121,174 quadruples. 29,477 variants are dead (fitness 0). Checksum and composition in
+triples, 121,174 quadruples. 29,477 measured variants are dead (fitness 0), and 10,639 theoretical
+genotypes are absent. Checksum and composition in
 `data/proteingym/provenance.json`. (The official `OATML-Markslab/ProteinGym` Hugging Face mirror ships
 GB1's Olson-2014 pairwise set only, not this four-site assay.)
 

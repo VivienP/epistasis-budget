@@ -1,0 +1,18 @@
+# Public result artifacts
+
+This directory contains small JSON results and provenance, never model weights, datasets, or scoring
+caches. `manifest.json` records the source run, command, base commit, dirty working-tree state,
+deterministic code-diff digest, configuration, and SHA-256 of every listed artifact.
+
+For entries classified `traceable_not_rerun`, `generation_command` is the deterministic reproduction
+command reconstructed from the recorded configuration; the original shell invocation was not embedded
+in the source JSON and is not claimed to have been captured verbatim.
+
+The current files are **provisional** because they were assembled before a final review commit. Their
+numerical payloads are copied unchanged from the audited local `report/` files and classified as
+`traceable_not_rerun` unless a local deterministic check reproduced them. After the final code commit,
+the required empirical runs must be repeated where specified and the manifest regenerated with the new
+commit SHA and clean code state.
+
+Run `python scripts/validate_artifacts.py` to verify schemas, checksums, README claim mappings, and banned
+historical values. `report/` remains ignored and is the location for transient or large outputs.

@@ -161,6 +161,8 @@ def allocate(
     alphabet: str = typer.Option(_AA20, help="Per-site candidate alphabet."),
     n_perturbations: int = typer.Option(16, help="Masking passes for var[ΔG] (the info prior)."),
     seed: int = typer.Option(0),
+    device: str = typer.Option("cpu", help="Compute device: cpu, cuda, or auto (GPU if present)."),
+    threads: int = typer.Option(0, help="torch CPU threads; 0 = library default."),
     out: str = typer.Option("allocation.json"),
 ) -> None:
     """Rank the B most epistasis-informative variants for a target."""
@@ -175,8 +177,16 @@ def allocate(
     wt_at = tuple(wt[p] for p in sites)
     candidates = enumerate_candidates(sites, wt_at, allowed_aa=alphabet, max_order=max_order)
 
-    console.print(f"[bold]allocate[/] scoring {len(candidates)} candidates with {model} …")
-    scorer = ConjointScorer(_resolve_model_id(model), n_perturbations=n_perturbations, seed=seed)
+    console.print(
+        f"[bold]allocate[/] scoring {len(candidates)} candidates with {model} on {device} …"
+    )
+    scorer = ConjointScorer(
+        _resolve_model_id(model),
+        device=device,
+        n_perturbations=n_perturbations,
+        seed=seed,
+        num_threads=threads if threads > 0 else None,
+    )
     scored = scorer.score_batch(wt, candidates)
     graph = EpistasisFactorGraph(
         predicted_epistasis(scored, max_order), {sv.variant: sv.var_delta_g for sv in scored}
@@ -217,8 +227,14 @@ def validate(
     ),
     n_perturbations: int = typer.Option(16, help="Masking passes for var[ΔG] (the info prior)."),
     max_order: int = typer.Option(3, help="Max interaction order (2 or 3)."),
+    device: str = typer.Option("cpu", help="Compute device: cpu, cuda, or auto (GPU if present)."),
+    threads: int = typer.Option(0, help="torch CPU threads; 0 = library default."),
+    batch_size: int = typer.Option(32, help="Scoring batch size (throughput only)."),
+    scored_cache: str = typer.Option(
+        "", help="JSONL scored-variant cache; resumes a long run after an interruption."
+    ),
 ) -> None:
-    """Run the frozen GB1 benchmark (info/fitness/structural/random/practice). See VALIDATION.md."""
+    """Run the GB1 harness; the frozen headline requires every explicit registered setting."""
     import hashlib  # noqa: PLC0415
     from datetime import UTC, datetime  # noqa: PLC0415
 
@@ -229,6 +245,7 @@ def validate(
         enumerate_candidates,
         load_gb1,
     )
+    from epibudget.scored_cache import build_cache_metadata, score_with_cache  # noqa: PLC0415
     from epibudget.scoring import ConjointScorer  # noqa: PLC0415
     from epibudget.validate import run_validation  # noqa: PLC0415
 
@@ -240,13 +257,34 @@ def validate(
     )
     console.print(
         f"[bold]validate[/] scoring {len(candidates)} candidates "
-        f"(alphabet={alphabet!r}) with {model} …"
+        f"(alphabet={alphabet!r}) with {model} on {device} …"
     )
     scorer_seed = 0
     scorer = ConjointScorer(
-        _resolve_model_id(model), n_perturbations=n_perturbations, seed=scorer_seed
+        _resolve_model_id(model),
+        device=device,
+        n_perturbations=n_perturbations,
+        seed=scorer_seed,
+        batch_size=batch_size,
+        num_threads=threads if threads > 0 else None,
     )
-    scored = scorer.score_batch(GB1_WT_SEQUENCE, candidates)
+    if scored_cache:
+        metadata = build_cache_metadata(
+            scorer,
+            GB1_WT_SEQUENCE,
+            candidates,
+            candidate_alphabet=alphabet,
+            max_order=max_order,
+        )
+        scored = score_with_cache(
+            scorer,
+            GB1_WT_SEQUENCE,
+            candidates,
+            Path(scored_cache),
+            metadata=metadata,
+        )
+    else:
+        scored = scorer.score_batch(GB1_WT_SEQUENCE, candidates)
 
     run_dir = Path(out) / datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     report = run_validation(
@@ -261,9 +299,85 @@ def validate(
         candidate_alphabet=alphabet,
         scorer_seed=scorer_seed,
         n_perturbations=n_perturbations,
+        device=scorer.device,
         data_sha256=data_sha256,
     )
     _print_validation_report(report, run_dir)
+
+
+@app.command()
+def robustness(
+    scored_cache: str = typer.Option(..., help="Completed JSONL scored-variant cache to analyse."),
+    data: str = typer.Option("data/proteingym/gb1_wu2016.csv", help="Path to the GB1 CSV."),
+    alphabet: str = typer.Option(_AA20, help="Per-site alphabet the cache was scored over."),
+    budgets: str = typer.Option("48,96,192", help="Comma-separated budgets."),
+    seeds: int = typer.Option(20, help="Random-baseline seeds."),
+    max_order: int = typer.Option(3, help="Max interaction order (2 or 3)."),
+    n_folds: int = typer.Option(5, help="Cross-fit folds for the scale-sensitivity analysis."),
+    out: str = typer.Option("report/", help="Report root; a run subdirectory is created."),
+) -> None:
+    """Post-hoc Phase B robustness analyses on a completed run (no GPU); see docs/specs."""
+    from datetime import UTC, datetime  # noqa: PLC0415
+
+    from epibudget.data import (  # noqa: PLC0415
+        GB1_SITES,
+        GB1_WT_AT_SITES,
+        enumerate_candidates,
+        load_gb1,
+    )
+    from epibudget.robustness import robustness_report  # noqa: PLC0415
+    from epibudget.scored_cache import (  # noqa: PLC0415
+        CacheMetadata,
+        cache_metadata_path,
+        load_cache,
+    )
+
+    if n_folds < 2:  # noqa: PLR2004 — >= 2 for out-of-fold cross-fitting
+        raise typer.BadParameter(f"--n-folds must be >= 2, got {n_folds}")
+
+    landscape = load_gb1(Path(data))
+    enumerated = enumerate_candidates(
+        GB1_SITES, GB1_WT_AT_SITES, allowed_aa=alphabet, max_order=max_order
+    )
+    cache = load_cache(Path(scored_cache))
+    missing = [v for v in enumerated if v not in cache]
+    if missing or len(cache) != len(enumerated):
+        extra = len(cache) - (len(enumerated) - len(missing))
+        raise typer.BadParameter(
+            f"scored cache does not match the alphabet {alphabet!r} (max_order={max_order}) "
+            f"candidate universe of {len(enumerated)}: {len(missing)} missing, {extra} unexpected. "
+            "Refusing — a mismatched cache would silently analyse a different universe than scored."
+        )
+    scored = [cache[v] for v in enumerated]  # enumeration order: reproduces the frozen selections
+
+    sidecar = cache_metadata_path(Path(scored_cache))
+    model_id = (
+        CacheMetadata.model_validate_json(sidecar.read_text(encoding="utf-8")).model_id
+        if sidecar.exists()
+        else ""
+    )
+
+    run_dir = Path(out) / datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    report = robustness_report(
+        scored,
+        landscape,
+        budgets=[int(b) for b in budgets.split(",")],
+        seeds=seeds,
+        max_order=max_order,
+        n_folds=n_folds,
+        model_id=model_id,
+        out_dir=run_dir,
+    )
+    console.print(
+        f"[bold]robustness[/] {report.n_candidates} candidates, {n_folds}-fold cross-fit; "
+        f"wrote {run_dir / 'robustness.json'}"
+    )
+    for scale in report.scale_sensitivity:
+        agree = "agrees" if scale.ranking_agrees else "DIFFERS"
+        console.print(
+            f"  {scale.order:<8} global={scale.global_ranking} crossfit={scale.crossfit_ranking} "
+            f"({agree})"
+        )
 
 
 @app.command()

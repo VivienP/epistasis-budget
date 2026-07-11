@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "provenance": {
+    "source_path": "report/spike_gb1_650M.json",
+    "source_run_id": "spike_gb1_650M",
+    "source_sha256": "a944ec8c362c57a52ef3a39acffbf9b62c626bf5b9227164f525b606dd9b8747",
+    "evidence_classification": "traceable_not_rerun"
+  },
+  "result": {
+    "model": "facebook/esm2_t33_650M_UR50D",
+    "seed": 0,
+    "data_sha_note": "see data/proteingym/provenance.json",
+    "n_pairwise": 257,
+    "n_third": 97,
+    "var_eps_pred_pooled": 0.7771307634544032,
+    "spearman_pairwise": 0.3019452425119898,
+    "spearman_third": 0.24890858405217753,
+    "spearman_pooled": 0.3164531144228409
+  }
+}

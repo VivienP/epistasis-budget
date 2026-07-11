@@ -187,6 +187,33 @@ method to a specific number once computed.
   criterion above; that rule remains the frozen bar for H1, and this stricter standard applies only to
   these companion analyses, not to it.
 
+## Second landscape — TrpB (pre-registered, run DEFERRED)
+
+**Status: protocol frozen here BEFORE any TrpB result exists; the run is deliberately deferred until the
+GB1 headline is interpreted.** Running a second landscape and only then choosing how to report it would
+be landscape / multiple-comparison cherry-picking (invariant #2). This section fixes the protocol first;
+the loader (`epibudget.data.load_trpb`) and fetch (`scripts/fetch_trpb.py`) are implemented, no number is
+computed. The TrpB result will be reported regardless of direction — including if it weakens the GB1
+story.
+
+- **Landscape.** TrpB (Johnston et al. 2024, PNAS 121(32) e2400439121): the combinatorially complete
+  20⁴ = 160,000-variant active-site landscape of the β-subunit of tryptophan synthase. An independent
+  readout from GB1 — enzyme catalysis vs GB1's IgG-Fc binding — so agreement across the two is a genuine
+  generalization, not a re-test of the same assay type. Reference (ε anchor) is the assayed parent
+  **Tm9D8* = VFVS** (residues V/F/V/S at positions 183/184/227/228, 1-indexed), never literal TmTrpB.
+- **Conditioning (stated up front).** ε and calibration use positive-fitness, log-transformable rows with
+  complete loops, exactly as for GB1. Per the paper, **871 of 160,000 fitness values (~0.5%) are imputed,
+  not measured**, and the public mirror does not flag which — any TrpB number must carry that caveat.
+- **Frozen settings (identical shape to the GB1 headline).** `esm2_t33_650M`, full 20-letter alphabet,
+  B ∈ {48, 96, 192}, ≥ 20 seeds, `n_perturbations = 16`; the same decision rule (info-optimal vs
+  fitness-greedy vs random on the pairwise-order Spearman AND Pearson map-recovery, non-overlapping
+  bootstrap 95% CIs), the same mandatory baselines (info / fitness / random, plus practice and
+  structural-only companions), and the same Phase B post-hoc analyses. No setting is chosen after seeing
+  a TrpB number.
+- **Reproducibility.** `python scripts/fetch_trpb.py` writes `data/proteingym/trpb_johnston2024.csv`
+  (git-ignored) with a checksum + provenance; the frozen run is the GB1 `validate` command with
+  `--data data/proteingym/trpb_johnston2024.csv` (and the TrpB sites/reference from `epibudget.data`).
+
 ## Threats to validity (and mitigations)
 
 | Threat | Mitigation |
@@ -196,3 +223,4 @@ method to a specific number once computed.
 | GB1 has only 4 positions | claim framed as *principle validation*; power comes from 20³ AA instantiations per triplet, not from many positions (see RESEARCH §4) |
 | Overfitting the metric to one B | report all B; decision rule requires a majority |
 | Inference step does the work, not selection | same `infer_epistasis` used for all three methods; only the *selected set* differs |
+| Second-landscape cherry-picking | the TrpB protocol is frozen before any TrpB number and the run is deferred until GB1 is interpreted; reported regardless of direction |

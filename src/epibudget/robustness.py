@@ -19,12 +19,14 @@ No torch/model/network import: this runs on already-computed scores. Reuses vali
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Mapping, Sequence
 from math import isnan, log
 from pathlib import Path
 
 import numpy as np
 from pydantic import BaseModel
+from scipy.stats import pearsonr, spearmanr
 
 from epibudget.acquisition import allocate, fitness_greedy
 from epibudget.epistasis import (
@@ -201,9 +203,27 @@ def _safe_corr(pred: np.ndarray, true: np.ndarray) -> tuple[float | None, float 
     return _finite(pearson), _finite(spearman)
 
 
+def _corr_one(pred: np.ndarray, true: np.ndarray, statistic: str) -> float | None:
+    """One statistic only — bit-identical to the matching ``_safe_corr`` component, half the work.
+
+    The bootstrap paths need a single statistic per call, but ``_corr`` computes both (a scipy
+    ``spearmanr`` sorts, which dominates); skipping the unused one halves the scipy calls in the hot
+    loops. Same degeneracy guard as ``_corr`` and the same scipy function, so values are unchanged.
+    """
+    if len(pred) < _MIN_POINTS_FOR_CORR or float(np.std(pred)) == 0.0 or float(np.std(true)) == 0.0:
+        return None
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")  # ConstantInput/NearConstant — degeneracy handled above
+        value = (
+            float(pearsonr(pred, true).statistic)
+            if statistic == "pearson"
+            else float(spearmanr(pred, true).statistic)
+        )
+    return _finite(value)
+
+
 def _stat(pred: np.ndarray, true: np.ndarray, statistic: str) -> float | None:
-    pearson, spearman = _safe_corr(pred, true)
-    return pearson if statistic == "pearson" else spearman
+    return _corr_one(pred, true, statistic)
 
 
 def _delta(

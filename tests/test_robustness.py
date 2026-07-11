@@ -23,6 +23,7 @@ from epibudget.robustness import (
     _CROSSFIT_CAVEAT,
     _DIFF_INTERPRETATION,
     PairDifference,
+    _corr_one,
     _deterministic_selections,
     _method_state,
     _MethodState,
@@ -257,14 +258,33 @@ def test_crossfit_slopes_reject_too_few_folds() -> None:
         crossfit_slopes(pool, _landscape(pool), 1)
 
 
-def test_safe_corr_and_paired_difference_never_leak_a_nan(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_corr_one_is_bit_identical_to_safe_corr_components() -> None:
+    """The throughput optimization must change no number: single-stat == _safe_corr's component."""
+    x = np.array([1.0, 2.0, 2.0, 4.0, 5.0, 3.0])
+    y = np.array([2.0, 1.0, 3.0, 5.0, 4.0, 3.5])
+    pearson, spearman = _safe_corr(x, y)
+    assert _corr_one(x, y, "pearson") == pearson  # exact equality, not approx
+    assert _corr_one(x, y, "spearman") == spearman
+    const = np.array([1.0, 1.0, 1.0, 1.0])
+    assert _corr_one(const, y[:4], "spearman") is None  # degeneracy guard matches _corr
+
+
+class _NanStat:
+    statistic = float("nan")
+
+
+def test_corr_paths_never_leak_a_nan(monkeypatch: pytest.MonkeyPatch) -> None:
     """A near-constant resample makes scipy return NaN; it must become None, never reach the CI."""
-    monkeypatch.setattr(
-        "epibudget.robustness._corr", lambda _pred, _true: (float("nan"), float("nan"))
-    )
-    pred = np.array([1.0, 2.0, 3.0, 4.0])
+    # Both correlation paths must guard NaN: _safe_corr (via _corr) and the bootstrap (_corr_one).
+    monkeypatch.setattr("epibudget.robustness._corr", lambda _p, _t: (float("nan"), float("nan")))
+    monkeypatch.setattr("epibudget.robustness.spearmanr", lambda _a, _b: _NanStat())
+    monkeypatch.setattr("epibudget.robustness.pearsonr", lambda _a, _b: _NanStat())
+    pred = np.array(
+        [1.0, 2.0, 3.0, 4.0]
+    )  # std > 0, so the degeneracy guard passes and scipy is hit
     true = np.array([1.0, 2.0, 3.0, 4.0])
     assert _safe_corr(pred, true) == (None, None)
+    assert _corr_one(pred, true, "spearman") is None
     delta, ci = paired_difference(pred, pred, true, "spearman", seed=0)
     assert delta is None
     assert ci is None

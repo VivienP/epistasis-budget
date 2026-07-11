@@ -167,7 +167,7 @@ def main() -> None:
         # sub-terms make instances non-independent). Pooled is context only, never the headline.
         "spearman_pairwise": rho_pair,
         "spearman_third": rho_third,
-        "spearman_pooled_context_only": _spearman(pooled_pred, pooled_true),
+        "spearman_pooled": _spearman(pooled_pred, pooled_true),
     }
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
@@ -181,7 +181,7 @@ def main() -> None:
         f"pairwise={_fmt(rho_pair)} (n={result['n_pairwise']}) "
         f"third={_fmt(rho_third)} (n={result['n_third']})  [target: each order >~ 0.2]"
     )
-    print(f"  context  pooled Spearman         : {_fmt(result['spearman_pooled_context_only'])}")
+    print(f"  context  pooled Spearman         : {_fmt(result['spearman_pooled'])}")
     print(f"  written to {args.out}")
 
 

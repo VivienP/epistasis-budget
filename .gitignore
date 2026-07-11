@@ -3,6 +3,9 @@ CLAUDE.md
 AGENTS.md
 ROADMAP.md
 .claude/
+.agents/
+.codex/
+docs/AI_CONTRACT.md
 .cursor/
 .aider*
 

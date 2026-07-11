@@ -16,7 +16,7 @@ from epibudget.artifacts import public_artifact_payload
 from epibudget.data import load_gb1
 from epibudget.provenance import workspace_code_diff_sha256, write_json_exclusive
 
-_BASE_COMMIT_SHA = "5bff99123d8ddf36905f2e40fc7e99f60b52a2ea"
+_BASE_COMMIT_SHA = "1a1f30aabd11bb50af6208bef983f2d017352b97"
 _DATA_SHA256 = "2f115d4eaf03b6083dcc22f7451b3ddfad41c9d8e519286c4e69b6d06db78f1c"
 
 
@@ -122,6 +122,60 @@ _SPECS: tuple[ArtifactSpec, ...] = (
             "n_perturbations": 0,
         },
         "status": "supplementary",
+        "evidence_classification": "traceable_not_rerun",
+    },
+    {
+        "filename": "headline_650m.json",
+        "source": "report/20260711T091947Z/metrics.json",
+        "source_run_id": "20260711T091947Z",
+        "generation_command": (
+            "epibudget validate --model esm2_t33_650M --alphabet ACDEFGHIKLMNPQRSTVWY "
+            "--budgets 48,96,192 --seeds 20 --n-perturbations 16 --device cuda "
+            "--batch-size 128 --scored-cache scored_650m.jsonl --out report/"
+        ),
+        "model_id": "facebook/esm2_t33_650M_UR50D",
+        "data_sha256": _DATA_SHA256,
+        "configuration": {
+            "alphabet": "ACDEFGHIKLMNPQRSTVWY",
+            "budgets": [48, 96, 192],
+            "seeds": 20,
+            "n_perturbations": 16,
+            "device": "cuda",
+            # Colab executed the GitHub branch tip; an ancestor of the local manifest base.
+            "colab_commit": "3ba75ebbe700247654c824627fa98c4b8ba4010c",
+            "cache_wt_sha256": ("7e859d82171047700fd3e9632f7a47eab4a39baedc8c3316d2fc62d3ce2260bb"),
+            "cache_candidate_sha256": (
+                "0822f65ec14183af7a534ec30cbf5f54e9864f7c96677d0aa1e0e046e4258c41"
+            ),
+        },
+        "status": "primary",
+        "evidence_classification": "traceable_not_rerun",
+    },
+    {
+        "filename": "robustness_650m.json",
+        "source": "report/20260711T102440Z/robustness.json",
+        "source_run_id": "20260711T102440Z",
+        "generation_command": (
+            "epibudget robustness --scored-cache report/scored_650m.jsonl "
+            "--data data/proteingym/gb1_wu2016.csv --alphabet ACDEFGHIKLMNPQRSTVWY "
+            "--budgets 48,96,192 --seeds 20 --max-order 3 --n-folds 5 --out report/"
+        ),
+        "model_id": "facebook/esm2_t33_650M_UR50D",
+        "data_sha256": _DATA_SHA256,
+        "configuration": {
+            "alphabet": "ACDEFGHIKLMNPQRSTVWY",
+            "budgets": [48, 96, 192],
+            "seeds": 20,
+            "max_order": 3,
+            "n_folds": 5,
+            "analysis": (
+                "post-hoc A1 common-predicted-term precision, A2 cross-fit scale "
+                "sensitivity, A3 paired difference CIs; descriptive, not hypothesis tests"
+            ),
+        },
+        "status": "primary",
+        # Derived from the Colab-produced (uncommitted, GPU) scored cache, so it is not
+        # regenerable from a clean checkout — traceable, not reproduced.
         "evidence_classification": "traceable_not_rerun",
     },
     {

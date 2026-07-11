@@ -5,13 +5,14 @@
 `epibudget` allocates a fixed experimental budget of *B* wells across candidate protein variants
 (singles, doubles, triples) to **maximally reduce uncertainty about the epistatic structure** of the
 fitness landscape. It is zero-shot (ESM-2), CPU-first and GPU-capable, and is evaluated on the measured,
-viable subset of the public GB1 four-site landscape. The frozen variance-inclusive
-650M comparison has not yet run.
+viable subset of the public GB1 four-site landscape. The frozen variance-inclusive 650M comparison has now
+run: the prior-free structural baseline outperforms information-optimal, so the ESM uncertainty prior is
+dropped from the claims.
 
 > Status: de-risk gate passed; scoring (now batched + de-duplicated + GPU-capable), epistasis graph,
-> allocation, and the GB1 harness shipped. The frozen 20-letter 650M headline is deferred to a GPU
-> ([`docs/headline_650m_colab.md`](docs/headline_650m_colab.md)); an in-session 650M supplementary run
-> and uncertainty-prior calibration are reported below. See [`docs/SPEC.md`](docs/SPEC.md) and
+> allocation, and the GB1 harness shipped. The frozen 20-letter 650M headline has now run on a GPU
+> (Colab T4) and is reported below, with a post-hoc robustness/precision analysis; uncertainty-prior
+> calibration is also reported. See [`docs/SPEC.md`](docs/SPEC.md) and
 > [`docs/VALIDATION.md`](docs/VALIDATION.md).
 
 ---
@@ -78,18 +79,22 @@ ESM-2 650M conjoint ε has pairwise Spearman **0.302** and third-order Spearman 
 ([provisional artifact](artifacts/step1_signal_650m.json)). This supports an epistatic signal in the
 scores; it does not validate the masking-variance uncertainty prior.
 
-**Frozen headline (info-optimal vs fitness-greedy vs random, full 20-letter alphabet, 650M): deferred to
-a GPU.** The package remains CPU-capable, but no complete CPU or GPU runtime has been measured for this
-exact run. The explicit recipe is in [`docs/headline_650m_colab.md`](docs/headline_650m_colab.md); the
-decision rule and baselines remain frozen in [`docs/VALIDATION.md`](docs/VALIDATION.md).
-
-**Supplementary 650M run (full alphabet, `pool ≫ B`, deterministic-only — not the frozen headline;
-info-optimal omitted).** At *B* ∈ {48, 96, 192} the structure-aware baseline (`structural-only`, rank by
-epistatic loops braced) has full-set pairwise Spearman **0.484 / 0.460 / 0.504**, versus
-**0.279 / 0.280 / 0.287** for random and **−0.259 / −0.247 / −0.134** for fitness-greedy
-([provisional artifact](artifacts/supplementary_recovery_650m.json)). These are correlations over the
-full eligible truth set. A common-predicted-term analysis is still required before attributing the
-difference to unseen-term precision rather than direct loop coverage.
+**Frozen headline (variance-inclusive, full 20-letter alphabet, 650M, *B* ∈ {48, 96, 192}, 20 seeds, run
+on a Colab T4) — the prior-free sort wins, so the uncertainty prior is dropped.** The prior-free ablation
+`structural-only` (`τ² ≡ const`, ranking purely by loop coverage `n(v)`) has the **higher** full-set
+pairwise recovery at every budget — Spearman **0.484 / 0.460 / 0.504**, Pearson **0.514 / 0.526 / 0.573** —
+than information-optimal, whose pairwise recovery is Spearman **0.408 / 0.418 / 0.443**, Pearson
+**0.458 / 0.479 / 0.504** ([provisional artifact](artifacts/headline_650m.json)). A post-hoc paired analysis
+over the terms both methods predict but neither pins (*B* = 48, n = 1,511 matched pairwise terms) puts
+structural ahead on precision too — Spearman **0.452** vs **0.537** for info-optimal and structural, a
+descriptive Δ −0.085, 95% CI [−0.125, −0.047] that excludes zero (and excludes zero at all three budgets;
+[provisional artifact](artifacts/robustness_650m.json)). **There is therefore no evidence that the ESM
+masking-variance uncertainty prior improves allocation** — the recovery is carried by the structural `n(v)`
+loop-coverage sort — so per [`docs/VALIDATION.md`](docs/VALIDATION.md) the uncertainty prior is dropped from
+the claims. The registered decision rule (info vs fitness vs random) is nonetheless **formally supported at
+all three budgets**: information-optimal beats fitness-greedy **−0.259 / −0.247 / −0.134** and random
+**0.279 / 0.280 / 0.287** on pairwise Spearman *and* Pearson with non-overlapping bootstrap 95% CIs. A
+cross-fit scale-sensitivity probe agrees (structural > info > fitness at every order and budget).
 
 **Masking-variance calibration.** At 650M, Spearman(σ², |error|) is **−0.113, 95% CI
 [−0.220, −0.002]** and Pearson is **−0.100, 95% CI [−0.198, 0.003]**, n=300
@@ -101,10 +106,11 @@ is **+0.049, 95% CI [−0.083, +0.180]**, n=300
 pending.
 <!-- artifact-claims:end -->
 
-The defensible current position is narrower: conjoint ESM-2 scores contain epistatic signal, and a
-supplementary structural allocation has stronger full-set recovery than the reported baselines.
-Masking-perturbation variance has not demonstrated positive calibration. The frozen variance-inclusive
-headline remains pending.
+The defensible current position: conjoint ESM-2 scores contain epistatic signal, and the frozen 650M
+headline is formally supported under the registered rule (info-optimal beats fitness-greedy and random) —
+but the prior-free structural allocation outperforms information-optimal on both full-set recovery and
+matched precision, so the masking-variance uncertainty prior is dropped from the claims.
+Masking-perturbation variance has not demonstrated positive calibration.
 
 ## How it works (3 steps)
 

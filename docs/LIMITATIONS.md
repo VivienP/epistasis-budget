@@ -31,18 +31,18 @@ Each item states the constraint, its consequence, and how the code/docs handle i
     ([artifact](../artifacts/bench_650m.json)). It does not support the earlier undocumented batch-1
     comparison, which is excluded from public claims.
 
-- **The residual compute requirement is not yet benchmarked end to end.** The frozen headline needs
-  `var_delta_g` from 16 perturbations for every candidate. A GPU is the recommended execution path, but
-  neither a complete CPU duration nor a Colab duration is published without a matching run artifact.
-  [`headline_650m_colab.md`](headline_650m_colab.md) is a reproducible recipe, not a runtime promise.
+- **The frozen headline has now run on a GPU.** It was executed on a Colab T4 (`device=cuda`, artifact
+  [`headline_650m.json`](../artifacts/headline_650m.json)) over all 29,678 candidates with `var_delta_g`
+  from 16 perturbations each. A complete CPU duration is still not published — the GPU is the recommended
+  execution path — and [`headline_650m_colab.md`](headline_650m_colab.md) remains the reproducible recipe.
 
-- **What was run in-session instead** (both write `report/<run_id>/metrics.json` with full provenance,
-  including `device`): (a) the **supplementary 650M full-alphabet deterministic-only** recovery — the
-  deterministic regime above, giving the var-independent methods (fitness / random / practice /
-  structural-only) at `B ∈ {48, 96, 192}`, `pool ≫ B` (`scripts/headline_650m_supplementary.py`); and
-  (b) the **650M uncertainty-prior calibration** (`scripts/calibrate_uncertainty.py`, see §5). The
-  supplementary run is **explicitly not the frozen headline**: info-optimal (which needs the var pass) is
-  omitted and the `VALIDATION.md` decision rule is not evaluated there.
+- **Additional in-session CPU runs** (both write `report/<run_id>/metrics.json` with full provenance,
+  including `device`): (a) the **supplementary 650M full-alphabet deterministic-only** recovery giving the
+  var-independent methods (fitness / random / practice / structural-only) at `B ∈ {48, 96, 192}`,
+  `pool ≫ B` (`scripts/headline_650m_supplementary.py`); and (b) the **650M uncertainty-prior calibration**
+  (`scripts/calibrate_uncertainty.py`, see §5). The supplementary deterministic run omits info-optimal and
+  does not evaluate the decision rule; the frozen variance-inclusive headline (with info-optimal) is the
+  `headline_650m.json` artifact above.
 
 - **The reduced-alphabet 35M runs remain a smoke test, not the headline.** They restrict the per-site
   alphabet (e.g. `ADEF`, ~307 candidates) so the pool scores in minutes; recorded as provenance in every
@@ -127,11 +127,13 @@ Each item states the constraint, its consequence, and how the code/docs handle i
   [−0.198, 0.003] ([artifact](../artifacts/calibration_650m.json)). This supports a weak negative rank
   association but not a general anti-calibration claim. At 35M, both intervals include zero
   ([artifact](../artifacts/calibration_35m.json)).
-- **The structural result is supplementary.** The full-alphabet deterministic 650M report gives stronger
-  full-set pairwise correlations for structural-only than the reported random and fitness-greedy
-  baselines ([artifact](../artifacts/supplementary_recovery_650m.json)). It does not include
-  info-optimal, and the direct common-predicted-term analysis remains pending. The evidence does not yet
-  distinguish an unseen-term precision effect from broader direct loop coverage.
+- **Structural-only outperforms information-optimal.** In the frozen variance-inclusive 650M headline the
+  prior-free `structural-only` sort has higher full-set pairwise recovery than info-optimal at every
+  budget, and the post-hoc paired common-predicted-term analysis puts it ahead on matched precision too
+  (descriptive Δ excludes zero at all three budgets; [artifact](../artifacts/robustness_650m.json)). So the
+  ESM masking-variance uncertainty prior earns no credit and is dropped from the claims: the recovery is
+  carried by direct loop coverage `n(v)`, not the uncertainty prior. The difference CIs are descriptive
+  (post-hoc), not hypothesis tests, and do not alter the frozen decision rule.
 
 ## 6. Statistical power & protocol scope
 
@@ -139,14 +141,14 @@ Each item states the constraint, its consequence, and how the code/docs handle i
   these budgets, so a third-order null is a *power* limitation, not evidence that no effect exists.
   Pairwise is the better-powered, decisive order.
 
-- **The frozen protocol is only partially exercised.** The headline requires 650M, the full alphabet,
-  B ∈ {48, 96, 192}, and ≥ 20 seeds with bootstrap CIs. What has run is a 35M reduced-alphabet smoke, a
-  deterministic 650M supplementary comparison, and 35M/650M calibration samples. The variance-inclusive
-  650M headline remains unexecuted.
+- **The frozen protocol has now been exercised.** The headline requires 650M, the full alphabet,
+  B ∈ {48, 96, 192}, and ≥ 20 seeds with bootstrap CIs — all met by the variance-inclusive run on a Colab
+  T4 ([artifact](../artifacts/headline_650m.json)). It was executed on the GitHub branch tip (`3ba75eb`),
+  an ancestor of the current manifest base; the metrics schema does not itself record that commit, so it is
+  stamped in the artifact `configuration.colab_commit`.
 
 ## 7. Not yet done (scope, not failure)
 
-- **No 650M headline run** (compute, §1).
 - **No downstream-impact demonstration** — the one test that escapes the recovery tautology (does a
   structure-aware budget's map support a *better decision* on held-out mutants?). This is the highest-value
   next step precisely because §4 makes the recovery headline thin on its own.

@@ -1,0 +1,1005 @@
+{
+  "schema_version": 1,
+  "provenance": {
+    "source_path": "report/20260711T091947Z/metrics.json",
+    "source_run_id": "20260711T091947Z",
+    "source_sha256": "c11dbe00a18cd72f7315ab91080427257805e33c2618008ae7b78e21d3c0a1d0",
+    "evidence_classification": "traceable_not_rerun"
+  },
+  "result": {
+    "dataset": "gb1_wu2016",
+    "model_id": "esm2_t33_650M",
+    "seeds": 20,
+    "budgets": [
+      48,
+      96,
+      192
+    ],
+    "candidate_alphabet": "ACDEFGHIKLMNPQRSTVWY",
+    "scorer_seed": 0,
+    "n_perturbations": 16,
+    "device": "cuda",
+    "max_order": 3,
+    "data_sha256": "2f115d4eaf03b6083dcc22f7451b3ddfad41c9d8e519286c4e69b6d06db78f1c",
+    "n_candidates": 29678,
+    "n_truth_terms": 17782,
+    "var_epsilon": 2.616182985722438,
+    "results": [
+      {
+        "method": "info",
+        "budget": 48,
+        "ci_method": "bootstrap-over-terms",
+        "hit_rate": 0.0,
+        "metrics": [
+          {
+            "order": "pairwise",
+            "n_terms": 1822,
+            "pearson": 0.4579158368687496,
+            "spearman": 0.4081551885629586,
+            "pearson_ci95": [
+              0.415925376617112,
+              0.4952723934716783
+            ],
+            "spearman_ci95": [
+              0.36489170611740646,
+              0.45074385440262865
+            ],
+            "n_informed": 1590,
+            "coverage_fraction": 0.8726673984632273,
+            "n_pinned": 0,
+            "pearson_predicted": 0.45986903120246897,
+            "spearman_predicted": 0.4310731367868647
+          },
+          {
+            "order": "third",
+            "n_terms": 15960,
+            "pearson": 0.15569715751706376,
+            "spearman": 0.15133428654052936,
+            "pearson_ci95": [
+              0.14008202852582993,
+              0.17155225262368148
+            ],
+            "spearman_ci95": [
+              0.13483280056078334,
+              0.16703758707908348
+            ],
+            "n_informed": 15379,
+            "coverage_fraction": 0.9635964912280702,
+            "n_pinned": 0,
+            "pearson_predicted": 0.15476994373940745,
+            "spearman_predicted": 0.1504351278503861
+          },
+          {
+            "order": "pooled",
+            "n_terms": 17782,
+            "pearson": 0.22456683526203813,
+            "spearman": 0.19970103692919028,
+            "pearson_ci95": [
+              0.20970610063093867,
+              0.2394055368006107
+            ],
+            "spearman_ci95": [
+              0.18551386564022115,
+              0.21343213624561425
+            ],
+            "n_informed": 16969,
+            "coverage_fraction": 0.9542796085929591,
+            "n_pinned": 0,
+            "pearson_predicted": 0.22515478167343297,
+            "spearman_predicted": 0.2006429855590415
+          }
+        ]
+      },
+      {
+        "method": "fitness",
+        "budget": 48,
+        "ci_method": "bootstrap-over-terms",
+        "hit_rate": 0.0,
+        "metrics": [
+          {
+            "order": "pairwise",
+            "n_terms": 1822,
+            "pearson": -0.27078227392527626,
+            "spearman": -0.2590490176916245,
+            "pearson_ci95": [
+              -0.3224319727580611,
+              -0.2165324765065799
+            ],
+            "spearman_ci95": [
+              -0.3029026445904038,
+              -0.21345001619549944
+            ],
+            "n_informed": 115,
+            "coverage_fraction": 0.06311745334796927,
+            "n_pinned": 0,
+            "pearson_predicted": -0.05389113618699667,
+            "spearman_predicted": -0.04351771482679713
+          },
+          {
+            "order": "third",
+            "n_terms": 15960,
+            "pearson": -0.06377232770080388,
+            "spearman": -0.08719467901430193,
+            "pearson_ci95": [
+              -0.0780532292853773,
+              -0.05047253117768429
+            ],
+            "spearman_ci95": [
+              -0.10302221229859478,
+              -0.07144355948776589
+            ],
+            "n_informed": 1591,
+            "coverage_fraction": 0.09968671679197995,
+            "n_pinned": 0,
+            "pearson_predicted": -0.170483802341803,
+            "spearman_predicted": -0.17164880532067497
+          },
+          {
+            "order": "pooled",
+            "n_terms": 17782,
+            "pearson": -0.15025443158490762,
+            "spearman": -0.14052868713494376,
+            "pearson_ci95": [
+              -0.16628217225367603,
+              -0.13383511270848664
+            ],
+            "spearman_ci95": [
+              -0.15457840157202513,
+              -0.12568698786806118
+            ],
+            "n_informed": 1706,
+            "coverage_fraction": 0.0959397143178495,
+            "n_pinned": 0,
+            "pearson_predicted": -0.21323360726285212,
+            "spearman_predicted": -0.21629907065354084
+          }
+        ]
+      },
+      {
+        "method": "structural",
+        "budget": 48,
+        "ci_method": "bootstrap-over-terms",
+        "hit_rate": 0.0,
+        "metrics": [
+          {
+            "order": "pairwise",
+            "n_terms": 1822,
+            "pearson": 0.514342379747816,
+            "spearman": 0.48448676698450566,
+            "pearson_ci95": [
+              0.4789090419895435,
+              0.5456271902063423
+            ],
+            "spearman_ci95": [
+              0.4453031493527215,
+              0.5181239720361216
+            ],
+            "n_informed": 1740,
+            "coverage_fraction": 0.9549945115257958,
+            "n_pinned": 0,
+            "pearson_predicted": 0.5444488004193484,
+            "spearman_predicted": 0.5057947488627356
+          },
+          {
+            "order": "third",
+            "n_terms": 15960,
+            "pearson": 0.2386433160296277,
+            "spearman": 0.22032955876875343,
+            "pearson_ci95": [
+              0.22357047584590725,
+              0.2545481169328365
+            ],
+            "spearman_ci95": [
+              0.2049774445171617,
+              0.23619598901188094
+            ],
+            "n_informed": 15960,
+            "coverage_fraction": 1.0,
+            "n_pinned": 0,
+            "pearson_predicted": 0.2386433160296277,
+            "spearman_predicted": 0.22032955876875343
+          },
+          {
+            "order": "pooled",
+            "n_terms": 17782,
+            "pearson": 0.2801087626562908,
+            "spearman": 0.24702628150121358,
+            "pearson_ci95": [
+              0.2650891417990522,
+              0.29475629154752175
+            ],
+            "spearman_ci95": [
+              0.23394457839194616,
+              0.2602162268068964
+            ],
+            "n_informed": 17700,
+            "coverage_fraction": 0.995388595208638,
+            "n_pinned": 0,
+            "pearson_predicted": 0.2820574003281274,
+            "spearman_predicted": 0.24770542901630754
+          }
+        ]
+      },
+      {
+        "method": "practice",
+        "budget": 48,
+        "ci_method": "bootstrap-over-terms",
+        "hit_rate": 0.0,
+        "metrics": [
+          {
+            "order": "pairwise",
+            "n_terms": 1822,
+            "pearson": -0.2723860622842808,
+            "spearman": -0.2709300398322422,
+            "pearson_ci95": [
+              -0.3266751113211745,
+              -0.22189512262948552
+            ],
+            "spearman_ci95": [
+              -0.3148089995497847,
+              -0.2243398328514436
+            ],
+            "n_informed": 48,
+            "coverage_fraction": 0.026344676180021953,
+            "n_pinned": 0,
+            "pearson_predicted": 0.08122789185205845,
+            "spearman_predicted": 0.024750325662179763
+          },
+          {
+            "order": "third",
+            "n_terms": 15960,
+            "pearson": -0.024585877696469985,
+            "spearman": -0.07826795513306622,
+            "pearson_ci95": [
+              -0.03805242582595699,
+              -0.010550866917440864
+            ],
+            "spearman_ci95": [
+              -0.09385232690723494,
+              -0.06261061504762355
+            ],
+            "n_informed": 1336,
+            "coverage_fraction": 0.0837092731829574,
+            "n_pinned": 0,
+            "pearson_predicted": -0.024305394349772504,
+            "spearman_predicted": -0.0771889515364739
+          },
+          {
+            "order": "pooled",
+            "n_terms": 17782,
+            "pearson": -0.08472914131297667,
+            "spearman": -0.1184414347163462,
+            "pearson_ci95": [
+              -0.10186442327167357,
+              -0.07013415930806488
+            ],
+            "spearman_ci95": [
+              -0.13255239873250302,
+              -0.10351446161968894
+            ],
+            "n_informed": 1384,
+            "coverage_fraction": 0.0778315150151839,
+            "n_pinned": 0,
+            "pearson_predicted": -0.02111778519214943,
+            "spearman_predicted": -0.07321668376744969
+          }
+        ]
+      },
+      {
+        "method": "random",
+        "budget": 48,
+        "ci_method": "bootstrap-over-seeds",
+        "hit_rate": 0.0010416666666666667,
+        "metrics": [
+          {
+            "order": "pairwise",
+            "n_terms": 1822,
+            "pearson": 0.31128897151872376,
+            "spearman": 0.27909976686693233,
+            "pearson_ci95": [
+              0.3049416480704491,
+              0.314740720971906
+            ],
+            "spearman_ci95": [
+              0.275107922303889,
+              0.28169102305174837
+            ],
+            "n_informed": 10,
+            "coverage_fraction": 0.005241492864983534,
+            "n_pinned": 0,
+            "pearson_predicted": 0.26993567815911884,
+            "spearman_predicted": 0.23610001278647583
+          },
+          {
+            "order": "third",
+            "n_terms": 15960,
+            "pearson": 0.0865269074874983,
+            "spearman": 0.08333414344886692,
+            "pearson_ci95": [
+              0.07606651913466354,
+              0.09384747116783888
+            ],
+            "spearman_ci95": [
+              0.0798051533956864,
+              0.08615964346112731
+            ],
+            "n_informed": 176,
+            "coverage_fraction": 0.011049498746867168,
+            "n_pinned": 0,
+            "pearson_predicted": 0.09806526571255923,
+            "spearman_predicted": 0.12104433928425565
+          },
+          {
+            "order": "pooled",
+            "n_terms": 17782,
+            "pearson": 0.16985334888661488,
+            "spearman": 0.12219941919245061,
+            "pearson_ci95": [
+              0.15864426772461107,
+              0.17680922989887557
+            ],
+            "spearman_ci95": [
+              0.1192433572569243,
+              0.12452322207550863
+            ],
+            "n_informed": 186,
+            "coverage_fraction": 0.010454392081880553,
+            "n_pinned": 0,
+            "pearson_predicted": 0.11816061265611763,
+            "spearman_predicted": 0.12369914515184677
+          }
+        ]
+      },
+      {
+        "method": "info",
+        "budget": 96,
+        "ci_method": "bootstrap-over-terms",
+        "hit_rate": 0.0,
+        "metrics": [
+          {
+            "order": "pairwise",
+            "n_terms": 1822,
+            "pearson": 0.4788849146281051,
+            "spearman": 0.41826570123426604,
+            "pearson_ci95": [
+              0.4423577899141259,
+              0.5131700356066154
+            ],
+            "spearman_ci95": [
+              0.3789885352688512,
+              0.4615416303826036
+            ],
+            "n_informed": 1799,
+            "coverage_fraction": 0.9873765093304061,
+            "n_pinned": 17,
+            "pearson_predicted": 0.4758162382054398,
+            "spearman_predicted": 0.41491282820380426
+          },
+          {
+            "order": "third",
+            "n_terms": 15960,
+            "pearson": 0.1423009278634036,
+            "spearman": 0.11956752826728997,
+            "pearson_ci95": [
+              0.12575947029491083,
+              0.15704925101191575
+            ],
+            "spearman_ci95": [
+              0.10481805768062398,
+              0.13449828761500576
+            ],
+            "n_informed": 15945,
+            "coverage_fraction": 0.9990601503759399,
+            "n_pinned": 0,
+            "pearson_predicted": 0.14215655162047436,
+            "spearman_predicted": 0.11942524139874065
+          },
+          {
+            "order": "pooled",
+            "n_terms": 17782,
+            "pearson": 0.2080454285843621,
+            "spearman": 0.16444789635671195,
+            "pearson_ci95": [
+              0.19253140377190345,
+              0.22333728871437625
+            ],
+            "spearman_ci95": [
+              0.14985963443109163,
+              0.17833129314896054
+            ],
+            "n_informed": 17744,
+            "coverage_fraction": 0.9978630075357102,
+            "n_pinned": 17,
+            "pearson_predicted": 0.20701083685266314,
+            "spearman_predicted": 0.16343922233047437
+          }
+        ]
+      },
+      {
+        "method": "fitness",
+        "budget": 96,
+        "ci_method": "bootstrap-over-terms",
+        "hit_rate": 0.0,
+        "metrics": [
+          {
+            "order": "pairwise",
+            "n_terms": 1822,
+            "pearson": -0.2633071642759596,
+            "spearman": -0.2471501239015881,
+            "pearson_ci95": [
+              -0.3167930291369938,
+              -0.2135651882884359
+            ],
+            "spearman_ci95": [
+              -0.29029933674279446,
+              -0.20029036461477148
+            ],
+            "n_informed": 177,
+            "coverage_fraction": 0.09714599341383096,
+            "n_pinned": 0,
+            "pearson_predicted": -0.11118242241287744,
+            "spearman_predicted": -0.06083256868821524
+          },
+          {
+            "order": "third",
+            "n_terms": 15960,
+            "pearson": -0.08772611045350696,
+            "spearman": -0.10563785045470948,
+            "pearson_ci95": [
+              -0.10196722084449591,
+              -0.07305942039724005
+            ],
+            "spearman_ci95": [
+              -0.12085803268106723,
+              -0.09054190823040723
+            ],
+            "n_informed": 2492,
+            "coverage_fraction": 0.156140350877193,
+            "n_pinned": 0,
+            "pearson_predicted": -0.2644813903860006,
+            "spearman_predicted": -0.2727322941380695
+          },
+          {
+            "order": "pooled",
+            "n_terms": 17782,
+            "pearson": -0.17774523426102093,
+            "spearman": -0.1640661577027952,
+            "pearson_ci95": [
+              -0.19407090435952484,
+              -0.1620672448162143
+            ],
+            "spearman_ci95": [
+              -0.1776210873268666,
+              -0.14920208652652822
+            ],
+            "n_informed": 2669,
+            "coverage_fraction": 0.15009560229445507,
+            "n_pinned": 0,
+            "pearson_predicted": -0.2951783101491419,
+            "spearman_predicted": -0.3057510166618629
+          }
+        ]
+      },
+      {
+        "method": "structural",
+        "budget": 96,
+        "ci_method": "bootstrap-over-terms",
+        "hit_rate": 0.0,
+        "metrics": [
+          {
+            "order": "pairwise",
+            "n_terms": 1822,
+            "pearson": 0.5262208524892606,
+            "spearman": 0.4601914797445085,
+            "pearson_ci95": [
+              0.49102990769663696,
+              0.5583005259813327
+            ],
+            "spearman_ci95": [
+              0.4182038990688248,
+              0.5005984504288421
+            ],
+            "n_informed": 1822,
+            "coverage_fraction": 1.0,
+            "n_pinned": 20,
+            "pearson_predicted": 0.5254913376559659,
+            "spearman_predicted": 0.46008196779195315
+          },
+          {
+            "order": "third",
+            "n_terms": 15960,
+            "pearson": 0.19245507627779776,
+            "spearman": 0.170503786616093,
+            "pearson_ci95": [
+              0.1756470105126509,
+              0.20705515645536893
+            ],
+            "spearman_ci95": [
+              0.15510396213647312,
+              0.18621279955985556
+            ],
+            "n_informed": 15960,
+            "coverage_fraction": 1.0,
+            "n_pinned": 0,
+            "pearson_predicted": 0.19245507627779776,
+            "spearman_predicted": 0.170503786616093
+          },
+          {
+            "order": "pooled",
+            "n_terms": 17782,
+            "pearson": 0.2662744525842729,
+            "spearman": 0.22101923137103635,
+            "pearson_ci95": [
+              0.25143631030777225,
+              0.280453685597686
+            ],
+            "spearman_ci95": [
+              0.20709150687494163,
+              0.23484309245326493
+            ],
+            "n_informed": 17782,
+            "coverage_fraction": 1.0,
+            "n_pinned": 20,
+            "pearson_predicted": 0.26599868180203434,
+            "spearman_predicted": 0.22060758239109143
+          }
+        ]
+      },
+      {
+        "method": "practice",
+        "budget": 96,
+        "ci_method": "bootstrap-over-terms",
+        "hit_rate": 0.0,
+        "metrics": [
+          {
+            "order": "pairwise",
+            "n_terms": 1822,
+            "pearson": 0.13108385302740366,
+            "spearman": 0.28213953792031043,
+            "pearson_ci95": [
+              0.08995038059212615,
+              0.16910269070288056
+            ],
+            "spearman_ci95": [
+              0.23874706020385278,
+              0.32499291675498604
+            ],
+            "n_informed": 95,
+            "coverage_fraction": 0.05214050493962678,
+            "n_pinned": 0,
+            "pearson_predicted": -0.024892483715721028,
+            "spearman_predicted": -0.042343225083986566
+          },
+          {
+            "order": "third",
+            "n_terms": 15960,
+            "pearson": 0.04738601948293789,
+            "spearman": 0.09036295354486298,
+            "pearson_ci95": [
+              0.03299023448243002,
+              0.060766848085140684
+            ],
+            "spearman_ci95": [
+              0.07570622574277501,
+              0.10584360217970143
+            ],
+            "n_informed": 2332,
+            "coverage_fraction": 0.14611528822055136,
+            "n_pinned": 0,
+            "pearson_predicted": -0.09199507056345027,
+            "spearman_predicted": -0.18279975308337854
+          },
+          {
+            "order": "pooled",
+            "n_terms": 17782,
+            "pearson": 0.028238682033092044,
+            "spearman": 0.11395069915020552,
+            "pearson_ci95": [
+              0.014920433531881501,
+              0.04144740491895735
+            ],
+            "spearman_ci95": [
+              0.09847145506682503,
+              0.12770000345959762
+            ],
+            "n_informed": 2427,
+            "coverage_fraction": 0.1364863344955573,
+            "n_pinned": 0,
+            "pearson_predicted": -0.10520383152605234,
+            "spearman_predicted": -0.18989056899308432
+          }
+        ]
+      },
+      {
+        "method": "random",
+        "budget": 96,
+        "ci_method": "bootstrap-over-seeds",
+        "hit_rate": 0.0026041666666666665,
+        "metrics": [
+          {
+            "order": "pairwise",
+            "n_terms": 1822,
+            "pearson": 0.31083756078318975,
+            "spearman": 0.27954832076524827,
+            "pearson_ci95": [
+              0.30764466392176737,
+              0.3131861774486378
+            ],
+            "spearman_ci95": [
+              0.2768256221353933,
+              0.2811968875319257
+            ],
+            "n_informed": 15,
+            "coverage_fraction": 0.00817782656421515,
+            "n_pinned": 0,
+            "pearson_predicted": 0.3094290397553367,
+            "spearman_predicted": 0.2794297894469798
+          },
+          {
+            "order": "third",
+            "n_terms": 15960,
+            "pearson": 0.08296432031283782,
+            "spearman": 0.08503989971637989,
+            "pearson_ci95": [
+              0.07768524509722358,
+              0.08764132391687192
+            ],
+            "spearman_ci95": [
+              0.08371601150317465,
+              0.08639035202546244
+            ],
+            "n_informed": 310,
+            "coverage_fraction": 0.019392230576441103,
+            "n_pinned": 0,
+            "pearson_predicted": 0.13653532381851732,
+            "spearman_predicted": 0.10993592899453053
+          },
+          {
+            "order": "pooled",
+            "n_terms": 17782,
+            "pearson": 0.1606965207300302,
+            "spearman": 0.12327750987944748,
+            "pearson_ci95": [
+              0.1553956148786327,
+              0.1654406328831264
+            ],
+            "spearman_ci95": [
+              0.12187428341143729,
+              0.12448155488311266
+            ],
+            "n_informed": 324,
+            "coverage_fraction": 0.018243167247778653,
+            "n_pinned": 0,
+            "pearson_predicted": 0.1478291743156732,
+            "spearman_predicted": 0.11626887611017304
+          }
+        ]
+      },
+      {
+        "method": "info",
+        "budget": 192,
+        "ci_method": "bootstrap-over-terms",
+        "hit_rate": 0.010416666666666666,
+        "metrics": [
+          {
+            "order": "pairwise",
+            "n_terms": 1822,
+            "pearson": 0.504156883135251,
+            "spearman": 0.4430593471954884,
+            "pearson_ci95": [
+              0.46999724463899867,
+              0.5377870342685864
+            ],
+            "spearman_ci95": [
+              0.402467376242544,
+              0.4812901870168875
+            ],
+            "n_informed": 1817,
+            "coverage_fraction": 0.9972557628979144,
+            "n_pinned": 75,
+            "pearson_predicted": 0.49203853582156076,
+            "spearman_predicted": 0.4259273604553943
+          },
+          {
+            "order": "third",
+            "n_terms": 15960,
+            "pearson": 0.17325481315913893,
+            "spearman": 0.14689569181769713,
+            "pearson_ci95": [
+              0.15727565503813026,
+              0.1889876861119552
+            ],
+            "spearman_ci95": [
+              0.13273800422421186,
+              0.16156940030648084
+            ],
+            "n_informed": 15958,
+            "coverage_fraction": 0.999874686716792,
+            "n_pinned": 0,
+            "pearson_predicted": 0.1732555579143715,
+            "spearman_predicted": 0.1468963136469119
+          },
+          {
+            "order": "pooled",
+            "n_terms": 17782,
+            "pearson": 0.21950434933878837,
+            "spearman": 0.17519570096546838,
+            "pearson_ci95": [
+              0.20414489481425566,
+              0.23457994061964274
+            ],
+            "spearman_ci95": [
+              0.16125041916542135,
+              0.18949344539760332
+            ],
+            "n_informed": 17775,
+            "coverage_fraction": 0.9996063434934203,
+            "n_pinned": 75,
+            "pearson_predicted": 0.21651759607336213,
+            "spearman_predicted": 0.17233755996517636
+          }
+        ]
+      },
+      {
+        "method": "fitness",
+        "budget": 192,
+        "ci_method": "bootstrap-over-terms",
+        "hit_rate": 0.0,
+        "metrics": [
+          {
+            "order": "pairwise",
+            "n_terms": 1822,
+            "pearson": -0.14383786381964622,
+            "spearman": -0.1342133819845606,
+            "pearson_ci95": [
+              -0.19713543946429943,
+              -0.0919671974764354
+            ],
+            "spearman_ci95": [
+              -0.1810188932338632,
+              -0.08905719021348285
+            ],
+            "n_informed": 504,
+            "coverage_fraction": 0.27661909989023054,
+            "n_pinned": 26,
+            "pearson_predicted": 0.4116502250169542,
+            "spearman_predicted": 0.38666090481411897
+          },
+          {
+            "order": "third",
+            "n_terms": 15960,
+            "pearson": 0.05106774175556391,
+            "spearman": 0.04729500145862971,
+            "pearson_ci95": [
+              0.036704095101277985,
+              0.0663083310556247
+            ],
+            "spearman_ci95": [
+              0.03212062412762252,
+              0.06274746826892222
+            ],
+            "n_informed": 6407,
+            "coverage_fraction": 0.4014411027568922,
+            "n_pinned": 17,
+            "pearson_predicted": 0.1054501907046746,
+            "spearman_predicted": 0.05739924967047181
+          },
+          {
+            "order": "pooled",
+            "n_terms": 17782,
+            "pearson": -0.041575569258160285,
+            "spearman": -0.024467528155135337,
+            "pearson_ci95": [
+              -0.05748524963111855,
+              -0.025209998843225088
+            ],
+            "spearman_ci95": [
+              -0.04030500367534056,
+              -0.00918935750845474
+            ],
+            "n_informed": 6911,
+            "coverage_fraction": 0.3886514452817456,
+            "n_pinned": 43,
+            "pearson_predicted": 0.09755691811862073,
+            "spearman_predicted": 0.06306000681207835
+          }
+        ]
+      },
+      {
+        "method": "structural",
+        "budget": 192,
+        "ci_method": "bootstrap-over-terms",
+        "hit_rate": 0.026041666666666668,
+        "metrics": [
+          {
+            "order": "pairwise",
+            "n_terms": 1822,
+            "pearson": 0.5728341519058228,
+            "spearman": 0.5041874729834025,
+            "pearson_ci95": [
+              0.5431015035359069,
+              0.6027892712164402
+            ],
+            "spearman_ci95": [
+              0.4643492485232403,
+              0.5417985887904516
+            ],
+            "n_informed": 1822,
+            "coverage_fraction": 1.0,
+            "n_pinned": 116,
+            "pearson_predicted": 0.5708283769780331,
+            "spearman_predicted": 0.5069487691005594
+          },
+          {
+            "order": "third",
+            "n_terms": 15960,
+            "pearson": 0.2675214723693438,
+            "spearman": 0.24754550498734532,
+            "pearson_ci95": [
+              0.25160439760902575,
+              0.28303791644742543
+            ],
+            "spearman_ci95": [
+              0.23325676540221182,
+              0.26193301230022054
+            ],
+            "n_informed": 15960,
+            "coverage_fraction": 1.0,
+            "n_pinned": 0,
+            "pearson_predicted": 0.2675214723693438,
+            "spearman_predicted": 0.24754550498734532
+          },
+          {
+            "order": "pooled",
+            "n_terms": 17782,
+            "pearson": 0.37274502539313153,
+            "spearman": 0.31987400675625893,
+            "pearson_ci95": [
+              0.35849757004494637,
+              0.3868734844295166
+            ],
+            "spearman_ci95": [
+              0.30634215357833194,
+              0.3336096387591573
+            ],
+            "n_informed": 17782,
+            "coverage_fraction": 1.0,
+            "n_pinned": 116,
+            "pearson_predicted": 0.3694218658840606,
+            "spearman_predicted": 0.3148225921251351
+          }
+        ]
+      },
+      {
+        "method": "practice",
+        "budget": 192,
+        "ci_method": "bootstrap-over-terms",
+        "hit_rate": 0.005208333333333333,
+        "metrics": [
+          {
+            "order": "pairwise",
+            "n_terms": 1822,
+            "pearson": 0.30745540420594586,
+            "spearman": 0.3048376417243201,
+            "pearson_ci95": [
+              0.2636137643116295,
+              0.3520044688076051
+            ],
+            "spearman_ci95": [
+              0.2631770448205785,
+              0.3501496054835141
+            ],
+            "n_informed": 185,
+            "coverage_fraction": 0.10153677277716795,
+            "n_pinned": 0,
+            "pearson_predicted": 0.13764517569866258,
+            "spearman_predicted": 0.16970357454228424
+          },
+          {
+            "order": "third",
+            "n_terms": 15960,
+            "pearson": 0.11939038831385834,
+            "spearman": 0.11580865968642723,
+            "pearson_ci95": [
+              0.10556475181861957,
+              0.13363692847121073
+            ],
+            "spearman_ci95": [
+              0.09979074130415351,
+              0.13161541747904196
+            ],
+            "n_informed": 4039,
+            "coverage_fraction": 0.2530701754385965,
+            "n_pinned": 0,
+            "pearson_predicted": 0.06556903611232305,
+            "spearman_predicted": 0.03887334465015413
+          },
+          {
+            "order": "pooled",
+            "n_terms": 17782,
+            "pearson": 0.12169751998597611,
+            "spearman": 0.13391677054857615,
+            "pearson_ci95": [
+              0.10853785478815638,
+              0.1359763286176616
+            ],
+            "spearman_ci95": [
+              0.11969714733348595,
+              0.14876596204458198
+            ],
+            "n_informed": 4224,
+            "coverage_fraction": 0.23754358339894274,
+            "n_pinned": 0,
+            "pearson_predicted": 0.04393808582050496,
+            "spearman_predicted": 0.020697034140380106
+          }
+        ]
+      },
+      {
+        "method": "random",
+        "budget": 192,
+        "ci_method": "bootstrap-over-seeds",
+        "hit_rate": 0.00859375,
+        "metrics": [
+          {
+            "order": "pairwise",
+            "n_terms": 1822,
+            "pearson": 0.3169560575318021,
+            "spearman": 0.28748820158414257,
+            "pearson_ci95": [
+              0.30552430516932144,
+              0.3325831836807324
+            ],
+            "spearman_ci95": [
+              0.28201056598082264,
+              0.2953878847101562
+            ],
+            "n_informed": 36,
+            "coverage_fraction": 0.01995060373216246,
+            "n_pinned": 0,
+            "pearson_predicted": 0.3416455493065345,
+            "spearman_predicted": 0.3701055091064601
+          },
+          {
+            "order": "third",
+            "n_terms": 15960,
+            "pearson": 0.08947427965490887,
+            "spearman": 0.0946003852333532,
+            "pearson_ci95": [
+              0.07537452557607259,
+              0.10850388498573879
+            ],
+            "spearman_ci95": [
+              0.08773405412897121,
+              0.10376801887612132
+            ],
+            "n_informed": 721,
+            "coverage_fraction": 0.04517543859649123,
+            "n_pinned": 0,
+            "pearson_predicted": 0.1455304318112369,
+            "spearman_predicted": 0.14637350873050695
+          },
+          {
+            "order": "pooled",
+            "n_terms": 17782,
+            "pearson": 0.15632828255427694,
+            "spearman": 0.13189072467916313,
+            "pearson_ci95": [
+              0.14375107241744278,
+              0.17319920253125473
+            ],
+            "spearman_ci95": [
+              0.12565413435690131,
+              0.1408233112516514
+            ],
+            "n_informed": 757,
+            "coverage_fraction": 0.042590822179732306,
+            "n_pinned": 0,
+            "pearson_predicted": 0.175665938710634,
+            "spearman_predicted": 0.1634796301294002
+          }
+        ]
+      }
+    ]
+  }
+}

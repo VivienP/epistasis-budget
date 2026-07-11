@@ -146,10 +146,10 @@ result exists.
 
 ## Post-registration robustness analyses — 2026-07-10
 
-**Status: implemented in `src/epibudget/robustness.py` (run via `epibudget robustness` on a completed
-scored cache; spec in `docs/specs/robustness.md`). No number from these analyses exists anywhere in this
-repo yet — they wire into public artifacts only after the real 650M run.** They do not alter or replace
-the frozen statistic or decision rule above. This section is written after the Step-1 signal, the
+**Status: implemented and run.** `epibudget robustness` was executed on the completed 650M scored cache
+(`src/epibudget/robustness.py`; spec in `docs/specs/robustness.md`) and its results are wired into public
+artifacts (`artifacts/robustness_650m.json`, README, and the Outcome section below). They do not alter or
+replace the frozen statistic or decision rule above; the difference CIs are descriptive, not tests. This section is written after the Step-1 signal, the
 650M masking-variance calibration, and the 650M deterministic supplementary recovery were already
 computed and committed (`docs/LIMITATIONS.md` §1, §5) — the qualitative shape of those results (the
 uncertainty prior looking unhelpful; structural-only beating random and fitness-greedy) was visible when
@@ -186,6 +186,27 @@ method to a specific number once computed.
   direct difference — a stricter standard than the frozen decision rule's own non-overlapping-CI
   criterion above; that rule remains the frozen bar for H1, and this stricter standard applies only to
   these companion analyses, not to it.
+
+## Outcome — frozen 650M headline (2026-07-11)
+
+The frozen run executed on a Colab T4 (`device=cuda`, 29,678 candidates, `n_perturbations=16`, 20 seeds,
+budgets 48/96/192) on the GitHub branch tip `3ba75eb`. Artifacts: `artifacts/headline_650m.json` (recovery
++ CIs) and `artifacts/robustness_650m.json` (post-hoc A1/A2/A3). Verdict, read strictly off the frozen rule
+and its mandatory companions (figures live in the artifacts and the claim-checked README):
+
+- **H1 supported.** On the registered statistic — pairwise Spearman *and* Pearson — information-optimal
+  beats fitness-greedy and random with non-overlapping bootstrap 95% CIs at all three budgets. The frozen
+  bar is met.
+- **The uncertainty prior earns no credit (ablation clause).** The prior-free `structural-only` ablation
+  has the higher pairwise recovery than info-optimal at every budget on both correlations, and the post-hoc
+  paired common-predicted-term precision comparison puts structural ahead of info-optimal with a descriptive
+  difference whose 95% CI excludes zero at all three budgets. Per "Mandatory baselines" above, info-optimal
+  is not `> structural-only`, so the ESM masking-perturbation uncertainty prior is **dropped from the
+  claims**; the allocation's recovery is attributed to the structural `n(v)` loop-coverage sort. The A2
+  cross-fit scale-sensitivity probe agrees (structural > info > fitness at every order and budget).
+- **Framing.** The headline is reported caveat-first (structural-only wins) with H1's formal support stated
+  plainly and all baselines shown together, per invariant #2. The A1/A3 difference CIs are descriptive
+  companions, not hypothesis tests, and do not change the frozen decision.
 
 ## Second landscape — TrpB (pre-registered, run DEFERRED)
 

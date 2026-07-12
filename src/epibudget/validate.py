@@ -127,6 +127,23 @@ def _candidate_terms(scored: Sequence[ScoredVariant], max_order: int) -> list[Te
     ]
 
 
+def esm_prior_mu(
+    scored: Sequence[ScoredVariant], revealed: Mapping[Variant, float]
+) -> dict[Variant, float]:
+    """The posterior-mean ΔG map ``infer_epistasis`` conditions on: measured pinned, else prior.
+
+    ``mu[v] = revealed[v]`` if ``v`` was measured, else ``b * esm[v]`` with ``b`` the through-origin
+    slope calibrated on the revealed set (:func:`_calibrate_slope`). For an unrevealed (e.g.
+    held-out) variant this is exactly the ESM prior on the measured scale — the circular quantity
+    that makes a prediction for such a variant unable to demonstrate learned downstream
+    information. Used by both :func:`infer_epistasis` and the downstream benchmark's
+    ``esm_circular_diagnostic``.
+    """
+    esm = {sv.variant: sv.delta_g for sv in scored}
+    b = _calibrate_slope([esm[v] for v in revealed], [revealed[v] for v in revealed])
+    return {v: (revealed[v] if v in revealed else b * esm[v]) for v in esm}
+
+
 def infer_epistasis(
     revealed: Mapping[Variant, float],
     scored: Sequence[ScoredVariant],
@@ -139,10 +156,8 @@ def infer_epistasis(
     keeps its unit-calibrated ESM prior mean; measured members are pinned to their true ΔG.
     Round-trips: empty ``revealed`` reproduces the ESM ε̂; a fully-measured loop reproduces true ε.
     """
-    esm = {sv.variant: sv.delta_g for sv in scored}
     tau2 = {sv.variant: sv.var_delta_g for sv in scored}
-    b = _calibrate_slope([esm[v] for v in revealed], [revealed[v] for v in revealed])
-    mu: dict[Variant, float] = {v: (revealed[v] if v in revealed else b * esm[v]) for v in esm}
+    mu = esm_prior_mu(scored, revealed)
 
     interactions: list[Interaction] = []
     for term in _candidate_terms(scored, max_order):

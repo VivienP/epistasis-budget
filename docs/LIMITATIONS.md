@@ -149,9 +149,12 @@ Each item states the constraint, its consequence, and how the code/docs handle i
 
 ## 7. Not yet done (scope, not failure)
 
-- **No downstream-impact demonstration** — the one test that escapes the recovery tautology (does a
-  structure-aware budget's map support a *better decision* on held-out mutants?). This is the highest-value
-  next step precisely because §4 makes the recovery headline thin on its own.
+- **No confirmatory downstream-impact result** — a downstream-impact benchmark (does a structure-aware
+  budget's map support a *better decision* on held-out mutants?) is implemented and fully specified
+  (`src/epibudget/downstream.py`, `docs/specs/downstream.md`), but no confirmatory R=20 downstream result
+  has yet been produced or scientifically validated. This is the one test that escapes the recovery
+  tautology §4 describes; it is the highest-value next step precisely because §4 makes the recovery
+  headline thin on its own.
 - **No second landscape** (generalisation) — premature until the mechanism on GB1 is settled.
 - **No background-averaged ε, no MoCHI handoff, no multi-round sequential design** — all deliberately out
   of scope for v1.

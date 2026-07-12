@@ -2,7 +2,7 @@
 
 The credibility of `epibudget` rests entirely on one honest benchmark. This document freezes the
 protocol **before** any result exists, so the outcome cannot be reverse-engineered. Changing anything
-here after seeing results requires an explicit note in the report and Vivien's sign-off.
+here after seeing results requires an explicit amendment note recorded in the report.
 
 ## The claim under test
 
@@ -207,6 +207,80 @@ and its mandatory companions (figures live in the artifacts and the claim-checke
 - **Framing.** The headline is reported caveat-first (structural-only wins) with H1's formal support stated
   plainly and all baselines shown together, per invariant #2. The A1/A3 difference CIs are descriptive
   companions, not hypothesis tests, and do not change the frozen decision.
+
+## Post-registration downstream-impact protocol — 2026-07-11
+
+**Status: protocol frozen here BEFORE any downstream number exists; the full spec is
+`docs/specs/downstream.md`.** This section is written after the GB1 map-recovery headline, the negative
+650M uncertainty calibration, and structural-only's apparent advantage were already known and committed
+(§Outcome above; `docs/LIMITATIONS.md` §4/§5). It is therefore **not** a blind pre-registration — it
+cannot claim that bias protection. It only fixes the method before its own numbers exist, which still
+blocks tuning the method to a specific number once computed. It **does not modify or replace the frozen
+historical decision rule** above; it adds a separate, independently-decided downstream benchmark.
+
+**Why.** The frozen recovery statistic is partly tautological (`docs/LIMITATIONS.md` §4) and
+`infer_epistasis` keeps the ESM prior for every unmeasured term, so it does not show that a
+structure-aware plate yields a **better downstream experimental decision**. The benchmark asks instead
+whether, at equal initial budget B on GB1, a method's selected plate is a better training set for a fixed
+supervised learner to rank **held-out** double/triple mutants. The primary learner is trained only from
+the revealed labels and consumes neither the held-out variant's own ESM score nor the prior-inclusive
+`infer_epistasis` output — so it cannot algebraically recover the ESM prior (the new, less-visible
+tautology this design must avoid).
+
+**Design (frozen; full detail in `docs/specs/downstream.md`).** Deterministic order-stratified SHA-256
+outer folds over the entire order-2/3 universe (singles never held out); for each fold `E_j`, every
+method selects B from `pool_j = universe \ E_j`, zero-shot, and is scored on the identical measured
+members of `E_j` (dead-0 retained, missing counted-not-imputed). Two estimands are run side-by-side
+(target-blind primary; target-aware companion) and two missingness regimes (attempted-budget primary;
+measured-available oracle sensitivity). The primary predictor is a pure-numpy generalized-dual ridge on a
+single global fixed feature dictionary (76 reference-coded amino-acid main effects + 2166 reference-coded
+pairwise indicators; no third-order, no ESM feature), with α chosen by held-out inner CV on the outer
+training set only. All five existing methods are retained (info-optimal, structural-only, fitness-greedy,
+random, practice); no baseline is dropped for performing well.
+
+**Metrics and inference.** Primary statistic is the order-stratified macro-Spearman
+`S_macro = ½(ρ_doubles + ρ_triples)` of predicted vs raw held-out fitness (pooled Spearman is a companion
+only). NDCG@B, hit-rate@B, regret@B, an epistasis-uplift, and a no-triples→held-out-triples transfer test
+are reported. The decision gate is a Nadeau–Bengio corrected-resampled t over R=20 frozen salted
+partitions × K=5 folds — a **corrected-CV interval, not a frequentist CI over future wet-lab campaigns** —
+plus a ≥16/20 partition-mean sign-consistency safeguard.
+
+**Decision rule (frozen for this benchmark).** The structural downstream claim is supported iff
+`structural − fitness` on the `S_macro`-AUC over B∈{48,96,192} excludes zero positive with the corrected-t
+and passes sign consistency. The ESM-uncertainty contribution is supported iff `info − structural` on
+`S_macro` at B=192 excludes zero positive (B∈{48,96} reported but non-decisional — underpowered by
+construction because both methods select ≈singles then doubles and never a triple). Otherwise the
+observed partial/null/negative is reported. All three narrative outcomes — (1) structural beats fitness
+downstream, (2) info does not beat structural, (3) nothing beats fitness — are preserved honestly. No
+generalization beyond GB1 and no product-readiness is claimed from a retrospective four-site benchmark.
+
+## Protocol amendment 1 — downstream-impact benchmark — 2026-07-12
+
+**Status: frozen here BEFORE any confirmatory downstream number is read or interpreted.** Review on
+2026-07-12 surfaced implementation and protocol deviations from the 2026-07-11 downstream-impact
+protocol above: a sign-consistency gate that silently lowered its 16/20 threshold to the count of
+*surviving* partitions rather than requiring all 20; no raw per-fold record trail (random-seed metrics
+were averaged before serialization, so the corrected-CV statistics and sign counts could not be
+independently recomputed); an inner-fold count (3) and alpha grids present in the code but never actually
+named in the frozen spec text; main-only and no-triples-transfer training reusing the full model's alpha
+instead of their own inner CV; the three mandatory ESM diagnostics (§"Secondary predictors / controls"
+above) absent from the implementation; and a report whose content depended on the input order of `scored`.
+Full detail: `docs/specs/downstream.md` §"Protocol amendment 1".
+
+A confirmatory-scale process (`R=20 x K=5`, 20 seeds) was started under the pre-amendment implementation
+on 2026-07-12 and produced a favorable exploratory smoke direction on the
+`structural-fitness` contrast before it was stopped without writing any artifact
+(`report/<run_id>/downstream.json` never existed). **That direction is explicitly non-decision-use and did
+not inform any value frozen in the amendment.** The 2026-07-11 design (held-out protocol, estimands,
+missingness regimes, primary predictor architecture, metric definitions) is unchanged; the amendment adds
+the raw-record schema, the fail-closed missing-partition policy, regime-separated hyperparameter tuning,
+the three mandatory ESM diagnostics, cache/provenance hardening, canonical-order enforcement, and reframes
+the corrected-CV interval as a labelled sensitivity companion rather than the primary gate (replaced by an
+explicit 7-point partition-level robustness gate, §"Protocol amendment 1" in the spec). The next
+`downstream` run performed under the amended protocol is a **confirmatory rerun**, not an untouched first
+test, and every artifact it produces records `provenance.protocol_version` /
+`provenance.amendment_version` accordingly. This amendment does not modify the frozen 650M GB1 headline or
+its decision rule (§Outcome above) and does not modify the TrpB protocol below.
 
 ## Second landscape — TrpB (pre-registered, run DEFERRED)
 

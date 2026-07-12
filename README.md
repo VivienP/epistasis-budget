@@ -5,15 +5,7 @@
 `epibudget` allocates a fixed experimental budget of *B* wells across candidate protein variants
 (singles, doubles, triples) to **maximally reduce uncertainty about the epistatic structure** of the
 fitness landscape. It is zero-shot (ESM-2), CPU-first and GPU-capable, and is evaluated on the measured,
-viable subset of the public GB1 four-site landscape. The frozen variance-inclusive 650M comparison has now
-run: the prior-free structural baseline outperforms information-optimal, so the ESM uncertainty prior is
-dropped from the claims.
-
-> Status: de-risk gate passed; scoring (now batched + de-duplicated + GPU-capable), epistasis graph,
-> allocation, and the GB1 harness shipped. The frozen 20-letter 650M headline has now run on a GPU
-> (Colab T4) and is reported below, with a post-hoc robustness/precision analysis; uncertainty-prior
-> calibration is also reported. See [`docs/SPEC.md`](docs/SPEC.md) and
-> [`docs/VALIDATION.md`](docs/VALIDATION.md).
+viable subset of the public GB1 four-site landscape.
 
 ---
 
@@ -111,6 +103,10 @@ headline is formally supported under the registered rule (info-optimal beats fit
 but the prior-free structural allocation outperforms information-optimal on both full-set recovery and
 matched precision, so the masking-variance uncertainty prior is dropped from the claims.
 Masking-perturbation variance has not demonstrated positive calibration.
+
+A downstream-impact benchmark — does a structure-aware budget yield a better training set for ranking
+held-out double and triple mutants? — is implemented and specified
+([`docs/specs/downstream.md`](docs/specs/downstream.md)); no confirmatory result has been produced yet.
 
 ## How it works (3 steps)
 

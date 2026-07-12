@@ -1,4 +1,4 @@
-"""Offline tests for the Phase B robustness analyses (no ESM, no network).
+"""Offline tests for the post-registration robustness analyses (no ESM, no network).
 
 A synthetic order-1..3 pool over three sites stands in for scored GB1 candidates. A linear landscape
 (fitness = exp ΔĜ) makes the cross-fitted slope exactly 1, so cross-fit must reduce to the frozen

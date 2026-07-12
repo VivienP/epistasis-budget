@@ -29,7 +29,7 @@ _NON_WT = 19
 _SINGLE_ROWS = _N_SITES  # 4: one shared "mask this site on WT" row per site
 _ORDER2_ROWS = _N_SITES * (_N_SITES - 1) * _NON_WT  # 228: (query, other site) by other residue
 _ORDER3_ROWS = _N_SITES * 3 * _NON_WT**2  # 4332: (query, C(3,2) other sites) by two residues
-_FULL_ROWS = _SINGLE_ROWS + _ORDER2_ROWS + _ORDER3_ROWS  # 4564 (the audit figure)
+_FULL_ROWS = _SINGLE_ROWS + _ORDER2_ROWS + _ORDER3_ROWS  # 4564 unique deterministic forwards
 
 
 def _det_unique_count(max_order: int, order_filter: int | None = None) -> int:
@@ -62,7 +62,7 @@ def test_dedup_collapses_order3_rows() -> None:
     assert _det_unique_count(max_order=3, order_filter=3) == _ORDER3_ROWS
 
 
-def test_dedup_full_pool_matches_audit_4564() -> None:
+def test_dedup_full_pool_matches_4564() -> None:
     # The headline de-dup claim: the full 20-letter four-site deterministic pass is 4,564 forwards.
     assert _det_unique_count(max_order=3) == _FULL_ROWS
 

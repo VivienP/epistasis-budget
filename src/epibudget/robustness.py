@@ -1,4 +1,4 @@
-"""Phase B robustness analyses (docs/specs/robustness.md, docs/VALIDATION.md post-registration).
+"""Post-registration robustness analyses (docs/specs/robustness.md, docs/VALIDATION.md).
 
 Three POST-HOC companion analyses on a completed run's inputs (ESM-scored candidates + the full
 measured landscape). They never feed selection and never alter the frozen decision rule:
@@ -118,7 +118,7 @@ class ScaleSensitivity(BaseModel):
 
 
 class RobustnessReport(BaseModel):
-    """The three Phase B analyses over the frozen budget grid, per order (never pooled)."""
+    """The three post-hoc analyses over the frozen budget grid, per order (never pooled)."""
 
     dataset: str
     model_id: str

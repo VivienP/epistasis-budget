@@ -9,7 +9,9 @@ from pathlib import Path
 
 import pytest
 
+from epibudget.provenance import write_json_exclusive
 from epibudget.scored_cache import (
+    CacheIdentity,
     CacheMetadata,
     append_cache,
     build_cache_metadata,
@@ -17,6 +19,7 @@ from epibudget.scored_cache import (
     candidate_sha256,
     load_cache,
     score_with_cache,
+    validate_cache_against_universe,
 )
 from epibudget.types import ScoredVariant, Variant
 
@@ -172,3 +175,207 @@ def test_score_with_cache_repairs_only_a_truncated_final_line(tmp_path: Path) ->
     assert [sv.variant for sv in result] == candidates
     assert second.scored == [candidates[2]]
     assert load_cache(path).keys() == set(candidates)
+
+
+# ------------------------------------------------------------ validate_cache_against_universe
+
+
+def _write_cache_and_sidecar(
+    path: Path, candidates: Sequence[Variant], metadata: CacheMetadata
+) -> None:
+    append_cache(path, [ScoredVariant(variant=v, delta_g=0.0, var_delta_g=0.0) for v in candidates])
+    write_json_exclusive(cache_metadata_path(path), metadata.model_dump(mode="json"))
+
+
+def test_validate_cache_against_universe_accepts_matching_identity(tmp_path: Path) -> None:
+    path = tmp_path / "cache.jsonl"
+    candidates = [_variant(p) for p in range(3)]
+    _write_cache_and_sidecar(path, candidates, _metadata(candidates))
+
+    cache, metadata, identity = validate_cache_against_universe(
+        path,
+        candidates,
+        candidate_alphabet="AC",
+        max_order=1,
+        model_id="toy-model",
+        scorer_seed=0,
+        n_perturbations=4,
+    )
+    assert set(cache) == set(candidates)
+    assert metadata.model_id == "toy-model"
+    assert identity == CacheIdentity(
+        model_id="toy-model",
+        scorer_seed=0,
+        n_perturbations=4,
+        candidate_sha256=candidate_sha256(candidates),
+        candidate_count=len(candidates),
+        candidate_alphabet="AC",
+        max_order=1,
+        wt_sha256=None,  # no wt_sequence was passed to this call
+    )
+
+
+def test_validate_cache_against_universe_rejects_wrong_model_id(tmp_path: Path) -> None:
+    path = tmp_path / "cache.jsonl"
+    candidates = [_variant(p) for p in range(3)]
+    _write_cache_and_sidecar(
+        path, candidates, _metadata(candidates)
+    )  # sidecar model_id="toy-model"
+
+    with pytest.raises(ValueError, match="model_id"):
+        validate_cache_against_universe(
+            path,
+            candidates,
+            candidate_alphabet="AC",
+            max_order=1,
+            model_id="a-different-model",  # the caller's own expected value, not the sidecar's
+            scorer_seed=0,
+            n_perturbations=4,
+        )
+
+
+def test_validate_cache_against_universe_rejects_wrong_scorer_seed(tmp_path: Path) -> None:
+    path = tmp_path / "cache.jsonl"
+    candidates = [_variant(p) for p in range(3)]
+    _write_cache_and_sidecar(path, candidates, _metadata(candidates))  # sidecar scorer_seed=0
+
+    with pytest.raises(ValueError, match="scorer_seed"):
+        validate_cache_against_universe(
+            path,
+            candidates,
+            candidate_alphabet="AC",
+            max_order=1,
+            model_id="toy-model",
+            scorer_seed=99,
+            n_perturbations=4,
+        )
+
+
+def test_validate_cache_against_universe_rejects_wrong_n_perturbations(tmp_path: Path) -> None:
+    path = tmp_path / "cache.jsonl"
+    candidates = [_variant(p) for p in range(3)]
+    _write_cache_and_sidecar(path, candidates, _metadata(candidates))  # sidecar n_perturbations=4
+
+    with pytest.raises(ValueError, match="n_perturbations"):
+        validate_cache_against_universe(
+            path,
+            candidates,
+            candidate_alphabet="AC",
+            max_order=1,
+            model_id="toy-model",
+            scorer_seed=0,
+            n_perturbations=99,
+        )
+
+
+def test_validate_cache_against_universe_rejects_missing_required_field(tmp_path: Path) -> None:
+    path = tmp_path / "cache.jsonl"
+    candidates = [_variant(p) for p in range(3)]
+    append_cache(path, [ScoredVariant(variant=v, delta_g=0.0, var_delta_g=0.0) for v in candidates])
+    payload = _metadata(candidates).model_dump(mode="json")
+    del payload["model_id"]  # a sidecar missing a required identity field must never validate
+    write_json_exclusive(cache_metadata_path(path), payload)
+
+    with pytest.raises(ValueError):
+        validate_cache_against_universe(
+            path,
+            candidates,
+            candidate_alphabet="AC",
+            max_order=1,
+            model_id="toy-model",
+            scorer_seed=0,
+            n_perturbations=4,
+        )
+
+
+def test_validate_cache_against_universe_rejects_malformed_field_type(tmp_path: Path) -> None:
+    path = tmp_path / "cache.jsonl"
+    candidates = [_variant(p) for p in range(3)]
+    append_cache(path, [ScoredVariant(variant=v, delta_g=0.0, var_delta_g=0.0) for v in candidates])
+    payload = _metadata(candidates).model_dump(mode="json")
+    payload["scorer_seed"] = "not-an-int"  # a non-coercible type must never validate
+    write_json_exclusive(cache_metadata_path(path), payload)
+
+    with pytest.raises(ValueError):
+        validate_cache_against_universe(
+            path,
+            candidates,
+            candidate_alphabet="AC",
+            max_order=1,
+            model_id="toy-model",
+            scorer_seed=0,
+            n_perturbations=4,
+        )
+
+
+# ------------------------------------------------------------------------ CacheIdentity
+
+
+def test_cache_identity_from_metadata_maps_every_shared_field() -> None:
+    metadata = _metadata([_variant(0), _variant(1)])
+    identity = CacheIdentity.from_metadata(metadata)
+    assert identity.model_id == metadata.model_id
+    assert identity.scorer_seed == metadata.scorer_seed
+    assert identity.n_perturbations == metadata.n_perturbations
+    assert identity.candidate_sha256 == metadata.candidate_sha256
+    assert identity.candidate_count == metadata.candidate_count
+    assert identity.candidate_alphabet == metadata.candidate_alphabet
+    assert identity.max_order == metadata.max_order
+    assert identity.wt_sha256 == metadata.wt_sha256
+
+
+def test_validate_cache_against_universe_expected_identity_never_reads_the_sidecar(
+    tmp_path: Path,
+) -> None:
+    """guard: the returned expected identity is the caller's own request, not the sidecar's
+    claim — a sidecar declaring a wrong ``candidate_alphabet``/``max_order`` label (while its
+    identity-bearing fields still match what was requested) must not leak into ``expected``."""
+    path = tmp_path / "cache.jsonl"
+    candidates = [_variant(p) for p in range(3)]
+    sidecar = _metadata(candidates).model_copy(
+        update={"wt_sha256": hashlib.sha256(b"WT").hexdigest()}
+    )
+    _write_cache_and_sidecar(path, candidates, sidecar)
+
+    _, _, expected_identity = validate_cache_against_universe(
+        path,
+        candidates,
+        candidate_alphabet="AC",
+        max_order=1,
+        model_id="toy-model",
+        scorer_seed=0,
+        n_perturbations=4,
+        wt_sequence="WT",
+    )
+    # The caller's own request, never the sidecar's claim (which declares a different model_id).
+    assert expected_identity == CacheIdentity(
+        model_id="toy-model",
+        scorer_seed=0,
+        n_perturbations=4,
+        candidate_sha256=candidate_sha256(candidates),
+        candidate_count=len(candidates),
+        candidate_alphabet="AC",
+        max_order=1,
+        wt_sha256=hashlib.sha256(b"WT").hexdigest(),
+    )
+
+
+def test_validate_cache_against_universe_expected_wt_sha256_is_none_without_wt_sequence(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "cache.jsonl"
+    candidates = [_variant(p) for p in range(3)]
+    _write_cache_and_sidecar(path, candidates, _metadata(candidates))
+
+    _, _, expected_identity = validate_cache_against_universe(
+        path,
+        candidates,
+        candidate_alphabet="AC",
+        max_order=1,
+        model_id="toy-model",
+        scorer_seed=0,
+        n_perturbations=4,
+    )
+    # wt_sequence was not supplied, so this call never independently checked wt_sha256; the
+    # expected identity says so explicitly rather than fabricating a value it did not verify.
+    assert expected_identity.wt_sha256 is None

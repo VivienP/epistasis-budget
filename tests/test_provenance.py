@@ -4,11 +4,18 @@ from __future__ import annotations
 
 import json
 import subprocess
+import threading
 from pathlib import Path
 
 import pytest
 
-from epibudget.provenance import code_diff_sha256, workspace_code_diff_sha256, write_json_exclusive
+from epibudget import provenance
+from epibudget.provenance import (
+    code_diff_sha256,
+    workspace_code_diff_sha256,
+    write_json_atomic,
+    write_json_exclusive,
+)
 
 _SHA256_HEX_LENGTH = 64
 
@@ -108,3 +115,105 @@ def test_workspace_code_diff_sha256_excludes_generated_and_ignored_paths(tmp_pat
     (repo / "docs" / "ROADMAP.md").write_text("ignored\n", encoding="utf-8")
 
     assert workspace_code_diff_sha256(repo, base) == clean
+
+
+def test_write_json_atomic_rejects_overwrite_and_leaves_no_temp_file(tmp_path: Path) -> None:
+    path = tmp_path / "result.json"
+    write_json_atomic(path, {"which": "A"})
+
+    with pytest.raises(FileExistsError):
+        write_json_atomic(path, {"which": "B"})
+
+    assert json.loads(path.read_text(encoding="utf-8")) == {"which": "A"}
+    assert [p.name for p in tmp_path.iterdir()] == ["result.json"]
+
+
+def test_write_json_atomic_concurrent_writers_exactly_one_wins(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """regression: two publishers racing on the same path via the real os.link.
+
+    A barrier forces both threads to call the real, unwrapped ``os.link`` at (as close as
+    possible to) the same instant; the wrapper only synchronizes, it never changes behavior. The
+    OS serializes the two create-only calls, so exactly one publishes and the other observes
+    ``FileExistsError`` -- the losing thread's own temp file is cleaned up, and the winner's
+    payload is the only content ever visible at ``path``. Which thread wins is not deterministic;
+    that there is exactly one winner and one loser is.
+    """
+    path = tmp_path / "result.json"
+    barrier = threading.Barrier(2)
+    real_link = provenance.os.link
+
+    def synced_link(src: object, dst: object) -> None:
+        barrier.wait()
+        real_link(src, dst)
+
+    monkeypatch.setattr(provenance.os, "link", synced_link)
+
+    payload_a = {"which": "A", "note": "payload-A"}
+    payload_b = {"which": "B", "note": "payload-B"}
+    outcomes: dict[str, str] = {}
+    outcomes_lock = threading.Lock()
+
+    def writer(name: str, payload: dict[str, str]) -> None:
+        try:
+            write_json_atomic(path, payload)
+            outcome = "success"
+        except FileExistsError:
+            outcome = "FileExistsError"
+        with outcomes_lock:
+            outcomes[name] = outcome
+
+    thread_a = threading.Thread(target=writer, args=("A", payload_a))
+    thread_b = threading.Thread(target=writer, args=("B", payload_b))
+    thread_a.start()
+    thread_b.start()
+    thread_a.join(timeout=10)
+    thread_b.join(timeout=10)
+
+    assert not thread_a.is_alive()
+    assert not thread_b.is_alive()
+    assert sorted(outcomes.values()) == ["FileExistsError", "success"]
+
+    final_payload = json.loads(path.read_text(encoding="utf-8"))
+    assert final_payload in (payload_a, payload_b)
+    assert [p.name for p in tmp_path.iterdir()] == ["result.json"]
+
+
+def test_write_json_atomic_cleans_up_temp_file_on_serialization_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "result.json"
+    call_count = 0
+
+    def raising_dumps(*args: object, **kwargs: object) -> str:
+        nonlocal call_count
+        call_count += 1
+        raise RuntimeError("boom-before-publish")
+
+    def failing_if_reached(src: object, dst: object) -> None:
+        raise AssertionError("os.link must not be called when serialization fails first")
+
+    monkeypatch.setattr(provenance.json, "dumps", raising_dumps)
+    monkeypatch.setattr(provenance.os, "link", failing_if_reached)
+
+    with pytest.raises(RuntimeError, match="boom-before-publish"):
+        write_json_atomic(path, {"value": 1})
+
+    assert call_count == 1
+    assert not path.exists()
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_write_json_atomic_never_touches_preexisting_final_file(tmp_path: Path) -> None:
+    path = tmp_path / "result.json"
+    original_bytes = json.dumps({"which": "pre-existing"}, indent=2).encode("utf-8")
+    path.write_bytes(original_bytes)
+    original_mtime_ns = path.stat().st_mtime_ns
+
+    with pytest.raises(FileExistsError):
+        write_json_atomic(path, {"which": "new"})
+
+    assert path.read_bytes() == original_bytes
+    assert path.stat().st_mtime_ns == original_mtime_ns
+    assert [p.name for p in tmp_path.iterdir()] == ["result.json"]

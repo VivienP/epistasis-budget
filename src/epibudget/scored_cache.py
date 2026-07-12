@@ -1,4 +1,4 @@
-"""Resumable scored-variant cache for long runs (e.g. the 650M headline on a free Colab GPU).
+"""Resumable scored-variant cache for long scoring runs.
 
 A JSONL sidecar of already-computed ``ScoredVariant`` rows so a run interrupted by a session timeout
 resumes without re-scoring. Purely a throughput/resilience aid: cached values are the scorer's exact
@@ -57,6 +57,42 @@ class CacheMetadata(BaseModel):
     num_threads: int | None
 
 
+class CacheIdentity(BaseModel):
+    """The 8 identity fields ``validate_cache_against_universe`` independently checks.
+
+    A caller builds one ``CacheIdentity`` from trusted, independently-computed values (the
+    ``expected`` side) and one from an already-validated sidecar's :class:`CacheMetadata` via
+    :meth:`from_metadata` (the ``observed`` side), so provenance can serialize both sides of every
+    check that was actually performed rather than trusting the sidecar for a field it claims to
+    have verified.
+    """
+
+    model_config = {"frozen": True}
+
+    model_id: str
+    scorer_seed: int
+    n_perturbations: int
+    candidate_sha256: str
+    candidate_count: int
+    candidate_alphabet: str
+    max_order: int
+    wt_sha256: str | None
+
+    @classmethod
+    def from_metadata(cls, metadata: CacheMetadata) -> CacheIdentity:
+        """The observed identity read from an already cache-validated sidecar."""
+        return cls(
+            model_id=metadata.model_id,
+            scorer_seed=metadata.scorer_seed,
+            n_perturbations=metadata.n_perturbations,
+            candidate_sha256=metadata.candidate_sha256,
+            candidate_count=metadata.candidate_count,
+            candidate_alphabet=metadata.candidate_alphabet,
+            max_order=metadata.max_order,
+            wt_sha256=metadata.wt_sha256,
+        )
+
+
 def candidate_sha256(candidates: Sequence[Variant]) -> str:
     """Hash the candidate identities independently of their input order."""
     canonical = sorted([sorted([list(mutation) for mutation in variant]) for variant in candidates])
@@ -112,16 +148,123 @@ def _ensure_metadata(path: Path, expected: CacheMetadata) -> None:
 
 
 def load_cache(path: Path) -> dict[Variant, ScoredVariant]:
-    """Load previously scored variants from a JSONL cache; empty dict if the file is absent."""
+    """Load previously scored variants from a JSONL cache; empty dict if the file is absent.
+
+    Rejects (never silently collapses) a duplicate candidate identity: two JSONL rows for the same
+    variant would let insertion order pick one arbitrarily, exactly the kind of scientific-integrity
+    mismatch a downstream analysis must never read past silently.
+    """
     if not path.exists():
         return {}
     out: dict[Variant, ScoredVariant] = {}
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
         if not line.strip():
             continue
         sv = ScoredVariant.model_validate_json(line)
+        if sv.variant in out:
+            raise ValueError(
+                f"duplicate candidate identity at line {line_number} in {path}: "
+                f"{sorted(sv.variant)} was already loaded from an earlier line"
+            )
         out[sv.variant] = sv
     return out
+
+
+def validate_cache_against_universe(
+    cache_path: Path,
+    candidates: Sequence[Variant],
+    *,
+    candidate_alphabet: str,
+    max_order: int,
+    model_id: str,
+    scorer_seed: int,
+    n_perturbations: int,
+    wt_sequence: str | None = None,
+) -> tuple[dict[Variant, ScoredVariant], CacheMetadata, CacheIdentity]:
+    """Load a scored cache and reject any mismatch against the exact requested candidate universe.
+
+    ``model_id``, ``scorer_seed``, and ``n_perturbations`` are the caller's own expected values
+    (e.g. a registered headline/protocol constant) — never derived from the sidecar under check,
+    since comparing the sidecar against itself can never fail.
+
+    Rejects (raises ``ValueError``, never warns) on: a missing sidecar; a sidecar whose
+    ``candidate_sha256``, ``candidate_count``, ``candidate_alphabet``, ``max_order``, ``model_id``,
+    ``scorer_seed``, ``n_perturbations``, or ``wt_sha256`` (when ``wt_sequence`` is given) does not
+    match the requested configuration; duplicate or malformed JSONL rows (:func:`load_cache`); or a
+    cache whose identity set is not exactly the requested ``candidates`` (missing or unexpected
+    entries, including a same-count swap that a bare count comparison would miss).
+
+    Returns the loaded cache, the sidecar's own parsed metadata, and the ``CacheIdentity`` this
+    call actually checked the sidecar against — the same 8 independently-computed values, so a
+    caller building provenance from the third element can never drift from what this function
+    validated (``wt_sha256`` is ``None`` when ``wt_sequence`` was not supplied, since that field is
+    then not independently checked here).
+    """
+    sidecar = cache_metadata_path(cache_path)
+    if not sidecar.exists():
+        raise ValueError(
+            f"score cache {cache_path} has no metadata sidecar; refuse unsafe analysis"
+        )
+    metadata = CacheMetadata.model_validate_json(sidecar.read_text(encoding="utf-8"))
+    expected_hash = candidate_sha256(candidates)
+    expected_wt_hash = (
+        hashlib.sha256(wt_sequence.encode("ascii")).hexdigest() if wt_sequence is not None else None
+    )
+    expected_identity = CacheIdentity(
+        model_id=model_id,
+        scorer_seed=scorer_seed,
+        n_perturbations=n_perturbations,
+        candidate_sha256=expected_hash,
+        candidate_count=len(candidates),
+        candidate_alphabet=candidate_alphabet,
+        max_order=max_order,
+        wt_sha256=expected_wt_hash,
+    )
+    mismatches: list[str] = []
+    if metadata.candidate_sha256 != expected_hash:
+        mismatches.append(
+            f"candidate_sha256: sidecar={metadata.candidate_sha256} expected={expected_hash}"
+        )
+    if metadata.candidate_count != len(candidates):
+        mismatches.append(
+            f"candidate_count: sidecar={metadata.candidate_count} expected={len(candidates)}"
+        )
+    if metadata.candidate_alphabet != candidate_alphabet:
+        mismatches.append(
+            f"candidate_alphabet: sidecar={metadata.candidate_alphabet!r} "
+            f"expected={candidate_alphabet!r}"
+        )
+    if metadata.max_order != max_order:
+        mismatches.append(f"max_order: sidecar={metadata.max_order} expected={max_order}")
+    if metadata.model_id != model_id:
+        mismatches.append(f"model_id: sidecar={metadata.model_id!r} expected={model_id!r}")
+    if metadata.scorer_seed != scorer_seed:
+        mismatches.append(f"scorer_seed: sidecar={metadata.scorer_seed} expected={scorer_seed}")
+    if metadata.n_perturbations != n_perturbations:
+        mismatches.append(
+            f"n_perturbations: sidecar={metadata.n_perturbations} expected={n_perturbations}"
+        )
+    if expected_wt_hash is not None and metadata.wt_sha256 != expected_wt_hash:
+        mismatches.append(f"wt_sha256: sidecar={metadata.wt_sha256} expected={expected_wt_hash}")
+    if mismatches:
+        raise ValueError(
+            f"score cache {cache_path} sidecar does not match the requested universe: "
+            + "; ".join(mismatches)
+        )
+
+    cache = load_cache(cache_path)
+    candidate_set = set(candidates)
+    cache_set = set(cache)
+    missing = candidate_set - cache_set
+    unexpected = cache_set - candidate_set
+    if missing or unexpected:
+        raise ValueError(
+            f"score cache {cache_path} does not match the exact requested candidate universe "
+            f"of {len(candidates)} (alphabet={candidate_alphabet!r}, max_order={max_order}): "
+            f"{len(missing)} missing, {len(unexpected)} unexpected. Refusing — a mismatched cache "
+            "would silently analyse a different universe than scored."
+        )
+    return cache, metadata, expected_identity
 
 
 def _load_cache_repairing_truncated_tail(path: Path) -> dict[Variant, ScoredVariant]:

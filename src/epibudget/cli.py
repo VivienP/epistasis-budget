@@ -13,6 +13,7 @@ from rich.table import Table
 from epibudget.types import Mutation, Variant
 
 if TYPE_CHECKING:
+    from epibudget.scored_cache import CacheIdentity
     from epibudget.validate import Report
 
 app = typer.Typer(
@@ -31,6 +32,14 @@ _MODEL_ALIASES = {
     "esm2_t30_150M": "facebook/esm2_t30_150M_UR50D",
     "esm2_t33_650M": "facebook/esm2_t33_650M_UR50D",
 }
+
+# Frozen confirmatory scoring identity (docs/VALIDATION.md "Outcome — frozen 650M headline"):
+# `robustness`/`downstream` only ever analyse the completed 650M scored cache, so this is the one
+# scoring configuration a cache may claim for those commands — checked against the sidecar rather
+# than trusted from it.
+_CONFIRMATORY_MODEL_ID = "facebook/esm2_t33_650M_UR50D"
+_CONFIRMATORY_SCORER_SEED = 0
+_CONFIRMATORY_N_PERTURBATIONS = 16
 
 
 def _resolve_model_id(name: str) -> str:
@@ -316,20 +325,21 @@ def robustness(
     n_folds: int = typer.Option(5, help="Cross-fit folds for the scale-sensitivity analysis."),
     out: str = typer.Option("report/", help="Report root; a run subdirectory is created."),
 ) -> None:
-    """Post-hoc Phase B robustness analyses on a completed run (no GPU); see docs/specs."""
+    """Post-hoc robustness analyses on a completed run (no GPU); see docs/specs."""
     from datetime import UTC, datetime  # noqa: PLC0415
 
     from epibudget.data import (  # noqa: PLC0415
         GB1_SITES,
         GB1_WT_AT_SITES,
+        GB1_WT_SEQUENCE,
         enumerate_candidates,
         load_gb1,
     )
+    from epibudget.provenance import write_json_exclusive  # noqa: PLC0415
     from epibudget.robustness import robustness_report  # noqa: PLC0415
     from epibudget.scored_cache import (  # noqa: PLC0415
-        CacheMetadata,
-        cache_metadata_path,
-        load_cache,
+        CacheIdentity,
+        validate_cache_against_universe,
     )
 
     if n_folds < 2:  # noqa: PLR2004 — >= 2 for out-of-fold cross-fitting
@@ -339,23 +349,22 @@ def robustness(
     enumerated = enumerate_candidates(
         GB1_SITES, GB1_WT_AT_SITES, allowed_aa=alphabet, max_order=max_order
     )
-    cache = load_cache(Path(scored_cache))
-    missing = [v for v in enumerated if v not in cache]
-    if missing or len(cache) != len(enumerated):
-        extra = len(cache) - (len(enumerated) - len(missing))
-        raise typer.BadParameter(
-            f"scored cache does not match the alphabet {alphabet!r} (max_order={max_order}) "
-            f"candidate universe of {len(enumerated)}: {len(missing)} missing, {extra} unexpected. "
-            "Refusing — a mismatched cache would silently analyse a different universe than scored."
+    try:
+        cache, metadata, expected_identity = validate_cache_against_universe(
+            Path(scored_cache),
+            enumerated,
+            candidate_alphabet=alphabet,
+            max_order=max_order,
+            model_id=_CONFIRMATORY_MODEL_ID,
+            scorer_seed=_CONFIRMATORY_SCORER_SEED,
+            n_perturbations=_CONFIRMATORY_N_PERTURBATIONS,
+            wt_sequence=GB1_WT_SEQUENCE,
         )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
     scored = [cache[v] for v in enumerated]  # enumeration order: reproduces the frozen selections
-
-    sidecar = cache_metadata_path(Path(scored_cache))
-    model_id = (
-        CacheMetadata.model_validate_json(sidecar.read_text(encoding="utf-8")).model_id
-        if sidecar.exists()
-        else ""
-    )
+    model_id = metadata.model_id
+    observed_identity = CacheIdentity.from_metadata(metadata)
 
     run_dir = Path(out) / datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     report = robustness_report(
@@ -368,6 +377,16 @@ def robustness(
         model_id=model_id,
         out_dir=run_dir,
     )
+    # `robustness` is descriptive/non-decision-bearing (RobustnessReport carries no provenance
+    # field), so the same independently-validated cache identity checked above is recorded as its
+    # own sidecar rather than folded into robustness.json's schema.
+    write_json_exclusive(
+        run_dir / "robustness_cache_identity.json",
+        {
+            "scored_cache_identity_expected": expected_identity.model_dump(mode="json"),
+            "scored_cache_identity_observed": observed_identity.model_dump(mode="json"),
+        },
+    )
     console.print(
         f"[bold]robustness[/] {report.n_candidates} candidates, {n_folds}-fold cross-fit; "
         f"wrote {run_dir / 'robustness.json'}"
@@ -378,6 +397,276 @@ def robustness(
             f"  {scale.order:<8} global={scale.global_ranking} crossfit={scale.crossfit_ranking} "
             f"({agree})"
         )
+
+
+def _git_lines(repo: Path, *args: str) -> list[str]:
+    import subprocess  # noqa: PLC0415
+
+    try:
+        result = subprocess.run(
+            ["git", *args], cwd=repo, check=True, capture_output=True, text=True, encoding="utf-8"
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return []
+    return [line for line in result.stdout.splitlines() if line]
+
+
+def _downstream_provenance(
+    repo: Path,
+    cache_path: Path,
+    sidecar: Path,
+    data_path: Path,
+    universe_sha256: str,
+    headline: Path,
+    command: str,
+    *,
+    partitions: int,
+    budgets: list[int],
+    seeds: int,
+    n_folds: int,
+    alphabet: str,
+    max_order: int,
+    expected_identity: CacheIdentity,
+    observed_identity: CacheIdentity,
+    started_at_utc: str,
+    completed_at_utc: str,
+) -> dict[str, object]:
+    """Assemble the full provenance dict for one ``downstream`` execution.
+
+    ``completed_at_utc`` is the caller's own post-computation timestamp (captured after
+    ``downstream_report`` returns), never computed here, so provenance never claims a completion
+    time earlier than the benchmark actually finished. ``expected_identity``/``observed_identity``
+    are the complete 8-field ``CacheIdentity`` pair ``validate_cache_against_universe`` actually
+    checked the sidecar against — ``expected_identity`` is that call's own independently-computed
+    return value (never re-derived from the sidecar), and ``observed_identity`` is read from the
+    already cache-validated sidecar metadata, so a reader never has to trust that the earlier gate
+    ran — both sides of every check are on the record.
+    """
+    import hashlib  # noqa: PLC0415
+
+    from epibudget.downstream import (  # noqa: PLC0415
+        _ESTIMANDS,
+        _METHODS,
+        _REGIMES,
+        AMENDMENT_VERSION,
+        GRID_MAIN,
+        GRID_PAIR,
+        N_INNER_FOLDS,
+        PROTOCOL_VERSION,
+        partition_salt,
+        protocol_profile_conformance,
+    )
+    from epibudget.provenance import (  # noqa: PLC0415
+        changed_scientific_files,
+        workspace_code_diff_sha256,
+    )
+
+    def sha(path: Path) -> str | None:
+        return hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
+
+    head = _git_lines(repo, "rev-parse", "HEAD")
+    dirty = bool(_git_lines(repo, "status", "--porcelain"))
+    execution_commit = head[0] if head else ""
+    code_diff = ""
+    changed_files: list[str] = []
+    if dirty and execution_commit:
+        code_diff = workspace_code_diff_sha256(repo, execution_commit)
+        changed_files = changed_scientific_files(repo, execution_commit)
+
+    # CLI-boundary confirmatory-profile check: computed defensively again,
+    # independently, inside downstream_report()/_decision_summary() itself — this is only an early,
+    # operator-facing signal, never the authoritative decision gate.
+    cli_conformance = protocol_profile_conformance(
+        protocol_version=PROTOCOL_VERSION,
+        partitions=partitions,
+        outer_folds=n_folds,
+        budgets=budgets,
+        alphabet=alphabet,
+        max_order=max_order,
+        random_seeds=range(seeds),
+        inner_folds=N_INNER_FOLDS,
+        estimands=_ESTIMANDS,
+        missingness_regimes=_REGIMES,
+        methods=_METHODS,
+    )
+    return {
+        "protocol_version": PROTOCOL_VERSION,
+        "amendment_version": AMENDMENT_VERSION,
+        "started_at_utc": started_at_utc,
+        "completed_at_utc": completed_at_utc,
+        "scored_cache_sha256": sha(cache_path),
+        "scored_cache_sidecar_sha256": sha(sidecar),
+        "scored_cache_identity_expected": expected_identity.model_dump(mode="json"),
+        "scored_cache_identity_observed": observed_identity.model_dump(mode="json"),
+        "dataset_sha256": sha(data_path),
+        "candidate_universe_sha256": universe_sha256,
+        "headline_artifact_path": str(headline) if headline.is_file() else None,
+        "headline_artifact_sha256": sha(headline),
+        "execution_commit": execution_commit,
+        "base_commit_sha": execution_commit,
+        "code_state": "dirty" if dirty else "clean",
+        "code_diff_sha256": code_diff,
+        "changed_scientific_files": changed_files,
+        "exact_command": command,
+        "inner_fold_policy": (
+            "identity-sorted balanced rank%n_inner over sha256(inner_salt:canonical_id); "
+            "fallback to strongest-shrinkage grid corner below n_inner distinct identities"
+        ),
+        "inner_salt": "sha256(epibudget-downstream-inner:v1)",
+        "n_inner_folds": N_INNER_FOLDS,
+        "alpha_grid_main": list(GRID_MAIN),
+        "alpha_grid_pair": list(GRID_PAIR),
+        "partition_salts": [partition_salt(i) for i in range(partitions)],
+        "estimands": list(_ESTIMANDS),
+        "missingness_regimes": list(_REGIMES),
+        "budgets": budgets,
+        "seeds": seeds,
+        "alpha_selection_source": "see deterministic_records[*]/random_records[*].alpha_*",
+        "cli_protocol_profile_conforming": cli_conformance.conforming,
+        "cli_protocol_profile_mismatches": cli_conformance.mismatches,
+        "status": "provisional",
+    }
+
+
+@app.command()
+def downstream(
+    scored_cache: str = typer.Option(..., help="Completed JSONL scored-variant cache to analyse."),
+    data: str = typer.Option("data/proteingym/gb1_wu2016.csv", help="Path to the GB1 CSV."),
+    alphabet: str = typer.Option(_AA20, help="Per-site alphabet the cache was scored over."),
+    budgets: str = typer.Option("48,96,192", help="Comma-separated budgets."),
+    seeds: int = typer.Option(20, help="Random-baseline seeds."),
+    max_order: int = typer.Option(3, help="Max interaction order (2 or 3)."),
+    n_folds: int = typer.Option(5, help="Outer held-out folds."),
+    partitions: int = typer.Option(20, help="Independent salted fold partitions."),
+    headline: str = typer.Option(
+        "report/20260711T091947Z/metrics.json", help="Frozen headline artifact for provenance."
+    ),
+    out: str = typer.Option("report/", help="Report root; a run subdirectory is created."),
+) -> None:
+    """Post-registration downstream-impact benchmark on a completed cache (CPU-only, no GPU).
+
+    A confirmatory run under protocol amendment 1 (docs/specs/downstream.md); ``decision_eligible``
+    is false whenever ``--partitions`` is below the frozen ``EXPECTED_PARTITIONS=20`` register.
+    """
+    from datetime import UTC, datetime  # noqa: PLC0415
+
+    from epibudget.data import (  # noqa: PLC0415
+        GB1_SITES,
+        GB1_WT_AT_SITES,
+        GB1_WT_SEQUENCE,
+        enumerate_candidates,
+        load_gb1,
+    )
+    from epibudget.downstream import downstream_report  # noqa: PLC0415
+    from epibudget.provenance import write_json_atomic  # noqa: PLC0415
+    from epibudget.scored_cache import (  # noqa: PLC0415
+        CacheIdentity,
+        cache_metadata_path,
+        candidate_sha256,
+        validate_cache_against_universe,
+    )
+
+    if n_folds < 2:  # noqa: PLR2004 — need a held-out fold
+        raise typer.BadParameter(f"--n-folds must be >= 2, got {n_folds}")
+    if partitions < 1:
+        raise typer.BadParameter(f"--partitions must be >= 1, got {partitions}")
+
+    cache_path = Path(scored_cache)
+    data_path = Path(data)
+    landscape = load_gb1(data_path)
+    enumerated = enumerate_candidates(
+        GB1_SITES, GB1_WT_AT_SITES, allowed_aa=alphabet, max_order=max_order
+    )
+    try:
+        cache, metadata, expected_identity = validate_cache_against_universe(
+            cache_path,
+            enumerated,
+            candidate_alphabet=alphabet,
+            max_order=max_order,
+            model_id=_CONFIRMATORY_MODEL_ID,
+            scorer_seed=_CONFIRMATORY_SCORER_SEED,
+            n_perturbations=_CONFIRMATORY_N_PERTURBATIONS,
+            wt_sequence=GB1_WT_SEQUENCE,
+        )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    scored = [cache[v] for v in enumerated]  # enumeration order: reproduces the frozen selections
+    model_id = metadata.model_id
+    observed_identity = CacheIdentity.from_metadata(metadata)
+
+    sidecar = cache_metadata_path(cache_path)
+    budget_list = [int(b) for b in budgets.split(",")]
+    repo = Path(__file__).resolve().parents[2]
+    command = (
+        f"epibudget downstream --scored-cache {scored_cache} --data {data} --alphabet {alphabet} "
+        f"--budgets {budgets} --seeds {seeds} --max-order {max_order} --n-folds {n_folds} "
+        f"--partitions {partitions} --headline {headline} --out {out}"
+    )
+    run_dir = Path(out) / datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    started_at_utc = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    console.print(
+        f"[bold]downstream[/] {len(scored)} candidates, {partitions}x{n_folds} fold-instances, "
+        f"seeds={seeds}; running (CPU) ..."
+    )
+    # `provenance`/`out_dir` are intentionally withheld here: `completed_at_utc` below is only
+    # correct once this call has returned, so the final report is written once, after that.
+    report = downstream_report(
+        scored,
+        landscape,
+        budget_list,
+        seeds=seeds,
+        n_folds=n_folds,
+        partitions=partitions,
+        max_order=max_order,
+        sites=GB1_SITES,
+        wt_at_sites=GB1_WT_AT_SITES,
+        alphabet=alphabet,
+        model_id=model_id,
+    )
+    completed_at_utc = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    provenance = _downstream_provenance(
+        repo,
+        cache_path,
+        sidecar,
+        data_path,
+        candidate_sha256(enumerated),
+        Path(headline),
+        command,
+        partitions=partitions,
+        budgets=budget_list,
+        seeds=seeds,
+        n_folds=n_folds,
+        alphabet=alphabet,
+        max_order=max_order,
+        expected_identity=expected_identity,
+        observed_identity=observed_identity,
+        started_at_utc=started_at_utc,
+        completed_at_utc=completed_at_utc,
+    )
+    if not provenance["cli_protocol_profile_conforming"]:
+        console.print(
+            "[yellow]warning:[/] executed configuration does not match the frozen confirmatory "
+            f"profile — mismatches={provenance['cli_protocol_profile_mismatches']}; this run can "
+            "never be decision_eligible regardless of partition coverage"
+        )
+    report = report.model_copy(update={"provenance": provenance})
+    write_json_atomic(run_dir / "downstream.json", report.model_dump(mode="json"))
+    decision = report.decision
+    console.print(
+        f"  decision_eligible(structural)={decision.structural_gate.decision_eligible}  "
+        f"structural_downstream_supported={decision.structural_downstream_supported}  "
+        f"esm_uncertainty_supported={decision.esm_uncertainty_supported}"
+    )
+    for gate, label in (
+        (decision.structural_gate, "structural-fitness"),
+        (decision.esm_gate, "info-structural"),
+    ):
+        console.print(
+            f"  {label:<18} status={gate.status:<28} coverage={gate.observed_valid_partitions}/"
+            f"{gate.expected_partitions} sign={gate.sign_positive}/{gate.sign_threshold} "
+            f"mean={_fmt(gate.global_mean_delta)}"
+        )
+    console.print(f"wrote {run_dir / 'downstream.json'} (status={provenance['status']})")
 
 
 @app.command()

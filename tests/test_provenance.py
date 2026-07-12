@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
+import os
 import subprocess
 import threading
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -18,6 +21,50 @@ from epibudget.provenance import (
 )
 
 _SHA256_HEX_LENGTH = 64
+_GIT_SHA_LENGTH = 40
+
+
+def _repository_local_git_env_vars() -> tuple[str, ...]:
+    """Names of the git environment variables that bind git to one repository.
+
+    ``git rev-parse --local-env-vars`` is git's own authoritative list (GIT_DIR, GIT_INDEX_FILE,
+    GIT_WORK_TREE, ...). It prints only the variable names and needs no repository, so it is stable
+    regardless of the surrounding environment.
+    """
+    result = subprocess.run(
+        ["git", "rev-parse", "--local-env-vars"], check=True, capture_output=True, text=True
+    )
+    return tuple(result.stdout.split())
+
+
+_LOCAL_GIT_ENV_VARS = _repository_local_git_env_vars()
+
+
+@contextlib.contextmanager
+def _without_repository_local_git_env() -> Iterator[None]:
+    """Temporarily drop every repository-local git variable from the process environment.
+
+    A pre-commit hook runs with GIT_DIR / GIT_INDEX_FILE / GIT_WORK_TREE exported and pointing at
+    the outer repository. Both the temp-repo helper below and the production
+    ``workspace_code_diff_sha256`` it exercises spawn ``git`` inheriting ``os.environ``; stripping
+    these variables is what makes every such child target the temp repo, in a hook or not.
+    """
+    saved = {name: os.environ[name] for name in _LOCAL_GIT_ENV_VARS if name in os.environ}
+    for name in saved:
+        del os.environ[name]
+    try:
+        yield
+    finally:
+        for name, value in saved.items():
+            os.environ[name] = value
+
+
+@pytest.fixture(autouse=True)
+def _isolate_git_from_hook_env() -> Iterator[None]:
+    """Run every test in this module with the repository-local git variables stripped, so the
+    temp-repo tests pass whether invoked directly or from the pre-commit hook that exports them."""
+    with _without_repository_local_git_env():
+        yield
 
 
 def _git(repo: Path, *args: str) -> None:
@@ -115,6 +162,35 @@ def test_workspace_code_diff_sha256_excludes_generated_and_ignored_paths(tmp_pat
     (repo / "docs" / "ROADMAP.md").write_text("ignored\n", encoding="utf-8")
 
     assert workspace_code_diff_sha256(repo, base) == clean
+
+
+def test_temp_repo_tests_survive_a_simulated_hook_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression: a pre-commit hook exports GIT_DIR/GIT_INDEX_FILE/GIT_WORK_TREE pointing at the
+    outer repo. The full temp-repo workflow — including the production diff — must still target the
+    temp repo once the repository-local variables are stripped.
+
+    The exported variables point at a throwaway directory under ``tmp_path`` (never the real repo),
+    so nothing here can touch the outer repository even if the isolation regressed.
+    """
+    fake_outer = tmp_path / "outer"
+    fake_outer.mkdir()
+    monkeypatch.setenv("GIT_DIR", str(fake_outer / ".git"))
+    monkeypatch.setenv("GIT_INDEX_FILE", str(fake_outer / ".git" / "index"))
+    monkeypatch.setenv("GIT_WORK_TREE", str(fake_outer))
+
+    work = tmp_path / "work"
+    work.mkdir()
+    with _without_repository_local_git_env():
+        base = _init_repo_with_base_commit(work)
+        (work / "src.py").write_bytes(b"two\n")
+        digest = workspace_code_diff_sha256(work, base)
+
+    assert len(base) == _GIT_SHA_LENGTH
+    # The diff reflects the temp repo's own edit — proof git did not follow the exported hook vars
+    # (which would have yielded the empty/outer-repo diff instead).
+    assert digest == code_diff_sha256({"src.py": b"two\n"})
 
 
 def test_write_json_atomic_rejects_overwrite_and_leaves_no_temp_file(tmp_path: Path) -> None:

@@ -8,7 +8,8 @@ positions.
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from itertools import combinations, product
 from pathlib import Path
 
@@ -140,6 +141,58 @@ def load_gb1(path: Path, sites: Sequence[int] = GB1_SITES) -> dict[Variant, floa
 def load_trpb(path: Path, sites: Sequence[int] = TRPB_SITES) -> dict[Variant, float]:
     """Load the measured TrpB four-site rows (Johnston 2024), ε-referenced to the Tm9D8* parent."""
     return _load_landscape(path, TRPB_WT_SEQUENCE, sites, TRPB_WT_AT_SITES)
+
+
+@dataclass(frozen=True)
+class DatasetSpec:
+    """Everything the validation harness needs to run one four-site landscape.
+
+    Binds a dataset identifier to its loader and its reference construct — the target ``sites``,
+    the WT residues expected there, and the full ``wt_sequence`` the ε anchor is defined against —
+    so the CLI never hardcodes a single landscape's constants. ``default_data_path`` is the
+    conventional on-disk CSV the matching fetch script writes.
+    """
+
+    identifier: str
+    loader: Callable[[Path], dict[Variant, float]]
+    sites: tuple[int, ...]
+    wt_at_sites: tuple[str, ...]
+    wt_sequence: str
+    default_data_path: str
+
+
+# Registered validation datasets. Each maps a stable identifier to its loader and reference
+# construct; a caller resolves one via :func:`resolve_dataset`, which rejects anything unregistered
+# rather than silently defaulting to GB1.
+DATASETS: dict[str, DatasetSpec] = {
+    "gb1_wu2016": DatasetSpec(
+        identifier="gb1_wu2016",
+        loader=load_gb1,
+        sites=GB1_SITES,
+        wt_at_sites=GB1_WT_AT_SITES,
+        wt_sequence=GB1_WT_SEQUENCE,
+        default_data_path="data/proteingym/gb1_wu2016.csv",
+    ),
+    "trpb_johnston2024": DatasetSpec(
+        identifier="trpb_johnston2024",
+        loader=load_trpb,
+        sites=TRPB_SITES,
+        wt_at_sites=TRPB_WT_AT_SITES,
+        wt_sequence=TRPB_WT_SEQUENCE,
+        default_data_path="data/proteingym/trpb_johnston2024.csv",
+    ),
+}
+
+
+def resolve_dataset(identifier: str) -> DatasetSpec:
+    """Return the registered :class:`DatasetSpec`, rejecting an unknown identifier explicitly."""
+    try:
+        return DATASETS[identifier]
+    except KeyError:
+        supported = ", ".join(sorted(DATASETS))
+        raise ValueError(
+            f"unknown dataset {identifier!r}; supported identifiers: {supported}"
+        ) from None
 
 
 def variant_order_composition(landscape: dict[Variant, float]) -> dict[int, int]:

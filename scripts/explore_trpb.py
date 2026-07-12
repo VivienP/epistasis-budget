@@ -20,9 +20,10 @@ In Colab (no hardcoded local paths): upload or mount the CSV, then pass its path
 
 A methods/metrics run is a SEPARATE, expensive step (it needs ESM scoring) and is intentionally NOT
 run here. When the GB1 headline is interpreted and the deferred TrpB confirmatory run is authorized,
-the command is the frozen GB1 `validate` pointed at the TrpB data (docs/VALIDATION.md §"Second
-landscape"):
-    epibudget validate --dataset gb1_wu2016 --data data/proteingym/trpb_johnston2024.csv \\
+the command is the frozen `validate` on the native TrpB dataset (docs/VALIDATION.md §"Second
+landscape"); the `trpb_johnston2024` identifier selects the TrpB loader, sites and reference, and
+`--data` defaults to `data/proteingym/trpb_johnston2024.csv`:
+    epibudget validate --dataset trpb_johnston2024 \\
         --model esm2_t33_650M --alphabet ACDEFGHIKLMNPQRSTVWY --budgets 48,96,192 \\
         --seeds 20 --n-perturbations 16 --device cuda --out report/
 """

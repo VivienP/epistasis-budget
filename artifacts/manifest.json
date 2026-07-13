@@ -22,10 +22,10 @@
       "evidence_classification": "reproduced"
     },
     {
-      "path": "artifacts/step1_signal_650m.json",
+      "path": "artifacts/signal_650m.json",
       "sha256": "e623e2b3e64ce1c610815f73f4474a5bccbe1d8b2a84acfea3c91cd166f853bb",
       "source_run_id": "spike_gb1_650M",
-      "generation_command": "python scripts/spike_gb1_epistasis.py --model facebook/esm2_t33_650M_UR50D --seed 0 --out report/spike_gb1_650M.json",
+      "generation_command": "python scripts/gb1_epistasis_signal.py --model facebook/esm2_t33_650M_UR50D --seed 0 --out report/spike_gb1_650M.json",
       "base_commit_sha": "1a1f30aabd11bb50af6208bef983f2d017352b97",
       "code_state": "dirty",
       "code_diff_sha256": "ccc9f93990540048aad2c1f5f880a6db34d718c2ed538455ff440cf7df91a102",
@@ -215,7 +215,7 @@
     },
     {
       "path": "artifacts/claim_map.json",
-      "sha256": "177ec608de6cd5645f2ab01c05ee7440dbf444bb597fd2b46159e20fa0274b3f",
+      "sha256": "ee847fe8bea5e7bc718eb5c3ce8a653bb0319b0d4d24c985575ddb2a7e5da5cd",
       "source_run_id": "claim-map-v1",
       "generation_command": "maintained with README.md; validated by python scripts/validate_artifacts.py",
       "base_commit_sha": "1a1f30aabd11bb50af6208bef983f2d017352b97",

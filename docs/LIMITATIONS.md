@@ -121,7 +121,7 @@ Each item states the constraint, its consequence, and how the code/docs handle i
 
 ## 5. Empirical evidence and unresolved interpretation
 
-- **Conjoint scores and masking variance are separate claims.** The 650M conjoint-score spike contains
+- **Conjoint scores and masking variance are separate claims.** The 650M conjoint scores contain
   positive epistatic signal. The masking-variance calibration does not show positive association with
   absolute error: Spearman is −0.113 with 95% CI [−0.220, −0.002], while Pearson is −0.100 with 95% CI
   [−0.198, 0.003] ([artifact](../artifacts/calibration_650m.json)). This supports a weak negative rank

@@ -2,7 +2,7 @@
 
 Records the pre-allocation gate: *does ESM-2 conjoint scoring carry usable GB1 epistasis signal before
 anything is built on top?* Reproduce with
-`python scripts/fetch_gb1.py` then `python scripts/spike_gb1_epistasis.py --model <checkpoint>`.
+`python scripts/fetch_gb1.py` then `python scripts/gb1_epistasis_signal.py --model <checkpoint>`.
 
 ## The gate (both must hold)
 

@@ -16,18 +16,18 @@
       "anchor": "149,361 measured genotypes"
     },
     {
-      "id": "step1.pairwise_spearman",
+      "id": "signal.pairwise_spearman",
       "document": "README.md",
-      "artifact": "artifacts/step1_signal_650m.json",
+      "artifact": "artifacts/signal_650m.json",
       "json_pointer": "/result/spearman_pairwise",
       "transform": {"name": "round", "digits": 3},
       "rendered": "0.302",
       "anchor": "pairwise Spearman **0.302**"
     },
     {
-      "id": "step1.third_spearman",
+      "id": "signal.third_spearman",
       "document": "README.md",
-      "artifact": "artifacts/step1_signal_650m.json",
+      "artifact": "artifacts/signal_650m.json",
       "json_pointer": "/result/spearman_third",
       "transform": {"name": "round", "digits": 3},
       "rendered": "0.249",

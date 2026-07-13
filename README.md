@@ -68,7 +68,7 @@ of information-optimal DMS design, not a silent win. See [`docs/VALIDATION.md`](
 <!-- artifact-claims:start -->
 **Conjoint-score signal.** On the viable GB1 terms available in the local public-data artifact,
 ESM-2 650M conjoint ε has pairwise Spearman **0.302** and third-order Spearman **0.249**
-([provisional artifact](artifacts/step1_signal_650m.json)). This supports an epistatic signal in the
+([provisional artifact](artifacts/signal_650m.json)). This supports an epistatic signal in the
 scores; it does not validate the masking-variance uncertainty prior.
 
 **Frozen headline (variance-inclusive, full 20-letter alphabet, 650M, *B* ∈ {48, 96, 192}, 20 seeds, run

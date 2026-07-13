@@ -1,6 +1,6 @@
-"""Step 1 de-risk spike: does ESM-2 conjoint scoring carry GB1 epistasis signal?
+"""Does ESM-2 conjoint scoring carry GB1 epistasis signal?
 
-Answers the two pre-allocation gate questions in docs/STEP1_GATE.md, on real data, before anything
+Answers the two pre-allocation gate questions in docs/SIGNAL_GATE.md, on real data, before anything
 is built on top:
 
   1. Is Var[ε_pred] > 0 (conjoint scoring is genuinely non-additive — invariant #1)?
@@ -16,9 +16,9 @@ instances. The correlation is Spearman over those ε instances.
 Requires: python scripts/fetch_gb1.py (GB1 on disk) and an ESM-2 forward pass (CPU minutes on 35M).
 
 Usage:
-    python scripts/spike_gb1_epistasis.py [--data data/proteingym/gb1_wu2016.csv]
+    python scripts/gb1_epistasis_signal.py [--data data/proteingym/gb1_wu2016.csv]
         [--model facebook/esm2_t12_35M_UR50D] [--k-pair 50] [--k-tri 40] [--seed 0]
-        [--out report/spike_gb1.json]
+        [--out report/gb1_signal.json]
 """
 
 from __future__ import annotations
@@ -107,7 +107,7 @@ def main() -> None:
         "--k-tri", type=int, default=40, help="aa-combos sampled per position-triple"
     )
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--out", type=Path, default=Path("report/spike_gb1.json"))
+    parser.add_argument("--out", type=Path, default=Path("report/gb1_signal.json"))
     args = parser.parse_args()
 
     landscape = load_gb1(args.data)
@@ -174,7 +174,7 @@ def main() -> None:
     args.out.write_text(json.dumps(result, indent=2), encoding="utf-8")
 
     # ASCII-only stdout (Windows consoles default to cp1252 and choke on Greek letters).
-    print("\n=== Step 1 de-risk gate ===")
+    print("\n=== ESM-2 epistasis signal gate ===")
     print(f"  gate #1  Var[eps_pred] > 0        : {_fmt4(result['var_eps_pred_pooled'])}")
     print(
         f"  gate #2  Spearman(eps_pred,eps_true): "

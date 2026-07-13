@@ -124,7 +124,7 @@ def ground_truth_epistasis(dg: Mapping[Variant, float], max_order: int = 3) -> l
 
     ``dg`` is the measured ΔG map (e.g. ln fitness, WT-anchored so ΔG(∅)=0). Dead variants have no
     log-fitness and must be absent from ``dg`` upstream; a term is dropped (never imputed) if any of
-    its up-to-seven loop members is missing (invariant #3, docs/STEP1_GATE.md).
+    its up-to-seven loop members is missing (invariant #3, docs/SIGNAL_GATE.md).
     """
     interactions: list[Interaction] = []
     for mutations in _top_order_candidates(dg, max_order):

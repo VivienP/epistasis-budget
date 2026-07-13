@@ -18,6 +18,7 @@ the interaction basis" that keeps selection and grading on one coherent model.
 
 from __future__ import annotations
 
+import hashlib
 import warnings
 from collections.abc import Mapping, Sequence
 from math import log
@@ -90,6 +91,8 @@ class Report(BaseModel):
     device: str  # the resolved compute device the scoring ran on (cpu / cuda)
     max_order: int
     data_sha256: str  # checksum of the dataset the landscape/truth came from
+    sites: list[int]  # 0-indexed target sites of the landscape (dataset-specific)
+    wt_sha256: str  # checksum of the reference (WT) sequence the ε anchor is defined against
     n_candidates: int
     n_truth_terms: int
     var_epsilon: float  # invariant #1 sanity: must be > 0
@@ -395,12 +398,17 @@ def run_validation(
     n_perturbations: int = 0,
     device: str = "cpu",
     data_sha256: str = "",
+    wt_sequence: str = "",
+    sites: Sequence[int] = (),
 ) -> Report:
     """Execute the frozen protocol and write ``<out_dir>/metrics.json``. See docs/VALIDATION.md.
 
-    ``scored`` are the ESM-scored candidates (orders 1..max_order); ``landscape`` is the full GB1
-    {variant → fitness}. The selection graph is built from ``predicted_epistasis`` (ESM) only, never
-    from ``ground_truth_epistasis`` — so no label can leak into selection.
+    ``scored`` are the ESM-scored candidates (orders 1..max_order); ``landscape`` is the full
+    {variant → fitness} landscape. The selection graph is built from ``predicted_epistasis`` (ESM)
+    only, never from ``ground_truth_epistasis`` — so no label can leak into selection.
+
+    ``dataset``, ``wt_sequence`` and ``sites`` are recorded verbatim as provenance so a report is
+    self-describing about which landscape and reference construct produced it (GB1 vs TrpB).
     """
     term_set = set(_candidate_terms(scored, max_order))
     landscape_dg = {v: log(f) for v, f in landscape.items() if f > 0.0}
@@ -458,6 +466,8 @@ def run_validation(
         device=device,
         max_order=max_order,
         data_sha256=data_sha256,
+        sites=list(sites),
+        wt_sha256=hashlib.sha256(wt_sequence.encode("ascii")).hexdigest() if wt_sequence else "",
         n_candidates=len(scored),
         n_truth_terms=len(truth_by_term),
         var_epsilon=var_epsilon,

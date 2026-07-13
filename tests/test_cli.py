@@ -6,6 +6,7 @@ input-parsing helpers are, which is where the surprising failure modes (indexing
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
 import time
@@ -17,6 +18,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+from epibudget import data as data_module
 from epibudget import downstream as downstream_module
 from epibudget import scoring
 from epibudget.cli import (
@@ -32,8 +34,12 @@ from epibudget.data import (
     GB1_SITES,
     GB1_WT_AT_SITES,
     GB1_WT_SEQUENCE,
+    TRPB_SITES,
+    TRPB_WT_AT_SITES,
+    TRPB_WT_SEQUENCE,
     apply_mutations,
     enumerate_candidates,
+    load_gb1,
 )
 from epibudget.scored_cache import CacheMetadata, cache_metadata_path
 from epibudget.types import ScoredVariant, Variant
@@ -249,6 +255,202 @@ def test_validate_command_runs_offline_and_writes_metrics(
         "random",
         "practice",
     }
+
+
+# ---------------------------------------------------------- native dataset routing
+
+
+def _write_landscape_csv(
+    path: Path, wt_sequence: str, sites: tuple[int, ...], variants: list[Variant]
+) -> None:
+    """Write a minimal (protein, label) CSV for any four-site landscape, non-additively coupled.
+
+    Same construction as ``_write_gb1_csv`` but parameterised on the reference sequence and sites,
+    so a TrpB fixture can be built without pointing the GB1 helper at a foreign reference.
+    """
+
+    def true_dg(variant: Variant) -> float:
+        positions = {pos for pos, _, _ in variant}
+        value = 0.5 * len(positions)
+        if {sites[0], sites[1]} <= positions:
+            value += 0.8  # a genuine pairwise interaction ⇒ Var[ε] > 0
+        return value
+
+    rows = [(wt_sequence, 1.0)]
+    rows += [(apply_mutations(wt_sequence, v), exp(true_dg(v))) for v in variants]
+    lines = ["protein,label"] + [f"{seq},{label}" for seq, label in rows]
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _count_run_validation_calls(monkeypatch: pytest.MonkeyPatch) -> dict[str, int]:
+    """Wrap ``run_validation`` with a call counter, patched at the module attribute the CLI's
+    deferred ``from epibudget.validate import run_validation`` reads at call time."""
+    from epibudget import validate as validate_module  # noqa: PLC0415
+
+    real_run_validation = validate_module.run_validation
+    calls = {"n": 0}
+
+    def _counting(*args: object, **kwargs: object) -> object:
+        calls["n"] += 1
+        return real_run_validation(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(validate_module, "run_validation", _counting)
+    return calls
+
+
+def test_validate_gb1_records_gb1_metadata(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """GB1 stamps the GB1 identifier, sites, and WT reference into provenance."""
+    monkeypatch.setattr(scoring, "ConjointScorer", _FakeScorer)
+    monkeypatch.setattr("epibudget.validate._N_BOOTSTRAP", 30)
+    candidates = enumerate_candidates(GB1_SITES, GB1_WT_AT_SITES, allowed_aa="AC", max_order=3)
+    csv = tmp_path / "gb1.csv"
+    _write_gb1_csv(csv, candidates)
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "validate",
+            "--dataset",
+            "gb1_wu2016",
+            "--data",
+            str(csv),
+            "--alphabet",
+            "AC",
+            "--budgets",
+            "4",
+            "--seeds",
+            "2",
+            "--out",
+            str(tmp_path / "report"),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    runs = list((tmp_path / "report").iterdir())
+    assert len(runs) == 1
+    written = json.loads((runs[0] / "metrics.json").read_text(encoding="utf-8"))
+    assert written["dataset"] == "gb1_wu2016"
+    assert written["sites"] == list(GB1_SITES)
+    assert written["wt_sha256"] == hashlib.sha256(GB1_WT_SEQUENCE.encode("ascii")).hexdigest()
+
+
+def test_validate_trpb_records_trpb_metadata(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """TrpB stamps the TrpB identifier, sites, and Tm9D8* WT reference into provenance."""
+    monkeypatch.setattr(scoring, "ConjointScorer", _FakeScorer)
+    monkeypatch.setattr("epibudget.validate._N_BOOTSTRAP", 30)
+    candidates = enumerate_candidates(TRPB_SITES, TRPB_WT_AT_SITES, allowed_aa="AC", max_order=3)
+    csv = tmp_path / "trpb.csv"
+    _write_landscape_csv(csv, TRPB_WT_SEQUENCE, TRPB_SITES, candidates)
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "validate",
+            "--dataset",
+            "trpb_johnston2024",
+            "--data",
+            str(csv),
+            "--alphabet",
+            "AC",
+            "--budgets",
+            "4",
+            "--seeds",
+            "2",
+            "--out",
+            str(tmp_path / "report"),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    runs = list((tmp_path / "report").iterdir())
+    assert len(runs) == 1
+    written = json.loads((runs[0] / "metrics.json").read_text(encoding="utf-8"))
+    assert written["dataset"] == "trpb_johnston2024"
+    assert written["sites"] == list(TRPB_SITES)
+    assert written["wt_sha256"] == hashlib.sha256(TRPB_WT_SEQUENCE.encode("ascii")).hexdigest()
+
+
+def test_validate_rejects_unknown_dataset_before_validation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An unregistered identifier fails as a bad parameter, before any landscape load or scoring,
+    and writes no report at all."""
+    monkeypatch.setattr(scoring, "ConjointScorer", _FakeScorer)
+    calls = _count_run_validation_calls(monkeypatch)
+    report_root = tmp_path / "report"
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "validate",
+            "--dataset",
+            "does_not_exist",
+            "--data",
+            str(tmp_path / "missing.csv"),
+            "--out",
+            str(report_root),
+        ],
+    )
+    assert result.exit_code != 0
+    assert "unknown dataset" in result.output
+    assert calls["n"] == 0  # validation never started
+    assert not report_root.exists()  # nothing was written
+
+
+def test_validate_trpb_csv_not_loaded_via_load_gb1(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A TrpB run must route the CSV through ``load_trpb``, never ``load_gb1``.
+
+    Proven two ways: ``load_gb1`` outright rejects the TrpB CSV (its sequences are not
+    length-compatible with the GB1 reference), and a spy on the registry's TrpB loader confirms the
+    CLI sent exactly this CSV to ``load_trpb``.
+    """
+    monkeypatch.setattr(scoring, "ConjointScorer", _FakeScorer)
+    monkeypatch.setattr("epibudget.validate._N_BOOTSTRAP", 30)
+    candidates = enumerate_candidates(TRPB_SITES, TRPB_WT_AT_SITES, allowed_aa="AC", max_order=3)
+    csv = tmp_path / "trpb.csv"
+    _write_landscape_csv(csv, TRPB_WT_SEQUENCE, TRPB_SITES, candidates)
+
+    # If the CLI wrongly routed the TrpB CSV through the GB1 loader, this is the error it would hit.
+    with pytest.raises(ValueError, match="length"):
+        load_gb1(csv)
+
+    load_trpb_paths: list[Path] = []
+    real_load_trpb = data_module.load_trpb
+
+    def _spy_load_trpb(path: Path) -> dict[Variant, float]:
+        load_trpb_paths.append(path)
+        return real_load_trpb(path)
+
+    trpb_spec = data_module.DATASETS["trpb_johnston2024"]
+    monkeypatch.setitem(
+        data_module.DATASETS,
+        "trpb_johnston2024",
+        dataclasses.replace(trpb_spec, loader=_spy_load_trpb),
+    )
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "validate",
+            "--dataset",
+            "trpb_johnston2024",
+            "--data",
+            str(csv),
+            "--alphabet",
+            "AC",
+            "--budgets",
+            "4",
+            "--seeds",
+            "2",
+            "--out",
+            str(tmp_path / "report"),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    # load_trpb ran exactly once, on the TrpB CSV — the GB1 loader was never in the path.
+    assert load_trpb_paths == [csv]
 
 
 def _build_scored_cache(

@@ -26,7 +26,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from itertools import combinations
 from math import log
 from pathlib import Path
@@ -35,6 +35,8 @@ import numpy as np
 from scipy.stats import spearmanr
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+
+from _console import configure_utf8_stdout
 
 from epibudget.data import GB1_SITES, GB1_WT_SEQUENCE, load_gb1
 from epibudget.epistasis import epsilon_pairwise, epsilon_third
@@ -53,7 +55,7 @@ def _non_wt(site: int) -> list[str]:
     return [a for a in _AA20 if a != GB1_WT_SEQUENCE[site]]
 
 
-def _sample(rng: np.random.Generator, grid: list[tuple[str, ...]], k: int) -> list[tuple[str, ...]]:
+def _sample[T](rng: np.random.Generator, grid: Sequence[T], k: int) -> list[T]:
     idx = rng.choice(len(grid), size=min(k, len(grid)), replace=False)
     return [grid[i] for i in idx]
 
@@ -97,6 +99,7 @@ def _spearman(pred: list[float], true: list[float]) -> float | None:
 
 
 def main() -> None:
+    configure_utf8_stdout()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data", type=Path, default=Path("data/proteingym/gb1_wu2016.csv"))
     parser.add_argument("--model", default="facebook/esm2_t12_35M_UR50D")
@@ -120,10 +123,10 @@ def main() -> None:
 
     # Distinct variants to score conjointly = the union of every instance's sub-variants.
     needed: set[Variant] = set()
-    for m in pairs_cov:
-        needed.update(_subsets(m))
-    for m in triples_cov:
-        needed.update(_subsets(m))
+    for pair in pairs_cov:
+        needed.update(_subsets(pair))
+    for triple in triples_cov:
+        needed.update(_subsets(triple))
     needed_list = sorted(needed, key=lambda v: (len(v), sorted(v)))
 
     print(

@@ -225,12 +225,16 @@ def allocate(
 
 @app.command()
 def validate(
-    dataset: str = typer.Option("gb1_wu2016", help="Validation dataset id."),
+    dataset: str = typer.Option(
+        "gb1_wu2016", help="Validation dataset id (gb1_wu2016 or trpb_johnston2024)."
+    ),
     budgets: str = typer.Option("48,96,192", help="Comma-separated budgets."),
     model: str = typer.Option("esm2_t12_35M", help="ESM-2 checkpoint short name or HF id."),
     seeds: int = typer.Option(20, help="Random-baseline seeds."),
     out: str = typer.Option("report/", help="Report root; a run subdirectory is created."),
-    data: str = typer.Option("data/proteingym/gb1_wu2016.csv", help="Path to the GB1 CSV."),
+    data: str = typer.Option(
+        "", help="Path to the dataset CSV; empty uses the selected dataset's default path."
+    ),
     alphabet: str = typer.Option(
         _AA20, help="Per-site candidate alphabet; a reduced set keeps the fast-model run tractable."
     ),
@@ -243,29 +247,33 @@ def validate(
         "", help="JSONL scored-variant cache; resumes a long run after an interruption."
     ),
 ) -> None:
-    """Run the GB1 harness; the frozen headline requires every explicit registered setting."""
+    """Run the validation harness; the frozen headline requires every explicit registered setting.
+
+    ``--dataset`` selects the landscape (loader + reference construct) from the registry in
+    ``epibudget.data``; an unregistered identifier is rejected before any scoring. GB1 is the
+    default and its resolved path/reference are unchanged.
+    """
     import hashlib  # noqa: PLC0415
     from datetime import UTC, datetime  # noqa: PLC0415
 
-    from epibudget.data import (  # noqa: PLC0415
-        GB1_SITES,
-        GB1_WT_AT_SITES,
-        GB1_WT_SEQUENCE,
-        enumerate_candidates,
-        load_gb1,
-    )
+    from epibudget.data import enumerate_candidates, resolve_dataset  # noqa: PLC0415
     from epibudget.scored_cache import build_cache_metadata, score_with_cache  # noqa: PLC0415
     from epibudget.scoring import ConjointScorer  # noqa: PLC0415
     from epibudget.validate import run_validation  # noqa: PLC0415
 
-    data_path = Path(data)
-    landscape = load_gb1(data_path)
+    try:
+        spec = resolve_dataset(dataset)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+    data_path = Path(data) if data else Path(spec.default_data_path)
+    landscape = spec.loader(data_path)
     data_sha256 = hashlib.sha256(data_path.read_bytes()).hexdigest()
     candidates = enumerate_candidates(
-        GB1_SITES, GB1_WT_AT_SITES, allowed_aa=alphabet, max_order=max_order
+        spec.sites, spec.wt_at_sites, allowed_aa=alphabet, max_order=max_order
     )
     console.print(
-        f"[bold]validate[/] scoring {len(candidates)} candidates "
+        f"[bold]validate[/] {spec.identifier}: scoring {len(candidates)} candidates "
         f"(alphabet={alphabet!r}) with {model} on {device} …"
     )
     scorer_seed = 0
@@ -280,20 +288,20 @@ def validate(
     if scored_cache:
         metadata = build_cache_metadata(
             scorer,
-            GB1_WT_SEQUENCE,
+            spec.wt_sequence,
             candidates,
             candidate_alphabet=alphabet,
             max_order=max_order,
         )
         scored = score_with_cache(
             scorer,
-            GB1_WT_SEQUENCE,
+            spec.wt_sequence,
             candidates,
             Path(scored_cache),
             metadata=metadata,
         )
     else:
-        scored = scorer.score_batch(GB1_WT_SEQUENCE, candidates)
+        scored = scorer.score_batch(spec.wt_sequence, candidates)
 
     run_dir = Path(out) / datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     report = run_validation(
@@ -303,13 +311,15 @@ def validate(
         seeds=seeds,
         model_id=model,
         out_dir=run_dir,
-        dataset=dataset,
+        dataset=spec.identifier,
         max_order=max_order,
         candidate_alphabet=alphabet,
         scorer_seed=scorer_seed,
         n_perturbations=n_perturbations,
         device=scorer.device,
         data_sha256=data_sha256,
+        wt_sequence=spec.wt_sequence,
+        sites=spec.sites,
     )
     _print_validation_report(report, run_dir)
 

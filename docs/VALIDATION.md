@@ -306,8 +306,10 @@ story.
   structural-only companions), and the same post-hoc robustness analyses. No setting is chosen after seeing
   a TrpB number.
 - **Reproducibility.** `python scripts/fetch_trpb.py` writes `data/proteingym/trpb_johnston2024.csv`
-  (git-ignored) with a checksum + provenance; the frozen run is the GB1 `validate` command with
-  `--data data/proteingym/trpb_johnston2024.csv` (and the TrpB sites/reference from `epibudget.data`).
+  (git-ignored) with a checksum + provenance; the frozen run is
+  `epibudget validate --dataset trpb_johnston2024 --model esm2_t33_650M --alphabet ACDEFGHIKLMNPQRSTVWY --budgets 48,96,192 --seeds 20 --n-perturbations 16 --device cuda --out report/`.
+  The `trpb_johnston2024` identifier selects the TrpB loader, sites and Tm9D8* reference from
+  `epibudget.data`, and `--data` defaults to `data/proteingym/trpb_johnston2024.csv`.
 
 ## Threats to validity (and mitigations)
 

@@ -1,7 +1,7 @@
 # epibudget — technical specification
 
-Source of truth for *what* to build. Pairs with [`CLAUDE.md`](../CLAUDE.md) (*how*),
-[`RESEARCH_EPISTASIS.md`](RESEARCH_EPISTASIS.md) (*why it is well-posed*), and
+Source of truth for *what* to build. Pairs with
+[`RESEARCH_EPISTASIS.md`](RESEARCH_EPISTASIS.md) (*why it is well-posed*) and
 [`VALIDATION.md`](VALIDATION.md) (*how we prove it works*).
 
 ---
@@ -119,8 +119,8 @@ var_delta_g  = var(scores)      # zero-shot proxy for "how unsure is the model h
 ```
 
 Batching, caching (per-sequence forward passes are reused across variants that share a context), and a
-small-model fast path (`esm2_t12_35M`) keep this CPU-tractable. Target: full GB1 four-site candidate set
-scored in < 45 min on a laptop CPU with the 35M model, < a few hours with 650M.
+small-model fast path (`esm2_t12_35M`) keep the reduced-alphabet pass CPU-tractable. The full 20-letter
+650M variance-inclusive pass is GPU-recommended; see [`LIMITATIONS.md`](LIMITATIONS.md) §1.
 
 ### 3.3 Public interface
 
@@ -264,6 +264,10 @@ epibudget allocate --fasta FILE --positions 39,40,41,54 --budget 96 \
 epibudget validate --dataset gb1_wu2016 --budgets 48,96,192 \
                    [--model esm2_t12_35M] [--seeds 20] [--out report/]
 
+epibudget robustness --scored-cache CACHE [--out report/]     # post-hoc robustness analyses (no GPU)
+
+epibudget downstream --scored-cache CACHE [--out report/]     # downstream-impact benchmark (CPU-only)
+
 epibudget score   --fasta FILE --variants variants.csv        # debug: dump conjoint ΔG + variance
 ```
 
@@ -306,9 +310,9 @@ Deterministic given `(model_id, seed, config)`. Every output embeds the resolved
 
 ## 11. Out of scope for v1
 
-- Background-averaged (ensemble) epistasis (v1 is WT-referenced). Promotion path: it is the bridge to
-  inference tools like MoCHI — promote to the v1.1 ambition layer *only if* the MoCHI integration is
-  pursued (see `docs/RESEARCH_EPISTASIS.md#3`).
+- Background-averaged (ensemble) epistasis (v1 is WT-referenced). It is the bridge to inference tools
+  like MoCHI, and is a future extension only if that integration is pursued
+  (see `docs/RESEARCH_EPISTASIS.md#3`).
 - Orders > 3.
 - Multi-round / sequential design (v1 is single-shot budget allocation at round 0).
 - Any GPU-specific path.

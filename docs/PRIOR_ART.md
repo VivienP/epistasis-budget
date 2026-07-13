@@ -1,9 +1,8 @@
 # Prior art & the defensible wedge
 
-Before committing to a build, we mapped the literature around every candidate framing. This document
-records what exists, what is therefore *not* novel, and the precise contribution `epibudget` claims.
-Being explicit about this is itself a credibility signal: the failure mode of a portfolio project is
-re-building something that shipped 12 months ago.
+This document records what exists in the literature, what is therefore *not* novel, and the precise
+contribution `epibudget` claims. Stating the boundary explicitly is a credibility requirement: the
+failure mode here is re-building something that already shipped.
 
 ## The one-paragraph positioning
 
@@ -45,20 +44,6 @@ loop-closure / BALD-style acquisition.
 4. **A null-tolerant benchmark** on the measurable, complete-loop subset of the GB1 four-site dataset:
    does information-optimal selection
    recover the epistasis map better than fitness-greedy and random at equal B? Reported either way.
-
-## Sibling ideas we rejected after the same novelty check (for the record)
-
-These scored well in the brainstorm but were **pre-empted** — kept here so we don't circle back:
-
-- **contamcheck** (ProteinGym × UniRef contamination) — pre-empted by *Beware of Data Leakage from
-  Protein LLM Pretraining* (bioRxiv 2024) and LiveProteinBench (2025).
-- **reyfit** (a-priori landscape-ruggedness → strategy) — pre-empted by *Learning-Based Estimation of
-  Fitness Landscape Ruggedness for Directed Evolution* (bioRxiv 2024).
-- **esm-nshot** (few-shot recalibration) — pre-empted by *Enhancing efficiency of PLMs with minimal
-  wet-lab data through few-shot learning* (Nat. Commun. 2024) and in-context-learning few-shot works.
-- **dms-noise-ceil** (replicate noise ceiling) — pre-empted by Livesey & Marsh DMS benchmarking (2023).
-- **anticonsensus** (conservation ≠ fitness) — the core finding is established (VEPs predict beneficial
-  variants poorly; Livesey & Marsh 2020).
 
 ## Residual risk
 

@@ -16,8 +16,7 @@ reference CPU scoring are parity-tested, while cross-device floating-point ident
 ## Cells
 
 **1. Preflight + install.** Runtime → Change runtime type → T4 GPU, then run. This clones the
-`audit/scientific-hardening` branch (the frozen recipe and the `--scored-cache` flag live there, not on
-`main`), records the checked-out commit for provenance, and downloads GB1:
+`audit/scientific-hardening` branch, records the checked-out commit for provenance, and downloads GB1:
 
 ```python
 import sys, torch

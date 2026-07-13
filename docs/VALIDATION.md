@@ -13,7 +13,7 @@ here after seeing results requires an explicit amendment note recorded in the re
 Null hypothesis **H0**: information-optimal is indistinguishable from (or worse than) fitness-greedy.
 **We report H0 as the headline if that is what the data show.** A clean negative — "information-optimal
 DMS design does *not* beat fitness-greedy for epistasis recovery on GB1, here is the evidence" — is a
-legitimate, publishable audit and a perfectly good portfolio artifact. It is *not* a failure to hide.
+legitimate, publishable audit. It is *not* a failure to hide.
 
 ## Dataset
 
@@ -106,7 +106,7 @@ with the same figures.
 ## Mandatory baselines
 
 Every figure and table shows **info-optimal**, **fitness-greedy**, and **random** together. Dropping a
-baseline to flatter a curve is a CLAUDE.md hard-limit violation. Also reported at every budget:
+baseline to flatter a curve is a hard-limit violation of this protocol. Also reported at every budget:
 
 - **practice** — the real-practice heuristic (top beneficial singles → all pairwise, cf. MULTI-evolve).
 - **structural-only** — the ablation that isolates what the ESM uncertainty prior actually contributes:
@@ -149,7 +149,7 @@ result exists.
 **Status: implemented and run.** `epibudget robustness` was executed on the completed 650M scored cache
 (`src/epibudget/robustness.py`; spec in `docs/specs/robustness.md`) and its results are wired into public
 artifacts (`artifacts/robustness_650m.json`, README, and the Outcome section below). They do not alter or
-replace the frozen statistic or decision rule above; the difference CIs are descriptive, not tests. This section is written after the Step-1 signal, the
+replace the frozen statistic or decision rule above; the difference CIs are descriptive, not tests. This section is written after the ESM-2 signal gate, the
 650M masking-variance calibration, and the 650M deterministic supplementary recovery were already
 computed and committed (`docs/LIMITATIONS.md` §1, §5) — the qualitative shape of those results (the
 uncertainty prior looking unhelpful; structural-only beating random and fitness-greedy) was visible when
@@ -303,7 +303,7 @@ story.
   B ∈ {48, 96, 192}, ≥ 20 seeds, `n_perturbations = 16`; the same decision rule (info-optimal vs
   fitness-greedy vs random on the pairwise-order Spearman AND Pearson map-recovery, non-overlapping
   bootstrap 95% CIs), the same mandatory baselines (info / fitness / random, plus practice and
-  structural-only companions), and the same Phase B post-hoc analyses. No setting is chosen after seeing
+  structural-only companions), and the same post-hoc robustness analyses. No setting is chosen after seeing
   a TrpB number.
 - **Reproducibility.** `python scripts/fetch_trpb.py` writes `data/proteingym/trpb_johnston2024.csv`
   (git-ignored) with a checksum + provenance; the frozen run is the GB1 `validate` command with

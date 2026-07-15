@@ -215,7 +215,7 @@
     },
     {
       "path": "artifacts/claim_map.json",
-      "sha256": "ee847fe8bea5e7bc718eb5c3ce8a653bb0319b0d4d24c985575ddb2a7e5da5cd",
+      "sha256": "89ae2b1ea47ada02c5a2ae7186b7fe704bf9082215954255e743bc136aa001ff",
       "source_run_id": "claim-map-v1",
       "generation_command": "maintained with README.md; validated by python scripts/validate_artifacts.py",
       "base_commit_sha": "1a1f30aabd11bb50af6208bef983f2d017352b97",

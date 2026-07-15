@@ -127,13 +127,11 @@ Each item states the constraint, its consequence, and how the code/docs handle i
   [−0.198, 0.003] ([artifact](../artifacts/calibration_650m.json)). This supports a weak negative rank
   association but not a general anti-calibration claim. At 35M, both intervals include zero
   ([artifact](../artifacts/calibration_35m.json)).
-- **Structural-only outperforms information-optimal.** In the frozen variance-inclusive 650M headline the
-  prior-free `structural-only` sort has higher full-set pairwise recovery than info-optimal at every
-  budget, and the post-hoc paired common-predicted-term analysis puts it ahead on matched precision too
-  (descriptive Δ excludes zero at all three budgets; [artifact](../artifacts/robustness_650m.json)). So the
-  ESM masking-variance uncertainty prior earns no credit and is dropped from the claims: the recovery is
-  carried by direct loop coverage `n(v)`, not the uncertainty prior. The difference CIs are descriptive
-  (post-hoc), not hypothesis tests, and do not alter the frozen decision rule.
+- **The historical structural-only comparison is not a current claim.** The frozen 650M report used one
+  deterministic enumeration-order tie-break for a score that is exactly tied within mutation order. Its
+  "structural wins at every budget" interpretation is therefore withdrawn. The corrective seeded analysis
+  is itself inconclusive under its registered rule and is ineligible for public claims, so it does not
+  support the converse claim that ESM masking dispersion improves allocation either.
 
 ## 6. Statistical power & protocol scope
 
@@ -147,6 +145,40 @@ Each item states the constraint, its consequence, and how the code/docs handle i
   an ancestor of the current manifest base; the metrics schema does not itself record that commit, so it is
   stamped in the artifact `configuration.colab_commit`.
 
+## 6b. Metric defects and corrective status
+
+Surfaced by the exploratory TrpB run
+([`experiments/trpb-smoke-20260713.md`](experiments/trpb-smoke-20260713.md)). The WT bug is fixed in the
+current validation and robustness paths. The structural tie and slope estimands are separated in the
+corrective Gate 2 report but remain constraints on interpreting the historical artifacts.
+
+- **The historical TrpB recovery used an uncentred reference; the current code does not.** Epistasis now
+  uses ΔG(v) = log f(v) − log f(reference), with exact ΔG(∅) = 0, in validation truth, revealed calibration
+  labels, robustness truth and cross-fit slopes. GB1 remains bit-exact because f(WT) = 1.0. TrpB's parent
+  has f = 0.408074, so the old recovery coefficients, correlations and truth-map variance require
+  regeneration. The old selection identities, attempted/revealed counts, coverage, hit-rate and run
+  configuration do not depend on that centring and remain valid descriptive outputs.
+
+- **`structural-only` has no within-order signal.** `n(v)` is constant per order (1140 singles / 39 doubles
+  / 1 triples), so with τ² ≡ 1 the greedy weight takes three distinct values and the within-order ranking is
+  an exact tie broken by `enumerate_candidates`' site-major order. `structural-only` is a single,
+  unreplicated draw with no variance over its tie-break. Gate 2 retains that legacy prefix as diagnostic
+  only and evaluates 100 seeded permutations of each exact score stratum. Its registered τ²-contribution
+  decision is inconclusive, so neither direction is promoted to a public claim. The same structural graph
+  remains the control in the downstream benchmark's primary contrast; that benchmark stays blocked.
+
+- **A per-method calibration slope can set low-coverage recovery signs.** With no measured loop member,
+  ε̂ = b · ε̂_ESM exactly, so a near-zero-coverage method reports `sign(b) · ρ_prior` — the sign of a
+  nuisance parameter, not a property of its selection. Gate 2 reports the operational method-specific
+  slope and a method-independent five-fold cross-fit attribution regime for every selection. No registered
+  contrast has a strict sign reversal at two budgets, but effect sizes differ materially; the shared slope
+  remains post-hoc attribution evidence, not an operational selection method.
+
+- **The downstream ESM-circular diagnostic mixes scales.** `_esm_circular` supplies `log1p(fitness)` labels
+  to `esm_prior_mu`, whose slope contract is WT-centred log fitness. This is confined to a non-decision-use
+  diagnostic. It must use a downstream-specific calibration scale before any downstream rerun; no global
+  replacement of the downstream `log1p` prediction target is warranted.
+
 ## 7. Not yet done (scope, not failure)
 
 - **No confirmatory downstream-impact result** — a downstream-impact benchmark (does a structure-aware
@@ -155,6 +187,10 @@ Each item states the constraint, its consequence, and how the code/docs handle i
   has yet been produced or scientifically validated. This is the one test that escapes the recovery
   tautology §4 describes; it is the highest-value next step precisely because §4 makes the recovery
   headline thin on its own.
-- **No second landscape** (generalisation) — premature until the mechanism on GB1 is settled.
+- **No second-landscape result.** The TrpB path is implemented and an exploratory smoke has run, but it is
+  off-protocol (`B ∈ {24, 48}`, 5 seeds vs the frozen 48/96/192, ≥ 20). TrpB scientific transfer is
+  **unestablished in either direction**. Its historical recovery and truth-map summaries are invalidated by
+  the old anchor, while its selections, coverage, hit-rate and configuration remain descriptive. The old
+  `var_epsilon` field is truth variance and cannot establish the predicted-epistasis CLI invariant.
 - **No background-averaged ε, no MoCHI handoff, no multi-round sequential design** — all deliberately out
   of scope for v1.

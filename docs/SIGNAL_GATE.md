@@ -25,7 +25,8 @@ GB1's Olson-2014 pairwise set only, not this four-site assay.)
 
 ## Method
 
-- **Measured** ΔG(v) = ln(fitness(v)); WT = 1 ⇒ ΔG(∅) = 0. Dead variants (fitness 0) have no
+- **Measured** ΔG(v) = ln(fitness(v)/fitness(reference)), so ΔG(∅) = 0 exactly. GB1 has
+  fitness(reference) = 1, making this bit-identical to ln(fitness(v)). Dead variants (fitness 0) have no
   log-fitness, so any interaction with a dead or missing constituent is **dropped, never imputed**
   (invariant #3).
 - **Predicted** ΔG(v) is the conjoint ESM-2 conditional log-likelihood ratio (`ConjointScorer`,

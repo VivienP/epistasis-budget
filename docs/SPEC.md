@@ -12,11 +12,12 @@ Source of truth for *what* to build. Pairs with
 allowed amino-acid set per position), an integer budget `B`, and an ESM-2 checkpoint.
 
 **Output:** an ordered list of `B` variants (each a set of point mutations over `P`, of order 1–3),
-ranked by expected reduction in epistasis uncertainty, plus the per-interaction uncertainty map and the
-predicted information gain of the selected batch.
+ranked by the v1 dispersion × loop-coverage proxy, plus the corresponding per-interaction dispersion map
+and modular score of the selected batch.
 
-**Objective (informal):** pick the `B` variants whose measured fitness would most sharpen a model of
-the landscape's **epistasis coefficients**, not the `B` with highest predicted fitness.
+**Objective (informal):** compare a structure-aware allocation proxy with ranking by predicted fitness.
+The v1 score is exact for its independent-variant variance objective (§5), but is not calibrated posterior
+uncertainty for the landscape-recovery estimand.
 
 ---
 
@@ -41,8 +42,8 @@ the landscape's **epistasis coefficients**, not the `B` with highest predicted f
                     │                Gaussian model over ε terms       │
                     └───────────────┬────────────────────────────────┘
                     ┌───────────────▼────────────────────────────────┐
-                    │ acquisition.py greedy submodular selection of B  │
-                    │                (variance reduction; λ slider)    │
+                    │ acquisition.py fixed modular ranking of B         │
+                    │                (dispersion proxy; λ slider)       │
                     └───────────────┬────────────────────────────────┘
              allocate │             │ validate
         ┌─────────────▼───┐  ┌──────▼───────────────────────────────┐
@@ -204,7 +205,7 @@ already been selected — so there is no iterative greedy loop: `allocate` is a 
 allocate(graph, candidates, B, lambda_) -> Allocation:
     info = {v: graph.info_gain(frozenset(), v) for v in candidates}   # fixed, modular
     if   lambda_ == 1.0: ranked = sort candidates by delta_g        desc   # == fitness_greedy exactly
-    elif lambda_ == 0.0: ranked = sort candidates by info[v]        desc   # pure info-optimal
+    elif lambda_ == 0.0: ranked = sort candidates by info[v]        desc   # dispersion × loops
     else:                ranked = sort candidates by
                                   (1-lambda_)·minmax(info) + lambda_·minmax(delta_g) desc
     selected = ranked[:B]
@@ -213,7 +214,7 @@ allocate(graph, candidates, B, lambda_) -> Allocation:
                       ...)
 ```
 
-- `lambda_ = 0.0` → pure information-optimal (the thesis); `1.0` → fitness-greedy (the control).
+- `lambda_ = 0.0` → ESM-dispersion × loop-coverage heuristic; `1.0` → fitness-greedy control.
 - The λ∈{0,1} endpoints are special-cased to bypass the min-max normalisation (which is 0/0 when a
   score is constant across the pool), so `lambda_=1` reproduces `fitness_greedy` as an ordered list.
 - `expected_info_gain` is always the raw `info_gain` of each selected variant, never the blended score.
@@ -226,7 +227,8 @@ allocate(graph, candidates, B, lambda_) -> Allocation:
 
 Every reported comparison includes all three, at each `B`:
 
-1. **info-optimal** — `select(..., lambda_=0.0)`.
+1. **info-optimal** — historical method label for `select(..., lambda_=0.0)`; scientifically this is the
+   v1 ESM-dispersion × loop-coverage heuristic, not calibrated posterior-optimal design.
 2. **fitness-greedy** — top-`B` by predicted `ΔG` (`select(..., lambda_=1.0)`).
 3. **random** — uniform sample of `B` candidates (averaged over ≥ 20 seeds).
 4. **practice heuristic** (v1.1, additional) — top beneficial singles then all their pairwise

@@ -951,6 +951,32 @@ def _count_downstream_report_calls(monkeypatch: pytest.MonkeyPatch) -> dict[str,
     return calls
 
 
+def test_downstream_rejects_unknown_dataset_before_any_load(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An unregistered ``--dataset`` fails as a bad parameter before any cache/landscape load, so
+    the benchmark never runs (mirrors the ``validate`` guard, now that ``downstream`` is
+    dataset-generic)."""
+    calls = _count_downstream_report_calls(monkeypatch)
+    result = CliRunner().invoke(
+        app,
+        [
+            "downstream",
+            "--scored-cache",
+            str(tmp_path / "missing.jsonl"),
+            "--dataset",
+            "does_not_exist",
+            "--data",
+            str(tmp_path / "missing.csv"),
+            "--out",
+            str(tmp_path / "report"),
+        ],
+    )
+    assert result.exit_code != 0
+    assert "unknown dataset" in result.output
+    assert calls["n"] == 0  # benchmark never started
+
+
 def test_downstream_command_serializes_complete_cache_identity_on_success(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

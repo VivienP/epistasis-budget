@@ -14,7 +14,7 @@ import json
 import subprocess
 import sys
 from collections.abc import Sequence
-from math import exp
+from math import exp, isfinite
 from pathlib import Path
 
 import numpy as np
@@ -94,6 +94,25 @@ def _landscape(pool: list[ScoredVariant]) -> dict[Variant, float]:
     landscape: dict[Variant, float] = {frozenset(): 1.0}
     for sv in pool:
         landscape[sv.variant] = exp(_true_dg(sv.variant))
+    return landscape
+
+
+_MUT_WEIGHT = {"C": 0.35, "G": -0.15}  # residue-dependent effect (so within-order fitness varies)
+
+
+def _landscape_trpb_like(pool: list[ScoredVariant]) -> dict[Variant, float]:
+    """A TrpB-shaped landscape: parent (WT) fitness != 1 and ~inactive variants carrying negative
+    (but > -1, hence log1p-safe) labels. This is exactly the shape that invalidated the historical
+    ε/map-recovery path (WT anchor != 0); the downstream benchmark instead rank-correlates against
+    the raw fitness, so it must run cleanly and produce finite S_macro on this landscape. Fitness is
+    residue-dependent (not just site-dependent) so triples — a single site-pattern in this 3-site
+    toy — are not constant, keeping rho_triples (hence S_macro) defined."""
+    landscape: dict[Variant, float] = {frozenset(): 0.4}  # parent != 1.0 (cf. TrpB parent 0.408)
+    for sv in pool:
+        dg = sum(_MUT_WEIGHT[mut] for _, _, mut in sv.variant)
+        if {0, 1} <= {pos for pos, _, _ in sv.variant}:
+            dg += 0.5  # a genuine order-2 interaction the ridge can learn
+        landscape[sv.variant] = max(exp(dg) - 1.3, -0.9)  # inactivity as negatives, always > -1
     return landscape
 
 
@@ -755,6 +774,38 @@ def _run(**kwargs: object) -> DownstreamReport:
         n_inner=2,
         **kwargs,  # type: ignore[arg-type]
     )
+
+
+def test_downstream_runs_on_nongb1_landscape_with_nonunit_wt_and_negative_labels() -> None:
+    # Generalization (TrpB): the benchmark must run on a landscape whose parent fitness != 1 and
+    # whose inactive variants carry negative (> -1) labels. Because the metric rank-correlates the
+    # prediction against RAW fitness (no WT-centering, no ε), the TrpB WT-anchor bug does not apply;
+    # log1p(raw) stays finite (min label > -1), so every produced S_macro is finite, never NaN.
+    pool = _pool()
+    landscape = _landscape_trpb_like(pool)
+    assert min(landscape.values()) > -1.0  # precondition: log1p(raw) is defined everywhere
+    assert any(f < 0.0 for f in landscape.values())  # genuinely exercises negative labels
+    report = downstream_report(
+        pool,
+        landscape,
+        budgets=[4, 6],
+        seeds=2,
+        n_folds=2,
+        partitions=2,
+        sites=_SITES,
+        wt_at_sites=_WT,
+        alphabet=_ALPHABET,
+        grid_main=[1.0, 10.0],
+        grid_pair=[1.0, 10.0],
+        n_inner=2,
+    )
+    s_macros = [
+        r.s_macro
+        for r in (*report.deterministic_records, *report.random_records)
+        if r.s_macro is not None
+    ]
+    assert s_macros  # the benchmark produced defined S_macro values on the negative-label landscape
+    assert all(isfinite(x) for x in s_macros)  # no NaN/inf from log1p on negative (> -1) fitness
 
 
 def test_downstream_report_retains_all_methods_estimands_and_regimes() -> None:

@@ -757,7 +757,12 @@ def _downstream_provenance(
 @app.command()
 def downstream(
     scored_cache: str = typer.Option(..., help="Completed JSONL scored-variant cache to analyse."),
-    data: str = typer.Option("data/proteingym/gb1_wu2016.csv", help="Path to the GB1 CSV."),
+    dataset: str = typer.Option(
+        "gb1_wu2016", help="Landscape id (gb1_wu2016 or trpb_johnston2024)."
+    ),
+    data: str = typer.Option(
+        "", help="Path to the dataset CSV; empty uses the selected dataset's default path."
+    ),
     alphabet: str = typer.Option(_AA20, help="Per-site alphabet the cache was scored over."),
     budgets: str = typer.Option("48,96,192", help="Comma-separated budgets."),
     seeds: int = typer.Option(20, help="Random-baseline seeds."),
@@ -777,11 +782,8 @@ def downstream(
     from datetime import UTC, datetime  # noqa: PLC0415
 
     from epibudget.data import (  # noqa: PLC0415
-        GB1_SITES,
-        GB1_WT_AT_SITES,
-        GB1_WT_SEQUENCE,
         enumerate_candidates,
-        load_gb1,
+        resolve_dataset,
     )
     from epibudget.downstream import downstream_report  # noqa: PLC0415
     from epibudget.provenance import write_json_atomic  # noqa: PLC0415
@@ -797,11 +799,15 @@ def downstream(
     if partitions < 1:
         raise typer.BadParameter(f"--partitions must be >= 1, got {partitions}")
 
+    try:
+        spec = resolve_dataset(dataset)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
     cache_path = Path(scored_cache)
-    data_path = Path(data)
-    landscape = load_gb1(data_path)
+    data_path = Path(data) if data else Path(spec.default_data_path)
+    landscape = spec.loader(data_path)
     enumerated = enumerate_candidates(
-        GB1_SITES, GB1_WT_AT_SITES, allowed_aa=alphabet, max_order=max_order
+        spec.sites, spec.wt_at_sites, allowed_aa=alphabet, max_order=max_order
     )
     try:
         cache, metadata, expected_identity = validate_cache_against_universe(
@@ -812,7 +818,7 @@ def downstream(
             model_id=_CONFIRMATORY_MODEL_ID,
             scorer_seed=_CONFIRMATORY_SCORER_SEED,
             n_perturbations=_CONFIRMATORY_N_PERTURBATIONS,
-            wt_sequence=GB1_WT_SEQUENCE,
+            wt_sequence=spec.wt_sequence,
         )
     except ValueError as exc:
         raise typer.BadParameter(str(exc)) from exc
@@ -824,9 +830,9 @@ def downstream(
     budget_list = [int(b) for b in budgets.split(",")]
     repo = Path(__file__).resolve().parents[2]
     command = (
-        f"epibudget downstream --scored-cache {scored_cache} --data {data} --alphabet {alphabet} "
-        f"--budgets {budgets} --seeds {seeds} --max-order {max_order} --n-folds {n_folds} "
-        f"--partitions {partitions} --headline {headline} --out {out}"
+        f"epibudget downstream --dataset {dataset} --scored-cache {scored_cache} --data {data} "
+        f"--alphabet {alphabet} --budgets {budgets} --seeds {seeds} --max-order {max_order} "
+        f"--n-folds {n_folds} --partitions {partitions} --headline {headline} --out {out}"
     )
     run_dir = Path(out) / datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     started_at_utc = datetime.now(UTC).isoformat().replace("+00:00", "Z")
@@ -844,9 +850,10 @@ def downstream(
         n_folds=n_folds,
         partitions=partitions,
         max_order=max_order,
-        sites=GB1_SITES,
-        wt_at_sites=GB1_WT_AT_SITES,
+        sites=spec.sites,
+        wt_at_sites=spec.wt_at_sites,
         alphabet=alphabet,
+        dataset=spec.identifier,
         model_id=model_id,
     )
     completed_at_utc = datetime.now(UTC).isoformat().replace("+00:00", "Z")

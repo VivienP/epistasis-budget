@@ -1316,6 +1316,7 @@ def _esm_circular(
     ``ctx.eval_variants`` and ``revealed`` are disjoint by construction (E_j vs pool_j), so every
     predicted value here is exactly ``b*esm[v]``, never a pinned measured value.
     """
+    # TODO: use a downstream-specific calibration scale; log1p labels do not satisfy esm_prior_mu's WT-centered log-fitness contract.  # noqa: E501
     calibration = {v: float(np.log1p(f)) for v, f in revealed.items() if isfinite(f)}
     if not calibration:
         return None

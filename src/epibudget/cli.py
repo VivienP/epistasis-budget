@@ -7,8 +7,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import typer
+from click import Context as ClickContext
 from rich.console import Console
 from rich.table import Table
+from typer.core import TyperCommand
 
 from epibudget.types import Mutation, Variant
 
@@ -18,7 +20,7 @@ if TYPE_CHECKING:
 
 app = typer.Typer(
     add_completion=False,
-    help="Information-optimal experimental budget allocation for mapping protein epistasis.",
+    help="Experimental-design methods for budgeted protein-epistasis mapping.",
 )
 console = Console()
 
@@ -40,6 +42,15 @@ _MODEL_ALIASES = {
 _CONFIRMATORY_MODEL_ID = "facebook/esm2_t33_650M_UR50D"
 _CONFIRMATORY_SCORER_SEED = 0
 _CONFIRMATORY_N_PERTURBATIONS = 16
+_GATE2_ARGV_META_KEY = "epibudget.gate2.raw_argv"
+
+
+class _Gate2Command(TyperCommand):
+    """Retain this command's pre-parse argument tokens for exact run provenance."""
+
+    def parse_args(self, ctx: ClickContext, args: list[str]) -> list[str]:
+        ctx.meta[_GATE2_ARGV_META_KEY] = tuple(args)
+        return super().parse_args(ctx, args)
 
 
 def _resolve_model_id(name: str) -> str:
@@ -126,15 +137,18 @@ _METHODS = ("info", "fitness", "structural", "random", "practice")
 
 def _print_validation_report(report: Report, run_dir: Path) -> None:
     """Print the invariant-#1 gate, provenance, and per-order Spearman recovery with coverage."""
-    gate = "PASS" if report.var_epsilon > 0.0 else "FAIL"
+    gate = "PASS" if report.predicted_epistasis_signal else "FAIL"
     console.print(
-        f"[bold]Var[ε][/] = {report.var_epsilon:.4f}  [{gate} invariant #1]   "
+        f"[bold]Predicted Var[ε][/] = {report.var_predicted_epsilon:.4f}  "
+        f"[{gate} invariant #1]  tolerance={report.predicted_epistasis_tolerance:.3e}   "
         f"candidates={report.n_candidates}  alphabet={report.candidate_alphabet!r}  "
         f"truth_terms={report.n_truth_terms}"
     )
+    console.print(f"[bold]Truth Var[ε][/] = {report.var_epsilon:.4f}")
     by_key = {(r.method, r.budget): r for r in report.results}
     for order in ("pairwise", "third", "pooled"):
-        table = Table(title=f"recovery — {order} (Spearman / Pearson, coverage)")
+        label = "pooled (diagnostic only; cross-order)" if order == "pooled" else order
+        table = Table(title=f"recovery — {label} (Spearman / Pearson, coverage)")
         table.add_column("B", justify="right")
         for method in _METHODS:
             table.add_column(method, justify="right")
@@ -419,6 +433,208 @@ def _git_lines(repo: Path, *args: str) -> list[str]:
     except (OSError, subprocess.CalledProcessError):
         return []
     return [line for line in result.stdout.splitlines() if line]
+
+
+def _gate2_required_git_lines(repo: Path, *args: str) -> list[str]:
+    """Run a required Gate 2 Git query, propagating every execution failure."""
+    import subprocess  # noqa: PLC0415
+
+    result = subprocess.run(
+        ["git", *args],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    return [line for line in result.stdout.splitlines() if line]
+
+
+def _gate2_run_stamp() -> str:
+    from datetime import UTC, datetime  # noqa: PLC0415
+
+    return datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+
+
+def _gate2_provenance(
+    repo: Path,
+    cache_path: Path,
+    sidecar_path: Path,
+    data_path: Path,
+    universe_sha256: str,
+    argv: list[str],
+    *,
+    expected_identity: CacheIdentity,
+    observed_identity: CacheIdentity,
+    started_at_utc: str,
+) -> dict[str, object]:
+    """Assemble the cache-validated provenance required by the Gate 2 decision gate."""
+    import hashlib  # noqa: PLC0415
+    import subprocess  # noqa: PLC0415
+
+    from epibudget.gate2 import PROTOCOL_VERSION, RUN_TYPE  # noqa: PLC0415
+    from epibudget.provenance import (  # noqa: PLC0415
+        changed_scientific_files,
+        workspace_code_diff_sha256,
+    )
+
+    def sha256(path: Path) -> str:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+
+    try:
+        head = _gate2_required_git_lines(repo, "rev-parse", "HEAD")
+        if len(head) != 1 or re.fullmatch(r"[0-9a-fA-F]{40,64}", head[0]) is None:
+            raise ValueError("Gate 2 git provenance requires one valid execution commit")
+        execution_commit = head[0].lower()
+        dirty = bool(_gate2_required_git_lines(repo, "status", "--porcelain"))
+        code_diff = ""
+        changed_files: list[str] = []
+        if dirty:
+            code_diff = workspace_code_diff_sha256(repo, execution_commit)
+            changed_files = changed_scientific_files(repo, execution_commit)
+            if re.fullmatch(r"[0-9a-f]{64}", code_diff) is None:
+                raise ValueError("Gate 2 git provenance requires a valid dirty-tree diff hash")
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise ValueError(f"Gate 2 git provenance could not be established: {exc}") from exc
+    identity_expected = expected_identity.model_dump(mode="json")
+    identity_observed = observed_identity.model_dump(mode="json")
+    return {
+        "protocol_version": PROTOCOL_VERSION,
+        "run_type": RUN_TYPE,
+        "scored_cache_sha256": sha256(cache_path),
+        "scored_cache_sidecar_sha256": sha256(sidecar_path),
+        "dataset_sha256": sha256(data_path),
+        "candidate_universe_sha256": universe_sha256,
+        "scored_cache_identity_expected": identity_expected,
+        "scored_cache_identity_observed": identity_observed,
+        "scored_cache_validator_status": "passed",
+        "execution_commit": execution_commit,
+        "code_state": "dirty" if dirty else "clean",
+        "code_diff_sha256": code_diff,
+        "changed_scientific_files": changed_files,
+        "argv": argv,
+        "exact_command": subprocess.list2cmdline(argv),
+        "started_at_utc": started_at_utc,
+        # Structurally complete markers for the in-memory decision gate; only these three fields
+        # are replaced after the analysis returns, so every eligibility-bearing field is stable.
+        "completed_at_utc": started_at_utc,
+        "elapsed_seconds": 0.0,
+    }
+
+
+@app.command(cls=_Gate2Command)
+def gate2(
+    ctx: typer.Context,
+    scored_cache: str = typer.Option(
+        "report/scored_650m.jsonl", help="Completed 650M JSONL score cache to analyse."
+    ),
+    data: str = typer.Option("data/proteingym/gb1_wu2016.csv", help="Path to the GB1 CSV."),
+    alphabet: str = typer.Option(_AA20, help="Per-site alphabet the cache was scored over."),
+    budgets: str = typer.Option("48,96,192", help="Comma-separated budgets."),
+    random_seeds: int = typer.Option(20, min=0, help="Random-baseline seeds."),
+    structural_seeds: int = typer.Option(100, min=0, help="Seeded structural tie-breaks."),
+    n_folds: int = typer.Option(5, min=2, help="Cross-fit folds for slope attribution."),
+    max_order: int = typer.Option(3, min=2, max=3, help="Maximum interaction order."),
+    out: str = typer.Option("report/", help="Report root; a UTC run directory is created."),
+) -> None:
+    """Run the registered corrective Gate 2 analysis from a completed score cache (CPU-only)."""
+    from datetime import UTC, datetime  # noqa: PLC0415
+    from time import perf_counter  # noqa: PLC0415
+
+    from epibudget.data import (  # noqa: PLC0415
+        GB1_SITES,
+        GB1_WT_AT_SITES,
+        GB1_WT_SEQUENCE,
+        enumerate_candidates,
+        load_gb1,
+    )
+    from epibudget.gate2 import finalize_gate2_report, gate2_report  # noqa: PLC0415
+    from epibudget.provenance import write_json_exclusive  # noqa: PLC0415
+    from epibudget.scored_cache import (  # noqa: PLC0415
+        CacheIdentity,
+        cache_metadata_path,
+        candidate_sha256,
+        validate_cache_against_universe,
+    )
+
+    started_clock = perf_counter()
+    started_at_utc = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    budget_list = [int(value) for value in budgets.split(",")]
+    cache_path = Path(scored_cache)
+    data_path = Path(data)
+    enumerated = enumerate_candidates(
+        GB1_SITES, GB1_WT_AT_SITES, allowed_aa=alphabet, max_order=max_order
+    )
+    try:
+        cache, metadata, expected_identity = validate_cache_against_universe(
+            cache_path,
+            enumerated,
+            candidate_alphabet=alphabet,
+            max_order=max_order,
+            model_id=_CONFIRMATORY_MODEL_ID,
+            scorer_seed=_CONFIRMATORY_SCORER_SEED,
+            n_perturbations=_CONFIRMATORY_N_PERTURBATIONS,
+            wt_sequence=GB1_WT_SEQUENCE,
+        )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    scored = [cache[variant] for variant in enumerated]
+    observed_identity = CacheIdentity.from_metadata(metadata)
+    sidecar_path = cache_metadata_path(cache_path)
+    raw_argv = ctx.meta.get(_GATE2_ARGV_META_KEY)
+    if not isinstance(raw_argv, tuple) or not all(isinstance(arg, str) for arg in raw_argv):
+        raise typer.BadParameter("Gate 2 could not capture its exact command arguments")
+    argv = ["epibudget", "gate2", *raw_argv]
+    repo = Path(__file__).resolve().parents[2]
+    try:
+        provenance = _gate2_provenance(
+            repo,
+            cache_path,
+            sidecar_path,
+            data_path,
+            candidate_sha256(enumerated),
+            argv,
+            expected_identity=expected_identity,
+            observed_identity=observed_identity,
+            started_at_utc=started_at_utc,
+        )
+    except (OSError, ValueError) as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+    # Labels are loaded only after the complete scored universe has passed its independent gate.
+    landscape = load_gb1(data_path)
+    console.print(
+        f"[bold]gate2[/] {len(scored)} cache-validated candidates; running corrective CPU analysis"
+    )
+    report = gate2_report(
+        scored,
+        landscape,
+        budget_list,
+        random_seeds=random_seeds,
+        structural_seeds=structural_seeds,
+        n_folds=n_folds,
+        max_order=max_order,
+        alphabet=alphabet,
+        dataset="gb1_wu2016",
+        model_id=metadata.model_id,
+        provenance=provenance,
+    )
+    completed_at_utc = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    final_provenance = {
+        **provenance,
+        "completed_at_utc": completed_at_utc,
+        "elapsed_seconds": perf_counter() - started_clock,
+    }
+    report = finalize_gate2_report(report, scored, final_provenance)
+    run_dir = Path(out) / _gate2_run_stamp()
+    report_path = run_dir / "gate2.json"
+    write_json_exclusive(report_path, report.model_dump(mode="json"))
+    console.print(
+        f"decision={report.decision.decision}  "
+        f"architecture_decision_eligible={report.architecture_decision_eligible}  "
+        "public_claim_eligible=False"
+    )
+    console.print(f"wrote {report_path}")
 
 
 def _downstream_provenance(

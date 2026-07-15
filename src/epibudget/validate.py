@@ -21,7 +21,6 @@ from __future__ import annotations
 import hashlib
 import warnings
 from collections.abc import Mapping, Sequence
-from math import log
 from pathlib import Path
 
 import numpy as np
@@ -36,6 +35,7 @@ from epibudget.epistasis import (
     ground_truth_epistasis,
     interaction_loop,
     predicted_epistasis,
+    wt_centered_log_fitness,
 )
 from epibudget.graph import EpistasisFactorGraph
 from epibudget.provenance import write_json_exclusive
@@ -95,7 +95,10 @@ class Report(BaseModel):
     wt_sha256: str  # checksum of the reference (WT) sequence the ε anchor is defined against
     n_candidates: int
     n_truth_terms: int
-    var_epsilon: float  # invariant #1 sanity: must be > 0
+    var_epsilon: float  # ground-truth variance, reported separately from invariant #1
+    var_predicted_epsilon: float  # descriptive spread; not the invariant #1 gate
+    predicted_epistasis_signal: bool
+    predicted_epistasis_tolerance: float
     results: list[MethodResult]
 
 
@@ -130,6 +133,16 @@ def _candidate_terms(scored: Sequence[ScoredVariant], max_order: int) -> list[Te
     ]
 
 
+def _predicted_epistasis_tolerance(scored: Sequence[ScoredVariant], max_order: int) -> float:
+    """Roundoff threshold ``eps64 * max|ΔĜ| * (2**max_order - 1)``.
+
+    The final factor bounds the number of signed additions in the largest inclusion-exclusion loop.
+    """
+    max_abs_delta_g = max((abs(sv.delta_g) for sv in scored), default=0.0)
+    loop_operation_bound = (1 << max_order) - 1
+    return float(np.finfo(np.float64).eps * max_abs_delta_g * loop_operation_bound)
+
+
 def esm_prior_mu(
     scored: Sequence[ScoredVariant], revealed: Mapping[Variant, float]
 ) -> dict[Variant, float]:
@@ -154,9 +167,10 @@ def infer_epistasis(
 ) -> list[Interaction]:
     """Posterior-mean ε̂ over the order-2..max_order terms from the measured ΔG of revealed variants.
 
-    ``revealed`` maps each measured variant to its ΔG (ln fitness); ``scored`` supplies the ESM ΔĜ
-    and var_delta_g for every candidate (all orders, as loop members). Each unmeasured loop member
-    keeps its unit-calibrated ESM prior mean; measured members are pinned to their true ΔG.
+    ``revealed`` maps each measured variant to its WT-centred log-fitness ΔG; ``scored`` supplies
+    the ESM ΔĜ and var_delta_g for every candidate (all orders, as loop members). Each unmeasured
+    loop member keeps its unit-calibrated ESM prior mean; measured members are pinned to their
+    true ΔG.
     Round-trips: empty ``revealed`` reproduces the ESM ε̂; a fully-measured loop reproduces true ε.
     """
     tau2 = {sv.variant: sv.var_delta_g for sv in scored}
@@ -372,9 +386,14 @@ def hit_rate(selected: Sequence[Variant], fitness: Mapping[Variant, float], budg
 def _measured_dg(
     landscape: Mapping[Variant, float], selected: Sequence[Variant]
 ) -> dict[Variant, float]:
-    """Reveal fitness for the selection; live values become ΔG=ln f (drop dead, never impute)."""
-    revealed = reveal_measured_fitness(dict(landscape), selected)
-    return {v: log(f) for v, f in revealed.items() if f > 0.0}
+    """Reveal WT plus the selection.
+
+    Return live selected values on the WT-centered log scale.
+    """
+    wt: Variant = frozenset()
+    requested = [wt, *(variant for variant in selected if variant != wt)]
+    centered = wt_centered_log_fitness(reveal_measured_fitness(dict(landscape), requested))
+    return {variant: centered[variant] for variant in selected if variant and variant in centered}
 
 
 def _candidate_fitness(
@@ -411,7 +430,7 @@ def run_validation(
     self-describing about which landscape and reference construct produced it (GB1 vs TrpB).
     """
     term_set = set(_candidate_terms(scored, max_order))
-    landscape_dg = {v: log(f) for v, f in landscape.items() if f > 0.0}
+    landscape_dg = wt_centered_log_fitness(landscape)
     truth_by_term: dict[Term, float] = {
         interaction.mutations: interaction.epsilon_hat
         for interaction in ground_truth_epistasis(landscape_dg, max_order)
@@ -419,10 +438,16 @@ def run_validation(
     }
     var_epsilon = float(np.var(np.array(list(truth_by_term.values())))) if truth_by_term else 0.0
 
-    graph = EpistasisFactorGraph(
-        predicted_epistasis(scored, max_order), {sv.variant: sv.var_delta_g for sv in scored}
+    predicted = predicted_epistasis(scored, max_order)
+    predicted_values = np.array([interaction.epsilon_hat for interaction in predicted])
+    var_predicted_epsilon = float(np.var(predicted_values)) if len(predicted_values) else 0.0
+    predicted_epistasis_tolerance = _predicted_epistasis_tolerance(scored, max_order)
+    predicted_epistasis_signal = any(
+        abs(interaction.epsilon_hat) > predicted_epistasis_tolerance for interaction in predicted
     )
-    structural = structural_graph(scored, max_order)  # τ² ≡ const ablation
+    graph = EpistasisFactorGraph(predicted, {sv.variant: sv.var_delta_g for sv in scored})
+    # τ² ≡ const ablation
+    structural = EpistasisFactorGraph(predicted, {sv.variant: 1.0 for sv in scored})
     candidate_fitness = _candidate_fitness(scored, landscape)
 
     results: list[MethodResult] = []
@@ -471,6 +496,9 @@ def run_validation(
         n_candidates=len(scored),
         n_truth_terms=len(truth_by_term),
         var_epsilon=var_epsilon,
+        var_predicted_epsilon=var_predicted_epsilon,
+        predicted_epistasis_signal=predicted_epistasis_signal,
+        predicted_epistasis_tolerance=predicted_epistasis_tolerance,
         results=results,
     )
     _write_report(report, out_dir)

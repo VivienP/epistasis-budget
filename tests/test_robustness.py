@@ -100,6 +100,17 @@ def test_crossfit_slopes_are_all_one_on_a_linear_landscape() -> None:
         assert slope == pytest.approx(1.0)
 
 
+def test_crossfit_slopes_and_truth_are_invariant_to_fitness_scale() -> None:
+    pool = _pool()
+    landscape = _landscape(pool)
+    scaled = {variant: 11.0 * fitness for variant, fitness in landscape.items()}
+
+    assert crossfit_slopes(pool, scaled, _N_FOLDS) == pytest.approx(
+        crossfit_slopes(pool, landscape, _N_FOLDS)
+    )
+    assert _truth_by_term(pool, scaled, 3) == pytest.approx(_truth_by_term(pool, landscape, 3))
+
+
 def test_crossfit_inference_reduces_to_global_when_slope_is_one() -> None:
     pool = _pool()
     landscape = _linear_landscape(pool)

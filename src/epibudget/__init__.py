@@ -1,7 +1,7 @@
-"""epibudget — information-optimal experimental budget allocation for mapping protein epistasis.
+"""Budgeted experimental-design methods for mapping protein epistasis.
 
-Given a protein target and a budget of B wells, rank the B variants whose measurement would most
-reduce uncertainty about the epistatic structure of the fitness landscape (zero-shot, ESM-2).
+Given a protein target and a budget of B wells, compare variant-ranking heuristics that combine
+epistatic loop structure with zero-shot ESM-2 signals.
 
 See docs/SPEC.md for the full design and docs/RESEARCH_EPISTASIS.md for the science.
 """

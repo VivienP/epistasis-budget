@@ -875,6 +875,7 @@ def test_all_aggregates_reconstruct_exactly_from_raw_records() -> None:
         partitions=report.partitions,
         alphabet=report.alphabet,
         max_order=report.max_order,
+        n_perturbations=16,
         seeds=report.seeds,
         n_inner=report.n_inner_folds,
     )
@@ -1117,6 +1118,7 @@ def test_esm_diagnostic_fields_never_feed_the_decision_pipeline() -> None:
         "partitions": baseline.partitions,
         "alphabet": baseline.alphabet,
         "max_order": baseline.max_order,
+        "n_perturbations": 16,
         "seeds": baseline.seeds,
         "n_inner": baseline.n_inner_folds,
     }
@@ -1301,6 +1303,7 @@ def _profile_kwargs(**overrides: object) -> dict[str, object]:
         "budgets": list(p.budgets),
         "alphabet": p.alphabet,
         "max_order": p.max_order,
+        "n_perturbations": p.n_perturbations,
         "random_seeds": list(p.random_seeds),
         "inner_folds": p.inner_folds,
         "estimands": list(p.estimands),
@@ -1315,6 +1318,7 @@ _FROZEN_K = 5
 _FROZEN_MAX_ORDER = 3
 _FROZEN_N_INNER = 3
 _FROZEN_SEED_COUNT = 20
+_FROZEN_N_PERTURBATIONS = 16
 
 
 def test_confirmatory_profile_matches_the_frozen_registered_values() -> None:
@@ -1325,6 +1329,7 @@ def test_confirmatory_profile_matches_the_frozen_registered_values() -> None:
     assert p.budgets == (48, 96, 192)
     assert p.alphabet == "ACDEFGHIKLMNPQRSTVWY"
     assert p.max_order == _FROZEN_MAX_ORDER
+    assert p.n_perturbations == _FROZEN_N_PERTURBATIONS
     assert p.random_seeds == tuple(range(_FROZEN_SEED_COUNT))
     assert p.inner_folds == ds.N_INNER_FOLDS
     assert ds.N_INNER_FOLDS == _FROZEN_N_INNER
@@ -1377,6 +1382,14 @@ def test_protocol_profile_conformance_flags_wrong_alphabet() -> None:
     result = ds.protocol_profile_conformance(**_profile_kwargs(alphabet="ACDEFGHIKLMNPQRSTVW"))  # type: ignore[arg-type]
     assert not result.conforming
     assert "alphabet" in result.mismatches
+
+
+def test_protocol_profile_conformance_flags_wrong_n_perturbations() -> None:
+    # A cache scored with n_perturbations != 16 is a different recipe -> non-conforming, so a
+    # downstream run on it is never decision-eligible (only the then-degenerate info prior uses it).
+    result = ds.protocol_profile_conformance(**_profile_kwargs(n_perturbations=0))  # type: ignore[arg-type]
+    assert not result.conforming
+    assert result.mismatches == ["n_perturbations"]
 
 
 def test_protocol_profile_conformance_flags_wrong_max_order() -> None:
@@ -1603,6 +1616,7 @@ def _run_decision(
         partitions=partitions,
         alphabet=profile.alphabet,
         max_order=profile.max_order,
+        n_perturbations=profile.n_perturbations,
         seeds=seeds,
         n_inner=profile.inner_folds,
     )
@@ -1661,6 +1675,7 @@ def test_decision_summary_status_is_nonconforming_when_partitions_exceeds_the_re
         partitions=21,
         alphabet=ds.CONFIRMATORY_PROFILE.alphabet,
         max_order=ds.CONFIRMATORY_PROFILE.max_order,
+        n_perturbations=ds.CONFIRMATORY_PROFILE.n_perturbations,
         seeds=len(ds.CONFIRMATORY_PROFILE.random_seeds),
         n_inner=ds.CONFIRMATORY_PROFILE.inner_folds,
     )
@@ -1678,6 +1693,7 @@ def test_decision_summary_status_is_nonconforming_when_scale_and_identity_both_m
         partitions=1,
         alphabet="AC",
         max_order=ds.CONFIRMATORY_PROFILE.max_order,
+        n_perturbations=ds.CONFIRMATORY_PROFILE.n_perturbations,
         seeds=len(ds.CONFIRMATORY_PROFILE.random_seeds),
         n_inner=ds.CONFIRMATORY_PROFILE.inner_folds,
     )
@@ -1750,6 +1766,7 @@ def test_extra_partition_beyond_expected_never_changes_gate_descriptive_fields()
         partitions=report.partitions,
         alphabet=_ALPHABET,
         max_order=3,
+        n_perturbations=16,
         seeds=1,
         n_inner=2,
     )
@@ -1760,6 +1777,7 @@ def test_extra_partition_beyond_expected_never_changes_gate_descriptive_fields()
         partitions=ds.EXPECTED_PARTITIONS,
         alphabet=_ALPHABET,
         max_order=3,
+        n_perturbations=16,
         seeds=1,
         n_inner=2,
     )
@@ -1896,6 +1914,7 @@ def _decision_summary_full(
         partitions=profile.partitions,
         alphabet=profile.alphabet,
         max_order=profile.max_order,
+        n_perturbations=profile.n_perturbations,
         seeds=len(profile.random_seeds),
         n_inner=profile.inner_folds,
     )

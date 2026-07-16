@@ -652,6 +652,7 @@ def _downstream_provenance(
     n_folds: int,
     alphabet: str,
     max_order: int,
+    n_perturbations: int,
     expected_identity: CacheIdentity,
     observed_identity: CacheIdentity,
     started_at_utc: str,
@@ -709,6 +710,7 @@ def _downstream_provenance(
         budgets=budgets,
         alphabet=alphabet,
         max_order=max_order,
+        n_perturbations=n_perturbations,
         random_seeds=range(seeds),
         inner_folds=N_INNER_FOLDS,
         estimands=_ESTIMANDS,
@@ -764,6 +766,10 @@ def downstream(
         "", help="Path to the dataset CSV; empty uses the selected dataset's default path."
     ),
     alphabet: str = typer.Option(_AA20, help="Per-site alphabet the cache was scored over."),
+    n_perturbations: int = typer.Option(
+        _CONFIRMATORY_N_PERTURBATIONS,
+        help="Masking passes the cache carries; only 16 conforms (0 drops the info prior).",
+    ),
     budgets: str = typer.Option("48,96,192", help="Comma-separated budgets."),
     seeds: int = typer.Option(20, help="Random-baseline seeds."),
     max_order: int = typer.Option(3, help="Max interaction order (2 or 3)."),
@@ -817,7 +823,7 @@ def downstream(
             max_order=max_order,
             model_id=_CONFIRMATORY_MODEL_ID,
             scorer_seed=_CONFIRMATORY_SCORER_SEED,
-            n_perturbations=_CONFIRMATORY_N_PERTURBATIONS,
+            n_perturbations=n_perturbations,
             wt_sequence=spec.wt_sequence,
         )
     except ValueError as exc:
@@ -831,8 +837,9 @@ def downstream(
     repo = Path(__file__).resolve().parents[2]
     command = (
         f"epibudget downstream --dataset {dataset} --scored-cache {scored_cache} --data {data} "
-        f"--alphabet {alphabet} --budgets {budgets} --seeds {seeds} --max-order {max_order} "
-        f"--n-folds {n_folds} --partitions {partitions} --headline {headline} --out {out}"
+        f"--alphabet {alphabet} --n-perturbations {n_perturbations} --budgets {budgets} "
+        f"--seeds {seeds} --max-order {max_order} --n-folds {n_folds} --partitions {partitions} "
+        f"--headline {headline} --out {out}"
     )
     run_dir = Path(out) / datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     started_at_utc = datetime.now(UTC).isoformat().replace("+00:00", "Z")
@@ -853,6 +860,7 @@ def downstream(
         sites=spec.sites,
         wt_at_sites=spec.wt_at_sites,
         alphabet=alphabet,
+        n_perturbations=n_perturbations,
         dataset=spec.identifier,
         model_id=model_id,
     )
@@ -871,6 +879,7 @@ def downstream(
         n_folds=n_folds,
         alphabet=alphabet,
         max_order=max_order,
+        n_perturbations=n_perturbations,
         expected_identity=expected_identity,
         observed_identity=observed_identity,
         started_at_utc=started_at_utc,

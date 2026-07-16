@@ -835,6 +835,7 @@ class ConfirmatoryProfile(BaseModel):
     budgets: tuple[int, ...]  # order-sensitive: learning_curve_auc trapezoidal-integrates in order
     alphabet: str
     max_order: int
+    n_perturbations: int  # scoring recipe: the cache's masking passes (0 disables the info prior)
     random_seeds: tuple[int, ...]
     inner_folds: int
     estimands: tuple[str, ...]
@@ -849,6 +850,7 @@ CONFIRMATORY_PROFILE = ConfirmatoryProfile(
     budgets=(48, 96, 192),
     alphabet=_AA20,
     max_order=3,
+    n_perturbations=16,
     random_seeds=tuple(range(20)),
     inner_folds=N_INNER_FOLDS,
     estimands=_ESTIMANDS,
@@ -874,6 +876,7 @@ def protocol_profile_conformance(
     budgets: Sequence[int],
     alphabet: str,
     max_order: int,
+    n_perturbations: int,
     random_seeds: Sequence[int],
     inner_folds: int,
     estimands: Sequence[str],
@@ -897,6 +900,7 @@ def protocol_profile_conformance(
         "budgets": list(budgets),
         "alphabet": alphabet,
         "max_order": max_order,
+        "n_perturbations": n_perturbations,
         "random_seeds": sorted(set(random_seeds)),
         "inner_folds": inner_folds,
         "estimands": sorted(set(estimands)),
@@ -910,6 +914,7 @@ def protocol_profile_conformance(
         "budgets": list(profile.budgets),
         "alphabet": profile.alphabet,
         "max_order": profile.max_order,
+        "n_perturbations": profile.n_perturbations,
         "random_seeds": sorted(profile.random_seeds),
         "inner_folds": profile.inner_folds,
         "estimands": sorted(profile.estimands),
@@ -2180,6 +2185,7 @@ def _declared_profile(
     budgets: Sequence[int],
     alphabet: str,
     max_order: int,
+    n_perturbations: int,
     seeds: int,
     n_inner: int,
 ) -> ConfirmatoryProfile:
@@ -2196,6 +2202,7 @@ def _declared_profile(
         budgets=tuple(budgets),
         alphabet=alphabet,
         max_order=max_order,
+        n_perturbations=n_perturbations,
         random_seeds=tuple(range(seeds)),
         inner_folds=n_inner,
         estimands=_ESTIMANDS,
@@ -2247,6 +2254,7 @@ def _decision_summary(
     partitions: int,
     alphabet: str,
     max_order: int,
+    n_perturbations: int,
     seeds: int,
     n_inner: int,
 ) -> tuple[DecisionSummary, list[PartitionAggregate], list[CorrectedCVCompanion]]:
@@ -2259,6 +2267,7 @@ def _decision_summary(
         budgets=budgets,
         alphabet=alphabet,
         max_order=max_order,
+        n_perturbations=n_perturbations,
         seeds=seeds,
         n_inner=n_inner,
     )
@@ -2270,6 +2279,7 @@ def _decision_summary(
         budgets=profile.budgets,
         alphabet=profile.alphabet,
         max_order=profile.max_order,
+        n_perturbations=profile.n_perturbations,
         random_seeds=profile.random_seeds,
         inner_folds=profile.inner_folds,
         estimands=profile.estimands,
@@ -2696,6 +2706,7 @@ def downstream_report(
     grid_main: Sequence[float] = GRID_MAIN,
     grid_pair: Sequence[float] = GRID_PAIR,
     n_inner: int = N_INNER_FOLDS,
+    n_perturbations: int = 16,
     dataset: str = "gb1_wu2016",
     model_id: str = "",
     provenance: Mapping[str, object] | None = None,
@@ -2771,6 +2782,7 @@ def downstream_report(
         partitions=partitions,
         alphabet=alphabet,
         max_order=max_order,
+        n_perturbations=n_perturbations,
         seeds=seeds,
         n_inner=n_inner,
     )
@@ -2790,6 +2802,7 @@ def downstream_report(
             budgets=budgets,
             alphabet=alphabet,
             max_order=max_order,
+            n_perturbations=n_perturbations,
             seeds=seeds,
             n_inner=n_inner,
         )

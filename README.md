@@ -85,14 +85,15 @@ must remain separate, and pooled recovery is diagnostic only.
 The defensible current position is narrower: conjoint ESM-2 scores contain epistatic signal, while
 masking-perturbation variance has not demonstrated positive calibration or acquisition value.
 
-A downstream-impact benchmark — does a structure-aware budget yield a better training set for ranking
-held-out double and triple mutants? — is implemented and specified
-([`docs/specs/downstream.md`](docs/specs/downstream.md)); no confirmatory result has been produced yet.
-
-The exploratory TrpB smoke establishes the technical path and preserves its selections, coverage,
-hit-rate and configuration. Its recovery metrics are not claimed because the historical run used an
-uncentred reference and was off-protocol
-([analysis](docs/experiments/trpb-smoke-20260713.md)).
+A downstream-impact benchmark asks whether a structure-aware budget yields a better *training set* for
+ranking held-out double and triple mutants ([`docs/specs/downstream.md`](docs/specs/downstream.md)). On
+GB1, a decision-eligible run finds structure-aware selection beats fitness-greedy and random across all
+20 salted partitions (S_macro-AUC Δ +0.342 vs fitness, +0.175 vs random); the masking-variance prior
+adds nothing. An exploratory, non-decision-eligible replication on the TrpB four-site landscape
+(Johnston 2024; enzyme catalysis) reproduces the direction — structure-aware beats random and
+fitness-greedy 20/20 (Δ +0.135, +0.286), with fitness-greedy worse than random on both. Both results are
+provisional and not yet registered artifacts; detail and caveats in
+[`docs/experiments/trpb-downstream-generalization-20260716.md`](docs/experiments/trpb-downstream-generalization-20260716.md).
 
 ## How it works (3 steps)
 

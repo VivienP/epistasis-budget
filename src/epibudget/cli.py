@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import typer
-from click import Context as ClickContext
 from rich.console import Console
 from rich.table import Table
 from typer.core import TyperCommand
@@ -48,7 +47,9 @@ _GATE2_ARGV_META_KEY = "epibudget.gate2.raw_argv"
 class _Gate2Command(TyperCommand):
     """Retain this command's pre-parse argument tokens for exact run provenance."""
 
-    def parse_args(self, ctx: ClickContext, args: list[str]) -> list[str]:
+    # ctx is a click Context, but typer vendors its own click, so the concrete Context class differs
+    # by typer version; Any keeps this override valid across typer versions.
+    def parse_args(self, ctx: Any, args: list[str]) -> list[str]:
         ctx.meta[_GATE2_ARGV_META_KEY] = tuple(args)
         return super().parse_args(ctx, args)
 

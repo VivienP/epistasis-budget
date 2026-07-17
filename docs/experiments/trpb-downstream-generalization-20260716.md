@@ -66,6 +66,25 @@ structure-aware plate is a better training set for ranking held-out epistasis th
 20/20 each), while fitness-greedy is worse than random on both. The GB1 finding is therefore not
 GB1-specific; it replicates on a second landscape.
 
+## Robustness controls
+
+**Permutation null (false-positive test).** Shuffling the fitness values across variants (a seeded
+random bijection variant→fitness) destroys the variant→fitness relationship while the selections —
+which read only ESM scores — are unchanged. No method can then predict held-out fitness, so
+`structural − random` must collapse to ~0. It does: at 10 partitions, GB1 falls from +0.175 to
+**+0.0046** (~40× smaller) and TrpB from +0.135 to **+0.0135** (~10× smaller), with every method's
+S_macro ≈ 0. The real advantage is therefore genuine epistatic-learning signal, not a benchmark
+artifact. A small residual survives permutation — a pure **coverage/diversity floor** (a structure-aware
+plate spans the orders more evenly than a random one, training a marginally better ridge even on
+noise): ~3% of the effect on GB1, ~10% on TrpB (10/10 partitions positive there). So ~90% of TrpB's and
+~97% of GB1's `structural − random` is real signal, with a minor coverage component.
+
+**Determinism.** Re-running the same configuration is bit-identical (verified; also covered by the
+committed `PYTHONHASHSEED` subprocess test).
+
+*Both controls were run at 10 partitions rather than the full 20 because the machine hit a RAM ceiling
+at R=20; the null and determinism conclusions are scale-independent.*
+
 ## Caveats (frozen)
 
 - TrpB is **exploratory / non-decision-eligible** (n=0, not the confirmatory n=16 recipe). A publishable

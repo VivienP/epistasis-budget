@@ -104,7 +104,7 @@ def test_single_measured_pair_correction_matches_additive_formula() -> None:
     # Two measured singles i, j; unmeasured pair {i,j}. With the single basis GᵀG = I, so
     # â = e/(1+λ) and the predicted pair error is (e_i + e_j)/(1+λ).
     variants = enumerate_candidates(_SITES, _WT, allowed_aa=_ALPHABET, max_order=3)
-    singles = sorted((v for v in variants if len(v) == 1), key=lambda v: sorted(v))
+    singles = sorted((v for v in variants if len(v) == 1), key=sorted)
     i, j = singles[0], singles[1]
     index = _effect_index([i, j], 1)
     design = _incidence([i, j], index, 1)

@@ -141,7 +141,7 @@ def _effect_index(
     effects: set[frozenset[Mutation]] = set()
     for variant in measured:
         effects.update(_sub_effects(variant, max_effect_order))
-    return {effect: index for index, effect in enumerate(sorted(effects, key=lambda e: sorted(e)))}
+    return {effect: index for index, effect in enumerate(sorted(effects, key=sorted))}
 
 
 def _incidence(
@@ -401,7 +401,7 @@ def evaluate_budget(
 
     selected = _info_selection(scored, budget, max_order)
     revealed, *_ = _reveal_selection(landscape, selected)
-    measured = sorted(revealed, key=lambda v: sorted(v))
+    measured = sorted(revealed, key=sorted)
     error_m = {variant: mu0[variant] - revealed[variant] for variant in measured}
 
     effect_index = _effect_index(measured, max_effect_order)

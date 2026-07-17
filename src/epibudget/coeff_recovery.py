@@ -749,7 +749,7 @@ def run_coeff_recovery(
         selections.append(("doptimal_pairs", None, doptimal_pairs_order[:budget]))
         for selection_name, seed, selected in selections:
             revealed, *_ = _reveal_selection(landscape, selected)
-            measured = sorted(revealed, key=lambda v: sorted(v))
+            measured = sorted(revealed, key=sorted)
             if not measured:
                 continue
             y = np.array([revealed[v] for v in measured], dtype=np.float64)

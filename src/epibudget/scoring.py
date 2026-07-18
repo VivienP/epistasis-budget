@@ -5,11 +5,11 @@ background, then read the conditional log-likelihood of each mutated residue IN 
 Never score each mutation independently on the wild-type background and sum — that makes every
 epistasis term identically zero by construction.
 
-``delta_g`` is the deterministic conjoint score (this is what feeds the epistasis terms and the
-de-risk gate). ``var_delta_g`` is a zero-shot uncertainty proxy: the dispersion of that score across
+``delta_g`` is the deterministic conjoint score (this is what feeds the epistasis terms).
+``var_delta_g`` is a zero-shot uncertainty proxy: the dispersion of that score across
 stochastic background-context masking perturbations. ESM-2 ships with dropout probability 0, so
 MC-dropout would be identically zero; the masking-perturbation dispersion of SPEC §3.2 is used
-instead, calibrated against real prediction error in the Step 4 uncertainty-prior scatter.
+instead, calibrated against real prediction error in the uncertainty-prior scatter.
 
 ``score`` is the reference per-variant path and the parity oracle. ``score_batch`` returns the same
 numbers via de-duplicated, cross-variant batched forwards (``scoring_plan``): masking a site erases
@@ -74,7 +74,7 @@ class ConjointScorer:
     ``num_threads`` tune throughput only and never change the numbers.
 
     ``n_perturbations`` background-masking passes estimate ``var_delta_g``; set it to 0 to skip the
-    uncertainty estimate (the de-risk gate needs only the deterministic ``delta_g``).
+    uncertainty estimate (the deterministic ``delta_g`` needs no perturbation passes).
     """
 
     def __init__(

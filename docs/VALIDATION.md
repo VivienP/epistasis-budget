@@ -2,7 +2,7 @@
 
 The credibility of `epibudget` rests entirely on one honest benchmark. This document freezes the
 protocol **before** any result exists, so the outcome cannot be reverse-engineered. Changing anything
-here after seeing results requires an explicit note in the report and Vivien's sign-off.
+here after seeing results requires an explicit amendment note recorded in the report.
 
 ## The claim under test
 
@@ -13,7 +13,19 @@ here after seeing results requires an explicit note in the report and Vivien's s
 Null hypothesis **H0**: information-optimal is indistinguishable from (or worse than) fitness-greedy.
 **We report H0 as the headline if that is what the data show.** A clean negative — "information-optimal
 DMS design does *not* beat fitness-greedy for epistasis recovery on GB1, here is the evidence" — is a
-legitimate, publishable audit and a perfectly good portfolio artifact. It is *not* a failure to hide.
+legitimate, publishable audit. It is *not* a failure to hide.
+
+**Standing (amendment; Step 5–6 zero-GPU diagnostics).** "Information-optimal" names the v1 modular
+loop-bracing heuristic — an A-optimal trace reduction under a diagonal, uncalibrated prior — not a
+general information-optimal design. The re-analysis narrows the thesis: pairwise map recovery is weak,
+and its raw rank gain is largely a main-effect-sharing confound; a correlated-error inferrer repairs
+the squared-error calibration but not the confound (Step 6 / `gate3`). The ESM prior does beat a
+structure-only compressed-sensing baseline for pairwise ordering, but order-3 is unrecoverable at these
+budgets and neither an isotropic (6B) nor a pairwise-targeted (6C) label-free D-optimal acquisition
+beats the ESM-weighted selection — pure experimental-design geometry does not recover the map above
+random, so the ESM prior (not the acquisition) carries the signal and the budget is the binding
+constraint (Step 6 / `coeff_recovery`). The frozen decision rule below is unchanged; no
+decision-eligible comparative claim is current. Numbers and provenance: `docs/ROADMAP.md` Steps 5–6.
 
 ## Dataset
 
@@ -30,7 +42,8 @@ legitimate, publishable audit and a perfectly good portfolio artifact. It is *no
 
 ## Ground truth
 
-`ground_truth_epistasis(measured_live_landscape)` computes, from positive measured fitnesses:
+`ground_truth_epistasis(wt_centered_log_fitness(measured_live_landscape))` computes, from positive measured
+fitnesses after subtracting log fitness(reference):
 
 - all pairwise ε(i,j) and third-order ε(i,j,k) terms (WT-referenced, inclusion–exclusion), and
 - the multiallelic Walsh–Hadamard spectrum (variance explained by order) for context.
@@ -54,14 +67,15 @@ These are the target coefficients the selected experiments must recover.
    keeps selection and grading on **one coherent model**, and real GB1 fitness stays the external
    referee, so info-optimal can still lose. The same estimator runs on every method; only `revealed`
    differs.
-4. `map_recovery(inferred, truth)` = correlation between inferred and true ε over all pairwise +
-   third-order terms.
+4. `map_recovery(inferred, truth)` reports correlation between inferred and true ε separately for
+   pairwise and third-order terms; the cross-order pooled value is diagnostic only.
 
 ## Metrics
 
 - **Primary (frozen):** Spearman and Pearson correlation between inferred and ground-truth ε
-  coefficients, reported per order (pairwise, third) and pooled, at **B ∈ {48, 96, 192}**. Both
-  correlations are always reported (never cherry-pick one). This is the number the decision rule reads.
+  coefficients, reported separately for pairwise and third order at **B ∈ {48, 96, 192}**. Both
+  correlations are always reported (never cherry-pick one). Pairwise is decision-bearing; pooled recovery
+  is retained only as a compatibility diagnostic.
 - **Breadth vs precision (pre-registered, additive — never a replacement for the primary, never in the
   decision rule):** a method can score well on the full-set correlation for two very different reasons —
   it *measured* many terms directly (breadth), or it *predicted* the unmeasured ones well (precision).
@@ -106,7 +120,7 @@ with the same figures.
 ## Mandatory baselines
 
 Every figure and table shows **info-optimal**, **fitness-greedy**, and **random** together. Dropping a
-baseline to flatter a curve is a CLAUDE.md hard-limit violation. Also reported at every budget:
+baseline to flatter a curve is a hard-limit violation of this protocol. Also reported at every budget:
 
 - **practice** — the real-practice heuristic (top beneficial singles → all pairwise, cf. MULTI-evolve).
 - **structural-only** — the ablation that isolates what the ESM uncertainty prior actually contributes:
@@ -149,7 +163,7 @@ result exists.
 **Status: implemented and run.** `epibudget robustness` was executed on the completed 650M scored cache
 (`src/epibudget/robustness.py`; spec in `docs/specs/robustness.md`) and its results are wired into public
 artifacts (`artifacts/robustness_650m.json`, README, and the Outcome section below). They do not alter or
-replace the frozen statistic or decision rule above; the difference CIs are descriptive, not tests. This section is written after the Step-1 signal, the
+replace the frozen statistic or decision rule above; the difference CIs are descriptive, not tests. This section is written after the ESM-2 signal gate, the
 650M masking-variance calibration, and the 650M deterministic supplementary recovery were already
 computed and committed (`docs/LIMITATIONS.md` §1, §5) — the qualitative shape of those results (the
 uncertainty prior looking unhelpful; structural-only beating random and fitness-greedy) was visible when
@@ -187,31 +201,128 @@ method to a specific number once computed.
   criterion above; that rule remains the frozen bar for H1, and this stricter standard applies only to
   these companion analyses, not to it.
 
-## Outcome — frozen 650M headline (2026-07-11)
+## Historical outcome — frozen 650M headline (2026-07-11; superseded for current claims)
 
 The frozen run executed on a Colab T4 (`device=cuda`, 29,678 candidates, `n_perturbations=16`, 20 seeds,
 budgets 48/96/192) on the GitHub branch tip `3ba75eb`. Artifacts: `artifacts/headline_650m.json` (recovery
 + CIs) and `artifacts/robustness_650m.json` (post-hoc A1/A2/A3). Verdict, read strictly off the frozen rule
-and its mandatory companions (figures live in the artifacts and the claim-checked README):
+and its mandatory companions (figures live in the frozen artifacts):
 
-- **H1 supported.** On the registered statistic — pairwise Spearman *and* Pearson — information-optimal
+- **Historical registered-rule result: H1 supported.** On the registered statistic — pairwise Spearman *and* Pearson — information-optimal
   beats fitness-greedy and random with non-overlapping bootstrap 95% CIs at all three budgets. The frozen
-  bar is met.
-- **The uncertainty prior earns no credit (ablation clause).** The prior-free `structural-only` ablation
+  bar was met under the original method-specific calibration estimand.
+- **Historical ablation result: the uncertainty prior earned no credit.** The prior-free `structural-only` ablation
   has the higher pairwise recovery than info-optimal at every budget on both correlations, and the post-hoc
   paired common-predicted-term precision comparison puts structural ahead of info-optimal with a descriptive
   difference whose 95% CI excludes zero at all three budgets. Per "Mandatory baselines" above, info-optimal
   is not `> structural-only`, so the ESM masking-perturbation uncertainty prior is **dropped from the
   claims**; the allocation's recovery is attributed to the structural `n(v)` loop-coverage sort. The A2
   cross-fit scale-sensitivity probe agrees (structural > info > fitness at every order and budget).
-- **Framing.** The headline is reported caveat-first (structural-only wins) with H1's formal support stated
-  plainly and all baselines shown together, per invariant #2. The A1/A3 difference CIs are descriptive
-  companions, not hypothesis tests, and do not change the frozen decision.
+- **Current claim status.** The artifacts and original decision remain frozen, but neither comparative
+  conclusion is current: the structural score is exactly tied within mutation order, and method-specific
+  slope calibration confounds low-coverage effect sizes. The corrective Gate 2 below supersedes their
+  interpretation without rewriting the historical records.
+
+## Corrective Gate 2 — 2026-07-14 (provisional, non-public)
+
+The zero-GPU corrective analysis used the completed 650M cache at budgets 48/96/192, 20 random seeds,
+100 seeded structural tie-breaks, five cross-fit folds and 2,000 paired term bootstraps. It serialized 372
+selection records, 377 slope records and 1,488 order-stratified evaluation records. Expected and observed
+cache identities match; all required pairwise cells are finite. The local report is
+`report/20260714T104137Z/gate2.json` (SHA-256
+`cb24af4f0ffd025260b430fa069075653608d048d8efd2a42c05b47384149fe5`). It records commit
+`fc6436a90911080e83b439f9e776d3086c393dcf`, the dirty-tree diff hash
+`2e876ac128b648b28c04181a9d589752d166858e64edff569b45bec9deba221f`, `status=provisional` and
+`public_claim_eligible=false`.
+
+The registered decision is `inconclusive_zero_gpu` with architecture-decision eligibility satisfied.
+Inference is mixed: pairwise Pearson and Spearman improve at every budget, while relative squared-error
+gain is negative at every budget. The ESM-dispersion contribution versus seeded structural ties is
+inconclusive overall, and no registered calibration contrast reverses sign across regimes at the required
+two budgets. Pairwise and third-order terms are never pooled for a decision.
+
+This report does not support a public winner, does not rescue the historical headline, and does not select
+between repairing the v1 model and replacing it for Phase 2. Confirmatory TrpB, downstream and Phase 2 runs
+remain blocked pending an explicit architecture decision.
+
+## Post-registration downstream-impact protocol — 2026-07-11
+
+**Status: protocol frozen here BEFORE any downstream number exists; the full spec is
+`docs/specs/downstream.md`.** This section is written after the GB1 map-recovery headline, the negative
+650M uncertainty calibration, and structural-only's apparent advantage were already known and committed
+(§Outcome above; `docs/LIMITATIONS.md` §4/§5). It is therefore **not** a blind pre-registration — it
+cannot claim that bias protection. It only fixes the method before its own numbers exist, which still
+blocks tuning the method to a specific number once computed. It **does not modify or replace the frozen
+historical decision rule** above; it adds a separate, independently-decided downstream benchmark.
+
+**Why.** The frozen recovery statistic is partly tautological (`docs/LIMITATIONS.md` §4) and
+`infer_epistasis` keeps the ESM prior for every unmeasured term, so it does not show that a
+structure-aware plate yields a **better downstream experimental decision**. The benchmark asks instead
+whether, at equal initial budget B on GB1, a method's selected plate is a better training set for a fixed
+supervised learner to rank **held-out** double/triple mutants. The primary learner is trained only from
+the revealed labels and consumes neither the held-out variant's own ESM score nor the prior-inclusive
+`infer_epistasis` output — so it cannot algebraically recover the ESM prior (the new, less-visible
+tautology this design must avoid).
+
+**Design (frozen; full detail in `docs/specs/downstream.md`).** Deterministic order-stratified SHA-256
+outer folds over the entire order-2/3 universe (singles never held out); for each fold `E_j`, every
+method selects B from `pool_j = universe \ E_j`, zero-shot, and is scored on the identical measured
+members of `E_j` (dead-0 retained, missing counted-not-imputed). Two estimands are run side-by-side
+(target-blind primary; target-aware companion) and two missingness regimes (attempted-budget primary;
+measured-available oracle sensitivity). The primary predictor is a pure-numpy generalized-dual ridge on a
+single global fixed feature dictionary (76 reference-coded amino-acid main effects + 2166 reference-coded
+pairwise indicators; no third-order, no ESM feature), with α chosen by held-out inner CV on the outer
+training set only. All five existing methods are retained (info-optimal, structural-only, fitness-greedy,
+random, practice); no baseline is dropped for performing well.
+
+**Metrics and inference.** Primary statistic is the order-stratified macro-Spearman
+`S_macro = ½(ρ_doubles + ρ_triples)` of predicted vs raw held-out fitness (pooled Spearman is a companion
+only). NDCG@B, hit-rate@B, regret@B, an epistasis-uplift, and a no-triples→held-out-triples transfer test
+are reported. The decision gate is a Nadeau–Bengio corrected-resampled t over R=20 frozen salted
+partitions × K=5 folds — a **corrected-CV interval, not a frequentist CI over future wet-lab campaigns** —
+plus a ≥16/20 partition-mean sign-consistency safeguard.
+
+**Decision rule (frozen for this benchmark).** The structural downstream claim is supported iff
+`structural − fitness` on the `S_macro`-AUC over B∈{48,96,192} excludes zero positive with the corrected-t
+and passes sign consistency. The ESM-uncertainty contribution is supported iff `info − structural` on
+`S_macro` at B=192 excludes zero positive (B∈{48,96} reported but non-decisional — underpowered by
+construction because both methods select ≈singles then doubles and never a triple). Otherwise the
+observed partial/null/negative is reported. All three narrative outcomes — (1) structural beats fitness
+downstream, (2) info does not beat structural, (3) nothing beats fitness — are preserved honestly. No
+generalization beyond GB1 and no product-readiness is claimed from a retrospective four-site benchmark.
+
+## Protocol amendment 1 — downstream-impact benchmark — 2026-07-12
+
+**Status: frozen here BEFORE any confirmatory downstream number is read or interpreted.** Review on
+2026-07-12 surfaced implementation and protocol deviations from the 2026-07-11 downstream-impact
+protocol above: a sign-consistency gate that silently lowered its 16/20 threshold to the count of
+*surviving* partitions rather than requiring all 20; no raw per-fold record trail (random-seed metrics
+were averaged before serialization, so the corrected-CV statistics and sign counts could not be
+independently recomputed); an inner-fold count (3) and alpha grids present in the code but never actually
+named in the frozen spec text; main-only and no-triples-transfer training reusing the full model's alpha
+instead of their own inner CV; the three mandatory ESM diagnostics (§"Secondary predictors / controls"
+above) absent from the implementation; and a report whose content depended on the input order of `scored`.
+Full detail: `docs/specs/downstream.md` §"Protocol amendment 1".
+
+A confirmatory-scale process (`R=20 x K=5`, 20 seeds) was started under the pre-amendment implementation
+on 2026-07-12 and produced a favorable exploratory smoke direction on the
+`structural-fitness` contrast before it was stopped without writing any artifact
+(`report/<run_id>/downstream.json` never existed). **That direction is explicitly non-decision-use and did
+not inform any value frozen in the amendment.** The 2026-07-11 design (held-out protocol, estimands,
+missingness regimes, primary predictor architecture, metric definitions) is unchanged; the amendment adds
+the raw-record schema, the fail-closed missing-partition policy, regime-separated hyperparameter tuning,
+the three mandatory ESM diagnostics, cache/provenance hardening, canonical-order enforcement, and reframes
+the corrected-CV interval as a labelled sensitivity companion rather than the primary gate (replaced by an
+explicit 7-point partition-level robustness gate, §"Protocol amendment 1" in the spec). The next
+`downstream` run performed under the amended protocol is a **confirmatory rerun**, not an untouched first
+test, and every artifact it produces records `provenance.protocol_version` /
+`provenance.amendment_version` accordingly. This amendment does not modify the frozen 650M GB1 headline or
+its decision rule (§Outcome above) and does not modify the TrpB protocol below.
 
 ## Second landscape — TrpB (pre-registered, run DEFERRED)
 
-**Status: protocol frozen here BEFORE any TrpB result exists; the run is deliberately deferred until the
-GB1 headline is interpreted.** Running a second landscape and only then choosing how to report it would
+**Status: protocol frozen here BEFORE any TrpB result exists; the confirmatory run remains deferred after
+the inconclusive corrective GB1 gate.** Running a second landscape and only then choosing how to report it would
 be landscape / multiple-comparison cherry-picking (invariant #2). This section fixes the protocol first;
 the loader (`epibudget.data.load_trpb`) and fetch (`scripts/fetch_trpb.py`) are implemented, no number is
 computed. The TrpB result will be reported regardless of direction — including if it weakens the GB1
@@ -229,19 +340,55 @@ story.
   B ∈ {48, 96, 192}, ≥ 20 seeds, `n_perturbations = 16`; the same decision rule (info-optimal vs
   fitness-greedy vs random on the pairwise-order Spearman AND Pearson map-recovery, non-overlapping
   bootstrap 95% CIs), the same mandatory baselines (info / fitness / random, plus practice and
-  structural-only companions), and the same Phase B post-hoc analyses. No setting is chosen after seeing
+  structural-only companions), and the same post-hoc robustness analyses. No setting is chosen after seeing
   a TrpB number.
 - **Reproducibility.** `python scripts/fetch_trpb.py` writes `data/proteingym/trpb_johnston2024.csv`
-  (git-ignored) with a checksum + provenance; the frozen run is the GB1 `validate` command with
-  `--data data/proteingym/trpb_johnston2024.csv` (and the TrpB sites/reference from `epibudget.data`).
+  (git-ignored) with a checksum + provenance; the frozen run is
+  `epibudget validate --dataset trpb_johnston2024 --model esm2_t33_650M --alphabet ACDEFGHIKLMNPQRSTVWY --budgets 48,96,192 --seeds 20 --n-perturbations 16 --device cuda --out report/`.
+  The `trpb_johnston2024` identifier selects the TrpB loader, sites and Tm9D8* reference from
+  `epibudget.data`, and `--data` defaults to `data/proteingym/trpb_johnston2024.csv`.
+
+## Exploratory TrpB smoke — run 20260713T135240Z (non-decision-eligible)
+
+**Status: exploratory, off-protocol, uninterpretable. It does not modify the frozen GB1 decision rule or
+the deferred TrpB protocol above, and no TrpB claim is registered from it.** Full analysis:
+[`experiments/trpb-smoke-20260713.md`](experiments/trpb-smoke-20260713.md).
+
+The historical production `validate` harness was run on `trpb_johnston2024` (650M, full alphabet, `device=cuda`,
+29,678 candidates) at `B ∈ {24, 48}` with 5 seeds — violating this section's frozen grid
+(`B ∈ {48, 96, 192}`, ≥ 20 seeds), so it is a smoke by construction. All 10 method × budget cells completed
+and the technical path ran end to end. Selection identities, coverage, hit-rate and configuration remain
+valid descriptive outputs. Recovery coefficients, recovery correlations and truth-map variance do not,
+because the run used an uncentred reference. The old `var_epsilon` field is measured-truth variance and is
+not the predicted-epistasis invariant. Three defects bear on interpretation:
+
+1. **The historical TrpB run used a broken WT anchor; the current code centres it.** `interaction_loop`
+   excludes the empty set, so the ε machinery assumes ΔG(∅) = 0. GB1 satisfies it by normalisation
+   (f(WT) = 1.0); TrpB's parent is f = 0.408074, so ln f(∅) = −0.896307 ≠ 0. Every pairwise ε is shifted
+   +0.896307 and every third-order ε −0.896307, manufacturing between-order separation: `var_epsilon` is
+   +23.3% inflated in the historical artifact, and the ε̂ error grows with coverage. Current validation
+   and robustness paths use log(f/f_reference); the historical artifact is not retroactively repaired.
+2. **`structural-only` is an arbitrary tie-break, not a structural sort (both landscapes).** `n(v)` is
+   constant within each order (1140 / 39 / 1), so with τ² ≡ 1 its greedy weight has three distinct values
+   and the within-order ranking is an exact tie resolved by `enumerate_candidates`' site-major input order.
+   Gate 2 replaces that single prefix with 100 seeded within-stratum permutations and reaches an
+   inconclusive registered τ²-contribution decision. The legacy prefix remains diagnostic only.
+3. **The per-method calibration slope sets a low-coverage method's sign (both landscapes).** With no
+   measured loop member, ε̂ = b · ε̂_ESM exactly, so recovery is `sign(b) · ρ_prior`. The existing A2
+   cross-fit treatment now covers every Gate 2 selection. It is method-independent attribution evidence,
+   not an operational selection method; no corresponding corrected TrpB recovery exists.
+
+**Consequence for this protocol.** The corrective GB1 gate is complete but inconclusive. The frozen TrpB
+protocol above remains the only path to a reportable second-landscape result, and it stays deferred until
+the project chooses whether Phase 2 repairs or replaces the v1 acquisition model.
 
 ## Threats to validity (and mitigations)
 
 | Threat | Mitigation |
 |--------|------------|
-| ε ≡ 0 from additive scoring | invariant #1 + `test_epsilon_not_identically_zero` |
+| ε̂ ≡ 0 from additive ESM scoring | CLI invariant uses predicted epistasis variance/signal + `test_epsilon_not_identically_zero` |
 | Selection leaks labels | selection code has no access to the DMS frame; enforced by module boundaries and a test |
 | GB1 has only 4 positions | claim framed as *principle validation*; power comes from 20³ AA instantiations per triplet, not from many positions (see RESEARCH §4) |
 | Overfitting the metric to one B | report all B; decision rule requires a majority |
 | Inference step does the work, not selection | same `infer_epistasis` used for all three methods; only the *selected set* differs |
-| Second-landscape cherry-picking | the TrpB protocol is frozen before any TrpB number and the run is deferred until GB1 is interpreted; reported regardless of direction |
+| Second-landscape cherry-picking | the confirmatory TrpB protocol remains frozen and deferred pending an explicit post-Gate-2 architecture decision; any eventual result is reported regardless of direction |

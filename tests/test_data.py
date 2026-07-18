@@ -1,4 +1,4 @@
-"""Tests for the GB1 loaders and candidate enumeration (docs/SPEC.md#10, Step 1 de-risk gate).
+"""Tests for the GB1 loaders and candidate enumeration (docs/SPEC.md#10).
 
 The enumeration tests are pure and offline. The real-landscape loader test is marked ``data``
 because it needs ``scripts/fetch_gb1.py`` to have run; the parsing/assertion logic is covered

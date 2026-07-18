@@ -33,6 +33,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
+from _console import configure_utf8_stdout
+
 from epibudget.data import (
     TRPB_SITES,
     TRPB_WT_AT_SITES,
@@ -56,6 +58,7 @@ def _sha256(path: Path) -> str:
 
 
 def main() -> None:
+    configure_utf8_stdout()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, default=Path("data/proteingym"))
     args = parser.parse_args()

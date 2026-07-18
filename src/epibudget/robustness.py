@@ -1,4 +1,4 @@
-"""Phase B robustness analyses (docs/specs/robustness.md, docs/VALIDATION.md post-registration).
+"""Post-registration robustness analyses (docs/specs/robustness.md, docs/VALIDATION.md).
 
 Three POST-HOC companion analyses on a completed run's inputs (ESM-scored candidates + the full
 measured landscape). They never feed selection and never alter the frozen decision rule:
@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import warnings
 from collections.abc import Mapping, Sequence
-from math import isnan, log
+from math import isnan
 from pathlib import Path
 
 import numpy as np
@@ -35,6 +35,7 @@ from epibudget.epistasis import (
     ground_truth_epistasis,
     interaction_loop,
     predicted_epistasis,
+    wt_centered_log_fitness,
 )
 from epibudget.graph import EpistasisFactorGraph
 from epibudget.provenance import write_json_exclusive
@@ -118,7 +119,7 @@ class ScaleSensitivity(BaseModel):
 
 
 class RobustnessReport(BaseModel):
-    """The three Phase B analyses over the frozen budget grid, per order (never pooled)."""
+    """The three post-hoc analyses over the frozen budget grid, per order (never pooled)."""
 
     dataset: str
     model_id: str
@@ -151,10 +152,11 @@ def crossfit_slopes(
     """
     if n_folds < _MIN_FOLDS:
         raise ValueError(f"n_folds must be >= {_MIN_FOLDS} for out-of-fold slopes, got {n_folds}")
+    landscape_dg = wt_centered_log_fitness(landscape)
     rows = [
-        (sv.variant, sv.delta_g, log(landscape[sv.variant]))
+        (sv.variant, sv.delta_g, landscape_dg[sv.variant])
         for sv in scored
-        if landscape.get(sv.variant, 0.0) > 0.0
+        if sv.variant in landscape_dg
     ]
     slopes: dict[int, float] = {}
     for fold in range(n_folds):
@@ -538,7 +540,7 @@ def _truth_by_term(
 ) -> dict[Term, float]:
     # Mirrors run_validation's truth construction (validate.py) so both grade the same terms.
     term_set = set(_candidate_terms(scored, max_order))
-    landscape_dg = {v: log(f) for v, f in landscape.items() if f > 0.0}
+    landscape_dg = wt_centered_log_fitness(landscape)
     return {
         interaction.mutations: interaction.epsilon_hat
         for interaction in ground_truth_epistasis(landscape_dg, max_order)

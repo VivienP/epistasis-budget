@@ -6,8 +6,8 @@ what the GB1 landscape gives us, how protein language models represent epistasis
 why *choosing which variants to measure* is an information-theoretic problem. Every design decision in
 [`SPEC.md`](SPEC.md) traces back to a claim here.
 
-> Citations are to real, verifiable sources. Where the exact author list was not confirmed during
-> research, the reference is given by title + venue + year (all verified) rather than invented names.
+> Citations are to real, verifiable sources. Where an author list could not be verified, the reference
+> is given by title + venue + year rather than invented names.
 
 ---
 
@@ -160,7 +160,7 @@ To surface real model epistasis you must score the mutant **conjointly**: place 
 variant on the background and read the joint conditional log-likelihood (a pseudo-log-likelihood over
 the mutated positions in the mutated context). This is the same "conditional / joint scoring"
 distinction that separates zero-shot from rescue-mutation scoring in the literature (cf. masked-marginal
-vs conditional scoring, Meier et al. 2021). It is invariant #1 in [`CLAUDE.md`](../CLAUDE.md).
+vs conditional scoring, Meier et al. 2021). It is invariant #1, enforced in [`SPEC.md`](SPEC.md) §3.
 
 > **Design decision #3.** ε terms are computed from **conjoint** ESM-2 conditional scores on the WT
 > background. A unit test (`test_epsilon_not_identically_zero`) fails loudly if additive scoring ever

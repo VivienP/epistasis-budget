@@ -8,6 +8,7 @@ conjoint (non-additive) ESM-2 scoring is mandatory
 from __future__ import annotations
 
 from itertools import chain, combinations
+from math import exp
 
 import numpy as np
 import pytest
@@ -23,6 +24,7 @@ from epibudget.epistasis import (
     interaction_loop,
     predicted_epistasis,
     wht_spectrum,
+    wt_centered_log_fitness,
 )
 from epibudget.scoring import additive_delta_g
 from epibudget.types import Mutation, ScoredVariant, Variant
@@ -30,6 +32,7 @@ from epibudget.types import Mutation, ScoredVariant, Variant
 MUT_I: Mutation = (0, "A", "C")
 MUT_J: Mutation = (1, "D", "E")
 MUT_K: Mutation = (2, "F", "G")
+MUT_L: Mutation = (3, "H", "I")
 
 _PAIRWISE_LOOP = 3  # {i}, {j}, {i,j}
 _THIRD_LOOP = 7  # 3 singles + 3 pairs + the triple
@@ -87,6 +90,76 @@ def test_epsilon_third_recovers_injected_interaction() -> None:
 def test_epsilon_symmetric_in_its_sites() -> None:
     dg = {_v(MUT_I): 0.2, _v(MUT_J): 0.9, _v(MUT_I, MUT_J): 1.7}
     assert epsilon_pairwise(dg, MUT_I, MUT_J) == pytest.approx(epsilon_pairwise(dg, MUT_J, MUT_I))
+
+
+# --- measured-fitness WT anchor ---------------------------------------------------------------
+
+
+def test_wt_centered_log_fitness_has_exact_wt_zero_and_is_scale_invariant() -> None:
+    fitness = {
+        frozenset(): 2.5,
+        _v(MUT_I): 5.0,
+        _v(MUT_J): 1.25,
+    }
+    centered = wt_centered_log_fitness(fitness)
+    scaled = wt_centered_log_fitness({variant: 7.0 * value for variant, value in fitness.items()})
+
+    assert centered[frozenset()].hex() == "0x0.0p+0"
+    assert centered[_v(MUT_I)] == pytest.approx(np.log(2.0))
+    assert centered[_v(MUT_J)] == pytest.approx(np.log(0.5))
+    assert scaled == pytest.approx(centered)
+
+
+@pytest.mark.parametrize(
+    "fitness",
+    [
+        {},
+        {frozenset(): 0.0},
+        {frozenset(): -1.0},
+        {frozenset(): float("inf")},
+        {frozenset(): float("nan")},
+    ],
+)
+def test_wt_centered_log_fitness_rejects_missing_or_invalid_reference(
+    fitness: dict[Variant, float],
+) -> None:
+    with pytest.raises(ValueError):
+        wt_centered_log_fitness(fitness)
+
+
+@pytest.mark.parametrize("value", [float("inf"), float("-inf"), float("nan")])
+def test_wt_centered_log_fitness_rejects_any_nonfinite_value(value: float) -> None:
+    with pytest.raises(ValueError, match="non-finite"):
+        wt_centered_log_fitness({frozenset(): 1.0, _v(MUT_I): value})
+
+
+def test_wt_centered_log_fitness_drops_nonpositive_nonreference_values() -> None:
+    centered = wt_centered_log_fitness(
+        {frozenset(): 2.0, _v(MUT_I): 0.0, _v(MUT_J): -3.0, _v(MUT_K): 4.0}
+    )
+    assert set(centered) == {frozenset(), _v(MUT_K)}
+
+
+def test_wt_centered_logs_recover_pair_third_and_arbitrary_inclusion_exclusion() -> None:
+    mutations = (MUT_I, MUT_J, MUT_K, MUT_L)
+    raw_log: dict[Variant, float] = {frozenset(): -0.6}
+    for order in range(1, len(mutations) + 1):
+        for index, combo in enumerate(combinations(mutations, order), start=1):
+            raw_log[frozenset(combo)] = 0.2 * order + 0.07 * index * index
+    centered = wt_centered_log_fitness({variant: exp(value) for variant, value in raw_log.items()})
+
+    def expected(term: tuple[Mutation, ...]) -> float:
+        return sum(
+            (-1.0 if (len(term) - order) % 2 else 1.0) * raw_log[frozenset(combo)]
+            for order in range(len(term) + 1)
+            for combo in combinations(term, order)
+        )
+
+    assert epsilon_pairwise(centered, MUT_I, MUT_J) == pytest.approx(expected((MUT_I, MUT_J)))
+    assert epsilon_third(centered, MUT_I, MUT_J, MUT_K) == pytest.approx(
+        expected((MUT_I, MUT_J, MUT_K))
+    )
+    assert _epsilon(centered, mutations) == pytest.approx(expected(mutations))
 
 
 # --- general inclusion-exclusion helper agrees with the hardcoded order-2/3 forms ---------------

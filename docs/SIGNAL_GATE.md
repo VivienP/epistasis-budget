@@ -1,8 +1,8 @@
-# Step 1 — de-risk gate result
+# ESM-2 epistasis signal — pre-allocation gate result
 
 Records the pre-allocation gate: *does ESM-2 conjoint scoring carry usable GB1 epistasis signal before
 anything is built on top?* Reproduce with
-`python scripts/fetch_gb1.py` then `python scripts/spike_gb1_epistasis.py --model <checkpoint>`.
+`python scripts/fetch_gb1.py` then `python scripts/gb1_epistasis_signal.py --model <checkpoint>`.
 
 ## The gate (both must hold)
 
@@ -25,7 +25,8 @@ GB1's Olson-2014 pairwise set only, not this four-site assay.)
 
 ## Method
 
-- **Measured** ΔG(v) = ln(fitness(v)); WT = 1 ⇒ ΔG(∅) = 0. Dead variants (fitness 0) have no
+- **Measured** ΔG(v) = ln(fitness(v)/fitness(reference)), so ΔG(∅) = 0 exactly. GB1 has
+  fitness(reference) = 1, making this bit-identical to ln(fitness(v)). Dead variants (fitness 0) have no
   log-fitness, so any interaction with a dead or missing constituent is **dropped, never imputed**
   (invariant #3).
 - **Predicted** ΔG(v) is the conjoint ESM-2 conditional log-likelihood ratio (`ConjointScorer`,
@@ -57,12 +58,12 @@ n = 257 pairwise instances, 97 third-order):
   best regime for GB1 epistasis (`RESEARCH_EPISTASIS.md` §5). At 35M the correlation is weak (0.09/0.11):
   the fast model is a CI smoke-test, not the headline.
 
-The signal is real and non-trivial — the epistasis factor graph and acquisition (Steps 2–4) rest on a
-measured effect, not an assumption. **Proceed to Step 2.**
+The signal is real and non-trivial — the epistasis factor graph and acquisition rest on a measured
+effect, not an assumption.
 
-## Caveats (carried into Step 4)
+## Caveats (carried into the frozen headline)
 
-- **Two seeds, indicative not final.** The gate is a go/no-go; the frozen Step 4 protocol adds ≥20
+- **Two seeds, indicative not final.** The gate is a go/no-go; the frozen headline protocol adds ≥20
   seeds and bootstrap 95% CIs. A second seed at 650M reproduces the effect closely — seed 0:
   pairwise 0.302 / third 0.249; seed 1: pairwise 0.305 / third 0.231 — so the pass is not a
   sampling fluke.

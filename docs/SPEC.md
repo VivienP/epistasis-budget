@@ -1,7 +1,7 @@
 # epibudget — technical specification
 
-Source of truth for *what* to build. Pairs with [`CLAUDE.md`](../CLAUDE.md) (*how*),
-[`RESEARCH_EPISTASIS.md`](RESEARCH_EPISTASIS.md) (*why it is well-posed*), and
+Source of truth for *what* to build. Pairs with
+[`RESEARCH_EPISTASIS.md`](RESEARCH_EPISTASIS.md) (*why it is well-posed*) and
 [`VALIDATION.md`](VALIDATION.md) (*how we prove it works*).
 
 ---
@@ -12,11 +12,12 @@ Source of truth for *what* to build. Pairs with [`CLAUDE.md`](../CLAUDE.md) (*ho
 allowed amino-acid set per position), an integer budget `B`, and an ESM-2 checkpoint.
 
 **Output:** an ordered list of `B` variants (each a set of point mutations over `P`, of order 1–3),
-ranked by expected reduction in epistasis uncertainty, plus the per-interaction uncertainty map and the
-predicted information gain of the selected batch.
+ranked by the v1 dispersion × loop-coverage proxy, plus the corresponding per-interaction dispersion map
+and modular score of the selected batch.
 
-**Objective (informal):** pick the `B` variants whose measured fitness would most sharpen a model of
-the landscape's **epistasis coefficients**, not the `B` with highest predicted fitness.
+**Objective (informal):** compare a structure-aware allocation proxy with ranking by predicted fitness.
+The v1 score is exact for its independent-variant variance objective (§5), but is not calibrated posterior
+uncertainty for the landscape-recovery estimand.
 
 ---
 
@@ -41,8 +42,8 @@ the landscape's **epistasis coefficients**, not the `B` with highest predicted f
                     │                Gaussian model over ε terms       │
                     └───────────────┬────────────────────────────────┘
                     ┌───────────────▼────────────────────────────────┐
-                    │ acquisition.py greedy submodular selection of B  │
-                    │                (variance reduction; λ slider)    │
+                    │ acquisition.py fixed modular ranking of B         │
+                    │                (dispersion proxy; λ slider)       │
                     └───────────────┬────────────────────────────────┘
              allocate │             │ validate
         ┌─────────────▼───┐  ┌──────▼───────────────────────────────┐
@@ -119,8 +120,8 @@ var_delta_g  = var(scores)      # zero-shot proxy for "how unsure is the model h
 ```
 
 Batching, caching (per-sequence forward passes are reused across variants that share a context), and a
-small-model fast path (`esm2_t12_35M`) keep this CPU-tractable. Target: full GB1 four-site candidate set
-scored in < 45 min on a laptop CPU with the 35M model, < a few hours with 650M.
+small-model fast path (`esm2_t12_35M`) keep the reduced-alphabet pass CPU-tractable. The full 20-letter
+650M variance-inclusive pass is GPU-recommended; see [`LIMITATIONS.md`](LIMITATIONS.md) §1.
 
 ### 3.3 Public interface
 
@@ -204,7 +205,7 @@ already been selected — so there is no iterative greedy loop: `allocate` is a 
 allocate(graph, candidates, B, lambda_) -> Allocation:
     info = {v: graph.info_gain(frozenset(), v) for v in candidates}   # fixed, modular
     if   lambda_ == 1.0: ranked = sort candidates by delta_g        desc   # == fitness_greedy exactly
-    elif lambda_ == 0.0: ranked = sort candidates by info[v]        desc   # pure info-optimal
+    elif lambda_ == 0.0: ranked = sort candidates by info[v]        desc   # dispersion × loops
     else:                ranked = sort candidates by
                                   (1-lambda_)·minmax(info) + lambda_·minmax(delta_g) desc
     selected = ranked[:B]
@@ -213,7 +214,7 @@ allocate(graph, candidates, B, lambda_) -> Allocation:
                       ...)
 ```
 
-- `lambda_ = 0.0` → pure information-optimal (the thesis); `1.0` → fitness-greedy (the control).
+- `lambda_ = 0.0` → ESM-dispersion × loop-coverage heuristic; `1.0` → fitness-greedy control.
 - The λ∈{0,1} endpoints are special-cased to bypass the min-max normalisation (which is 0/0 when a
   score is constant across the pool), so `lambda_=1` reproduces `fitness_greedy` as an ordered list.
 - `expected_info_gain` is always the raw `info_gain` of each selected variant, never the blended score.
@@ -226,7 +227,8 @@ allocate(graph, candidates, B, lambda_) -> Allocation:
 
 Every reported comparison includes all three, at each `B`:
 
-1. **info-optimal** — `select(..., lambda_=0.0)`.
+1. **info-optimal** — historical method label for `select(..., lambda_=0.0)`; scientifically this is the
+   v1 ESM-dispersion × loop-coverage heuristic, not calibrated posterior-optimal design.
 2. **fitness-greedy** — top-`B` by predicted `ΔG` (`select(..., lambda_=1.0)`).
 3. **random** — uniform sample of `B` candidates (averaged over ≥ 20 seeds).
 4. **practice heuristic** (v1.1, additional) — top beneficial singles then all their pairwise
@@ -263,6 +265,10 @@ epibudget allocate --fasta FILE --positions 39,40,41,54 --budget 96 \
 
 epibudget validate --dataset gb1_wu2016 --budgets 48,96,192 \
                    [--model esm2_t12_35M] [--seeds 20] [--out report/]
+
+epibudget robustness --scored-cache CACHE [--out report/]     # post-hoc robustness analyses (no GPU)
+
+epibudget downstream --scored-cache CACHE [--out report/]     # downstream-impact benchmark (CPU-only)
 
 epibudget score   --fasta FILE --variants variants.csv        # debug: dump conjoint ΔG + variance
 ```
@@ -306,9 +312,9 @@ Deterministic given `(model_id, seed, config)`. Every output embeds the resolved
 
 ## 11. Out of scope for v1
 
-- Background-averaged (ensemble) epistasis (v1 is WT-referenced). Promotion path: it is the bridge to
-  inference tools like MoCHI — promote to the v1.1 ambition layer *only if* the MoCHI integration is
-  pursued (see `docs/RESEARCH_EPISTASIS.md#3`).
+- Background-averaged (ensemble) epistasis (v1 is WT-referenced). It is the bridge to inference tools
+  like MoCHI, and is a future extension only if that integration is pursued
+  (see `docs/RESEARCH_EPISTASIS.md#3`).
 - Orders > 3.
 - Multi-round / sequential design (v1 is single-shot budget allocation at round 0).
 - Any GPU-specific path.

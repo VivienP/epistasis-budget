@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from itertools import combinations
+from math import isfinite, log
 
 import numpy as np
 import numpy.typing as npt
@@ -24,6 +25,27 @@ _MIN_INTERACTION_ORDER = 2
 def _v(*mutations: Mutation) -> Variant:
     """Build a Variant (frozenset) from point mutations."""
     return frozenset(mutations)
+
+
+def wt_centered_log_fitness(fitness: Mapping[Variant, float]) -> dict[Variant, float]:
+    """Convert raw fitness to live log-fitness relative to the wild-type reference."""
+    wt: Variant = frozenset()
+    if wt not in fitness:
+        raise ValueError("fitness is missing the wild-type reference")
+    for variant, value in fitness.items():
+        if not isfinite(value):
+            raise ValueError(f"fitness contains a non-finite value for variant {sorted(variant)}")
+    reference = fitness[wt]
+    if reference <= 0.0:
+        raise ValueError("wild-type reference fitness must be positive")
+
+    log_reference = log(reference)
+    centered: dict[Variant, float] = {}
+    for variant, value in fitness.items():
+        if value <= 0.0:
+            continue
+        centered[variant] = 0.0 if variant == wt else log(value) - log_reference
+    return centered
 
 
 def epsilon_pairwise(dg: Mapping[Variant, float], i: Mutation, j: Mutation) -> float:
@@ -124,7 +146,7 @@ def ground_truth_epistasis(dg: Mapping[Variant, float], max_order: int = 3) -> l
 
     ``dg`` is the measured ΔG map (e.g. ln fitness, WT-anchored so ΔG(∅)=0). Dead variants have no
     log-fitness and must be absent from ``dg`` upstream; a term is dropped (never imputed) if any of
-    its up-to-seven loop members is missing (invariant #3, docs/STEP1_GATE.md).
+    its up-to-seven loop members is missing (invariant #3, docs/SIGNAL_GATE.md).
     """
     interactions: list[Interaction] = []
     for mutations in _top_order_candidates(dg, max_order):

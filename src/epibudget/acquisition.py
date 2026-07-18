@@ -1,11 +1,11 @@
-"""Information-optimal greedy budget allocation with an exploitation slider. See docs/SPEC.md#6.
+"""Modular budget allocation with an exploitation slider. See docs/SPEC.md#6.
 
 score(v) = (1 − λ)·info_gain(v) + λ·normalized_fitness(v)
-  λ = 0 → pure information-optimal (the thesis)
-  λ = 1 → pure fitness-greedy (the baseline to beat / current practice)
+  λ = 0 → ESM-dispersion × loop-coverage heuristic
+  λ = 1 → pure fitness-greedy baseline
 Under the v1 independent-noise model info_gain is modular (docs/SPEC.md#5), so greedy is exactly
-optimal for a fixed budget — it coincides with sorting candidates by the fixed weight and taking the
-top B. The (1 − 1/e) submodular bound is only the fallback for a future correlated-prior model.
+optimal for that stated modular objective: it coincides with sorting candidates by the fixed weight
+and taking the top B. This does not make it posterior-optimal for the landscape-recovery estimand.
 """
 
 from __future__ import annotations

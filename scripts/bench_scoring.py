@@ -22,6 +22,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
+from _console import configure_utf8_stdout
+
 from epibudget.data import GB1_SITES, GB1_WT_AT_SITES, GB1_WT_SEQUENCE, enumerate_candidates
 from epibudget.scoring import ConjointScorer
 from epibudget.scoring_plan import dedup, plan_variant
@@ -53,6 +55,7 @@ def _dedup_stats(candidates: list[Variant], seed: int, n_perturbations: int) -> 
 
 
 def main() -> None:
+    configure_utf8_stdout()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", default="esm2_t12_35M")
     parser.add_argument("--alphabet", default="ACDEF", help="Per-site candidate alphabet.")

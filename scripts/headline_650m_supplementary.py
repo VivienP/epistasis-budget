@@ -30,6 +30,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 import numpy as np
+from _console import configure_utf8_stdout
 
 from epibudget.acquisition import allocate, fitness_greedy
 from epibudget.data import (
@@ -61,6 +62,7 @@ _AA20 = "ACDEFGHIKLMNPQRSTVWY"
 
 
 def main() -> None:
+    configure_utf8_stdout()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", default="esm2_t33_650M")
     parser.add_argument("--budgets", default="48,96,192")

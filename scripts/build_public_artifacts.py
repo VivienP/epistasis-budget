@@ -34,11 +34,11 @@ class ArtifactSpec(TypedDict):
 
 _SPECS: tuple[ArtifactSpec, ...] = (
     {
-        "filename": "step1_signal_650m.json",
+        "filename": "signal_650m.json",
         "source": "report/spike_gb1_650M.json",
         "source_run_id": "spike_gb1_650M",
         "generation_command": (
-            "python scripts/spike_gb1_epistasis.py "
+            "python scripts/gb1_epistasis_signal.py "
             "--model facebook/esm2_t33_650M_UR50D --seed 0 "
             "--out report/spike_gb1_650M.json"
         ),

@@ -1,4 +1,4 @@
-"""Offline tests for the Phase B robustness analyses (no ESM, no network).
+"""Offline tests for the post-registration robustness analyses (no ESM, no network).
 
 A synthetic order-1..3 pool over three sites stands in for scored GB1 candidates. A linear landscape
 (fitness = exp ΔĜ) makes the cross-fitted slope exactly 1, so cross-fit must reduce to the frozen
@@ -98,6 +98,17 @@ def test_crossfit_slopes_are_all_one_on_a_linear_landscape() -> None:
     assert set(slopes) == set(range(_N_FOLDS))
     for slope in slopes.values():
         assert slope == pytest.approx(1.0)
+
+
+def test_crossfit_slopes_and_truth_are_invariant_to_fitness_scale() -> None:
+    pool = _pool()
+    landscape = _landscape(pool)
+    scaled = {variant: 11.0 * fitness for variant, fitness in landscape.items()}
+
+    assert crossfit_slopes(pool, scaled, _N_FOLDS) == pytest.approx(
+        crossfit_slopes(pool, landscape, _N_FOLDS)
+    )
+    assert _truth_by_term(pool, scaled, 3) == pytest.approx(_truth_by_term(pool, landscape, 3))
 
 
 def test_crossfit_inference_reduces_to_global_when_slope_is_one() -> None:

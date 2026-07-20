@@ -115,8 +115,8 @@ by the variant, and the variance of the conjoint `ΔG` across those passes is ta
 — ESM-2 ships with dropout probability 0, so it would be identically zero:
 
 ```
+delta_g      = conjoint_score(v)                                 # one unperturbed pass; deterministic
 scores = [conjoint_score(v, perturbation=k) for k in range(K)]   # K ≈ 16–32
-delta_g      = mean(scores)
 var_delta_g  = var(scores)      # zero-shot proxy for "how unsure is the model here"
 ```
 

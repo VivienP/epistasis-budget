@@ -59,9 +59,8 @@ epibudget downstream --dataset gb1_wu2016 --scored-cache scored_650m.jsonl \
   --n-perturbations 16 --partitions 20 --seeds 20 --budgets 48,96,192 --max-order 3
 ```
 
-`allocate` always weights the factor graph by the ESM masking variance, so it can only produce the
-`info` selection — the structure-only selection that the downstream benchmark validates is not exposed
-there (see "How it works").
+`allocate` emits only the `info` selection; the structure-only one the benchmark validates is not
+exposed there (see "How it works").
 
 ## The hypothesis under evaluation
 
@@ -133,6 +132,7 @@ are in
 
 Full math and pseudocode: [`docs/SPEC.md`](docs/SPEC.md). Background on epistasis, the Walsh-Hadamard
 formalism, and why this is well-posed: [`docs/RESEARCH_EPISTASIS.md`](docs/RESEARCH_EPISTASIS.md).
+Every approach tried, including the killed ones and why: [`docs/RND_RECORD.md`](docs/RND_RECORD.md).
 
 ## Constraints
 

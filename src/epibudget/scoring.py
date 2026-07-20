@@ -1,4 +1,4 @@
-"""Conjoint ESM-2 scoring. INVARIANT #1 lives here (docs/CLAUDE.md, RESEARCH §5, SPEC §3).
+"""Conjoint ESM-2 scoring. INVARIANT #1 lives here (docs/SIGNAL_GATE.md, RESEARCH §5, SPEC §3).
 
 Multi-mutant scores MUST be computed conjointly: apply all of a variant's mutations to the
 background, then read the conditional log-likelihood of each mutated residue IN THE MUTATED CONTEXT.
@@ -48,7 +48,7 @@ def resolve_device(device: str) -> str:
     """Resolve ``"auto"`` to ``"cuda"`` when a GPU is present, else ``"cpu"``; pass others through.
 
     Prefer CPU/free tiers for reproducibility, but use available compute when a run is otherwise
-    blocked (docs/CLAUDE.md). ``"cpu"`` (the default) and an explicit ``"cuda"`` are honoured as-is.
+    blocked. ``"cpu"`` (the default) and an explicit ``"cuda"`` are honoured as-is.
     """
     if device == "auto":
         import torch  # noqa: PLC0415  # deferred heavy dependency (see _ensure_loaded)

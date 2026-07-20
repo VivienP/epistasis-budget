@@ -25,7 +25,10 @@ budgets and neither an isotropic (6B) nor a pairwise-targeted (6C) label-free D-
 beats the ESM-weighted selection — pure experimental-design geometry does not recover the map above
 random, so the ESM prior (not the acquisition) carries the signal and the budget is the binding
 constraint (Step 6 / `coeff_recovery`). The frozen decision rule below is unchanged; no
-decision-eligible comparative claim is current. Numbers and provenance: `docs/ROADMAP.md` Steps 5–6.
+decision-eligible comparative claim is current. Method: `docs/specs/gate3-correlated-inference.md`
+and `docs/specs/step6-coefficient-recovery.md`. These are internal zero-GPU diagnostics: the numbers
+live in an uncommitted working roadmap, and `gate3` / `coeff_recovery` expose no CLI command, so
+they are not reproducible from the public tree and no claim above is decision-eligible.
 
 ## Dataset
 
@@ -242,8 +245,15 @@ inconclusive overall, and no registered calibration contrast reverses sign acros
 two budgets. Pairwise and third-order terms are never pooled for a decision.
 
 This report does not support a public winner, does not rescue the historical headline, and does not select
-between repairing the v1 model and replacing it for Phase 2. Confirmatory TrpB, downstream and Phase 2 runs
-remain blocked pending an explicit architecture decision.
+between repairing the v1 model and replacing it for Phase 2.
+
+**Factual correction (the registered decision above is unchanged).** The confirmatory TrpB map-recovery run
+and Phase 2 remain blocked pending an explicit architecture decision. The separately-decided
+downstream-impact benchmark (§"Post-registration downstream-impact protocol" below) is not: it was
+subsequently run and is reported in
+[`experiments/trpb-downstream-generalization-20260716.md`](experiments/trpb-downstream-generalization-20260716.md)
+— GB1 decision-eligible (`structural_downstream_supported = true`, 2026-07-15), TrpB exploratory at
+`n_perturbations = 0` (2026-07-16). Both artifacts are `status = provisional` and non-public.
 
 ## Post-registration downstream-impact protocol — 2026-07-11
 

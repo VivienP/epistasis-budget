@@ -109,9 +109,10 @@ epistasis terms in §4 are non-trivial.
 
 ### 3.2 Uncertainty via masking perturbations
 
-The model's uncertainty about `ΔG(v)` is estimated by `K` stochastic passes that perturb the scoring —
-either MC-dropout at inference (dropout enabled) or randomised masking order for multi-site variants
-(the masked-marginal order dependence documented for multi-mutants):
+The model's uncertainty about `ΔG(v)` is estimated by `K` stochastic passes that perturb the *background
+context*: each pass masks a random subset (`mask_fraction`, default 0.15) of the positions **not** mutated
+by the variant, and the variance of the conjoint `ΔG` across those passes is taken. MC-dropout is not used
+— ESM-2 ships with dropout probability 0, so it would be identically zero:
 
 ```
 scores = [conjoint_score(v, perturbation=k) for k in range(K)]   # K ≈ 16–32
@@ -128,10 +129,16 @@ small-model fast path (`esm2_t12_35M`) keep the reduced-alphabet pass CPU-tracta
 ```python
 class ConjointScorer:
     def __init__(self, model_id: str, device: str = "cpu",
-                 n_perturbations: int = 16, seed: int = 0) -> None: ...
+                 n_perturbations: int = 16, seed: int = 0,
+                 mask_fraction: float = 0.15, batch_size: int = 32,
+                 num_threads: int | None = None) -> None: ...
     def score(self, wt: str, variant: Variant) -> ScoredVariant: ...
     def score_batch(self, wt: str, variants: Sequence[Variant]) -> list[ScoredVariant]: ...
 ```
+
+`mask_fraction` is the fraction of background (non-mutated) positions masked in each of the §3.2
+perturbation passes, so it changes `var_delta_g`; `batch_size` and `num_threads` tune throughput only and
+never change the numbers.
 
 ---
 
@@ -151,8 +158,9 @@ def epsilon_third(dg: Mapping[Variant, float], i, j, k) -> float:
 - `predicted_epistasis(scored) -> list[Interaction]` builds `ε_hat` from ESM-2 conjoint scores and
   propagates `var_delta_g` into a seed `σ²` per interaction (linear error propagation through the
   inclusion–exclusion sum, assuming independent score noise as a first approximation).
-- `ground_truth_epistasis(dms_frame) -> list[Interaction]` computes the true ε terms from measured GB1
-  fitness (for validation only). For completeness it can also compute the multiallelic WHT spectrum of
+- `ground_truth_epistasis(dg: Mapping[Variant, float], max_order: int = 3) -> list[Interaction]` computes
+  the true ε terms from the measured WT-anchored ΔG map (`wt_centered_log_fitness` of the measured
+  fitnesses); validation only, σ²=0. For completeness it can also compute the multiallelic WHT spectrum of
   the full landscape to report variance-by-order.
 
 ---
@@ -227,13 +235,20 @@ allocate(graph, candidates, B, lambda_) -> Allocation:
 
 Every reported comparison includes all three, at each `B`:
 
-1. **info-optimal** — historical method label for `select(..., lambda_=0.0)`; scientifically this is the
+1. **info-optimal** — historical method label for `allocate(..., lambda_=0.0)`; scientifically this is the
    v1 ESM-dispersion × loop-coverage heuristic, not calibrated posterior-optimal design.
-2. **fitness-greedy** — top-`B` by predicted `ΔG` (`select(..., lambda_=1.0)`).
+2. **fitness-greedy** — top-`B` by predicted `ΔG` (`fitness_greedy(candidates, B)`).
 3. **random** — uniform sample of `B` candidates (averaged over ≥ 20 seeds).
 4. **practice heuristic** (v1.1, additional) — top beneficial singles then all their pairwise
    combinations (the real-world design, cf. MULTI-evolve). Reported as a fourth comparison; not part of the
    frozen decision rule, which stays on info vs fitness vs random. See `docs/VALIDATION.md`.
+5. **structural-only** (additional) — the `τ² ≡ const` ablation of info-optimal: the same modular sort with
+   every variant's dispersion pinned to 1.0, so ranking reduces to `n(v)` (loops braced) alone and the ESM
+   masking-perturbation dispersion plays no role. Isolates what the uncertainty prior contributes: if
+   info-optimal ≈ structural-only, the prior adds nothing. Reported as a fifth comparison at every `B`;
+   like practice, not part of this section's frozen decision rule — though `structural − fitness` is the
+   primary contrast of the downstream-impact benchmark (`docs/specs/downstream.md`). See
+   `docs/VALIDATION.md`.
 
 ### Validation pipeline
 
@@ -242,7 +257,7 @@ validate(dataset, budgets, model_id, seeds) -> Report:
     load measured GB1 four-site rows (data.py)
     truth = ground_truth_epistasis(full landscape)          # via WHT / inclusion-exclusion
     for B in budgets:
-        for method in {info, fitness, random}:
+        for method in {info, fitness, structural, random, practice}:
             selected = allocate(method, B)                  # zero-shot; never sees labels
             revealed = reveal_measured_fitness(selected)    # simulate wet-lab from GB1
             inferred = infer_epistasis(revealed)            # least-squares / MoCHI-style fit
@@ -268,16 +283,26 @@ epibudget validate --dataset gb1_wu2016 --budgets 48,96,192 \
 
 epibudget robustness --scored-cache CACHE [--out report/]     # post-hoc robustness analyses (no GPU)
 
-epibudget downstream --scored-cache CACHE [--out report/]     # downstream-impact benchmark (CPU-only)
+epibudget gate2    [--scored-cache report/scored_650m.jsonl] [--budgets 48,96,192] \
+                   [--random-seeds 20] [--structural-seeds 100] [--n-folds 5] \
+                   [--max-order 3] [--out report/]            # corrective Gate 2 analysis (CPU-only)
+
+epibudget downstream --scored-cache CACHE \
+                   [--dataset gb1_wu2016|trpb_johnston2024] [--n-perturbations 16] \
+                   [--budgets 48,96,192] [--seeds 20] [--partitions 20] [--max-order 3] \
+                   [--n-folds 5] [--out report/]              # downstream-impact benchmark (CPU-only)
 
 epibudget score   --fasta FILE --variants variants.csv        # debug: dump conjoint ΔG + variance
 ```
 
 `allocate` prints a rich table (rank, variant, order, ΔG, marginal info gain) and writes
 `Allocation` JSON. `validate` writes `report/<run_id>/metrics.json` (one row per method × budget, with
-per-order correlations, CIs, and coverage) and prints a rich summary; the figures are rendered
-separately by `notebooks/gb1_demo.ipynb` from that JSON. Any empirical claim must trace to a
-`metrics.json` written by this command.
+per-order correlations, CIs, and coverage) and prints a rich summary; no figure-rendering step is
+committed, so `metrics.json` is the artifact. Any empirical claim must trace to a
+`metrics.json` written by this command. `gate2` re-analyses a completed 650M GB1 cache — it validates the
+cache identity (model, scorer seed, perturbation count) against the enumerated candidate universe before
+any fitness label is read — and writes `report/<run_id>/gate2.json`; it is GB1-only and reports
+`public_claim_eligible=False`.
 
 ---
 
@@ -302,7 +327,7 @@ Deterministic given `(model_id, seed, config)`. Every output embeds the resolved
 
 | Module | Owns | Key tests |
 |--------|------|-----------|
-| `data.py` | GB1/ProteinGym loaders, candidate enumeration | `test_data`: GB1 loads to 160k rows; enumeration counts |
+| `data.py` | GB1/ProteinGym loaders, candidate enumeration | `test_data`: GB1 loads its ~149k measured rows of the 160k theoretical four-site space; enumeration counts |
 | `scoring.py` | conjoint scoring, dispersion | `test_scoring`: **ε not identically zero**; determinism under seed |
 | `epistasis.py` | ε terms, WHT ground truth | `test_epistasis`: inclusion–exclusion identities; WHT round-trip |
 | `graph.py` | Gaussian factor graph, variance updates | `test_graph`: variance is non-increasing in measurements; submodularity |

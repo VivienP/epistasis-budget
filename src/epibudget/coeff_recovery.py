@@ -69,7 +69,7 @@ _CD_TOL = 1e-7
 _RIDGE_LAMBDA_GRID: tuple[float, ...] = tuple(float(value) for value in np.logspace(-3, 4, 15))
 
 # Decision rule (operational budgets B>=96): the ESM pipeline's Gate-3 residualized recovery,
-# a fixed constant reference (docs/VALIDATION.md), not re-derived here.
+# a fixed constant reference (docs/specs/step6-coefficient-recovery.md), not re-derived here.
 _OPERATIONAL_BUDGET = 96
 _ESM_REFERENCE: dict[str, dict[int, float]] = {
     "pairwise": {96: 0.20, 192: 0.29},

@@ -85,7 +85,9 @@ class Allocation(BaseModel):
 
 
 class Config(BaseModel):
-    """Runtime configuration; outputs embed the resolved config for reproducibility. See SPEC #9."""
+    """Declarative runtime-configuration schema mirroring SPEC #9. Not constructed by any command:
+    run provenance is embedded per-field by `validate.Report` and `scored_cache.CacheMetadata`,
+    and as a whole object by `gate2.Gate2Report.config` (a separate `Gate2Config`)."""
 
     model_id: str = "facebook/esm2_t33_650M_UR50D"
     device: str = "cpu"

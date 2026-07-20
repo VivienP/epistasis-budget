@@ -1,13 +1,14 @@
-"""GB1 validation harness. Frozen protocol in docs/VALIDATION.md.
+"""Landscape validation harness (dataset-generic; registered landscapes in data.DATASETS).
 
-Compares five methods at each budget: info-optimal, fitness-greedy, structural-only, random, and
-practice. Recovery is evaluated against eligible GB1 ground-truth terms. Info, fitness, and random
-form the frozen decision rule; structural and practice are companions.
+Frozen protocol in docs/VALIDATION.md. Compares five methods at each budget: info-optimal,
+fitness-greedy, structural-only, random, and practice. Recovery is evaluated against the eligible
+ground-truth terms of the selected landscape. Info, fitness, and random form the frozen decision
+rule; structural and practice are companions.
 
 Isolation. The SAME ``infer_epistasis`` runs per method; only the *selected set* differs, so the
 comparison isolates selection, not inference. Selection is zero-shot (ESM predictions + the factor
 graph). Measured fitness enters exactly once, via ``data.reveal_measured_fitness``, strictly after a
-method has returned its selection (docs/skills/no-label-leakage).
+method has returned its selection (docs/VALIDATION.md threats table).
 
 Inference (docs/VALIDATION.md §Simulation). ``infer_epistasis`` is the closed-form posterior mean of
 the linear-Gaussian model in graph.py: measuring a variant pins its ΔG, and every unmeasured loop
@@ -72,7 +73,7 @@ class OrderMetric(BaseModel):
 
 
 class MethodResult(BaseModel):
-    method: str  # "info" | "fitness" | "random" | "practice"
+    method: str  # "info" | "fitness" | "structural" | "random" | "practice"
     budget: int
     ci_method: str  # "bootstrap-over-terms" | "bootstrap-over-seeds"
     hit_rate: float

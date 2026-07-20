@@ -1,6 +1,6 @@
 """Modular budget allocation with an exploitation slider. See docs/SPEC.md#6.
 
-score(v) = (1 − λ)·info_gain(v) + λ·normalized_fitness(v)
+score(v) = (1 − λ)·normalized_info_gain(v) + λ·normalized_fitness(v)
   λ = 0 → ESM-dispersion × loop-coverage heuristic
   λ = 1 → pure fitness-greedy baseline
 Under the v1 independent-noise model info_gain is modular (docs/SPEC.md#5), so greedy is exactly

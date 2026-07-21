@@ -150,6 +150,7 @@ outer_folds        = 5
 budgets             = (48, 96, 192)   # order-sensitive: learning_curve_auc integrates in this order
 alphabet            = "ACDEFGHIKLMNPQRSTVWY"
 max_order           = 3
+n_perturbations     = 16                 # scoring recipe of the cache; 0 zeroes var_delta_g, degenerating `info`
 random_seeds        = tuple(range(20))   # the seeds parameter is a count; the set is {0, ..., 19}
 inner_folds         = 3
 estimands           = {"target_blind", "target_aware"}
@@ -162,11 +163,23 @@ flagged, since the AUC contrast trapezoidal-integrates over `budgets` in the giv
 sequence fields are compared as sets. No value is ever coerced toward the profile — a mismatch is
 always reported, never silently accepted or truncated.
 
+`n_perturbations` is an identity field, not a scale field: it is absent from
+`_SCALE_ONLY_PROFILE_FIELDS`, so a cache scored at any value other than 16 is always
+`nonconforming_protocol_profile`, never `smoke_or_exploratory_profile` — at `n_perturbations = 0` the
+masking variance `var_delta_g` is identically zero and `info`'s selection degenerates to an arbitrary
+tie-break.
+
+`CONFIRMATORY_PROFILE` is deliberately landscape-blind: it certifies the execution *recipe*, not which
+landscape was run. The landscape a report certifies is the one recorded in `DownstreamReport.dataset`;
+`decision_eligible = true` therefore means "confirmatory recipe on the landscape named in `dataset`",
+never "confirmatory on GB1". A run on any landscape `data.resolve_dataset` accepts (currently
+`gb1_wu2016`, `trpb_johnston2024`) can be decision-eligible on its own terms.
+
 **Three distinct non-decision statuses**, replacing the single generic
 `status = "insufficient_valid_partitions"` for every non-eligible case:
 
 - `status = "nonconforming_protocol_profile"` — the executed configuration does not match the frozen
-  profile in some dimension other than partition count alone (wrong alphabet, budgets, `K`, `max_order`,
+  profile in some dimension other than partition count alone (wrong alphabet, budgets, `K`, `max_order`, `n_perturbations`,
   seed count, or missing estimand/regime/method coverage — e.g. a regime silently skipped because its
   pool was smaller than the max budget). `decision_eligible = False`, `supported = None`.
 - `status = "smoke_or_exploratory_profile"` — every profile dimension matches **except**
@@ -287,11 +300,15 @@ recover the ESM prior algebraically (the new, less-visible tautology this design
 
 ## Claimable scope
 
-A positive result may state: *"At equal initial budget on GB1, structure-aware selection provides a better
-training set for a fixed pairwise ridge learner to rank held-out double and triple mutants than
-fitness-greedy, across 20 salted partitions of this one landscape."* It may **not** state that epibudget is
-an active-learning system, that the plate yields generally better wet-lab decisions, or that the result
-generalizes beyond GB1. The benchmark is retrospective, single-landscape, single-assay,
+A positive result may state, for the landscape named in its own `dataset` field: *"At equal initial budget
+on that landscape, structure-aware selection provides a better training set for a fixed pairwise ridge
+learner to rank held-out double and triple mutants than fitness-greedy, across 20 salted partitions of this
+one landscape."* The registered GB1 result licenses that sentence for GB1 and nothing beyond it; a
+decision-eligible TrpB run would independently license the same sentence with "TrpB" substituted; and only
+a joint statement across two decision-eligible landscapes licenses "replicates on a second landscape". It
+may **not** state that epibudget is an active-learning system, that the plate yields generally better
+wet-lab decisions, or that the result generalizes beyond the landscape it was run on. The benchmark is
+retrospective, single-landscape, single-assay,
 single-primary-learner, one-step, with no sequential selector update — even a fully positive confirmatory
 result remains all of these (see the final report's "Remaining limitations").
 

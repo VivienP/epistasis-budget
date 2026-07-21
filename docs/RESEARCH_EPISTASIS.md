@@ -189,9 +189,13 @@ This is classical optimal experimental design, imported into sequence space:
   {ij, ik, jk} and vertices {i,j,k}: measuring the members of a loop pins down ε(i,j,k). The most
   informative *B* variants are those that best "brace" the epistasis factor graph.
 
-Under a Gaussian model of the interaction terms, expected-uncertainty-reduction is **submodular**, so a
-greedy selection is near-optimal and cheap — no combinatorial search, tractable on CPU. This is the
-engine in [`SPEC.md#acquisition`](SPEC.md).
+Under the v1 independent-noise Gaussian model this expected uncertainty reduction is **modular**, not
+strictly submodular: `info_gain(M, v) = τ²_v · n(v)` does not depend on what has already been selected,
+so allocation is a single exact sort rather than an iterative greedy loop — no combinatorial search,
+tractable on CPU, and exactly optimal for that stated modular objective rather than (1 − 1/e)-near
+optimal. The loop-closure / diminishing-returns intuition above is therefore **not realized in v1**; it
+would require correlated priors across variants, which are out of v1 scope (SPEC.md §5, §11). This is
+the engine in [`SPEC.md#acquisition`](SPEC.md).
 
 > **Why this is well-posed and not circular.** The *uncertainties* that drive selection come from ESM-2
 > (a masking-perturbation / ensemble dispersion of the conjoint scores — a zero-shot proxy for "how
@@ -209,7 +213,7 @@ engine in [`SPEC.md#acquisition`](SPEC.md).
 | HOE declines with order but has large exceptions (§2) | value = *uncertainty* of a term, not its expected magnitude — chase the exceptions |
 | WHT partitions variance by order (§3) | WHT is used only on complete synthetic grids; real-GB1 truth uses WT-referenced complete loops |
 | GB1/Wu-2016 provides dense higher-order measurements (§4) | it is the validation substrate; scope is conditional on complete positive-fitness loops |
-| Uncertainty reduction is submodular (§6) | greedy allocation, CPU-tractable, near-optimal |
+| Uncertainty reduction is modular under v1 independent noise (§6) | allocation is a single exact sort, CPU-tractable; diminishing returns not realized |
 | MoCHI infers, doesn't design (§6, PRIOR_ART) | `epibudget` is the design front-end that feeds inference tools |
 
 ---

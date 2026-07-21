@@ -10,8 +10,7 @@ The literature is crowded on two fronts — (a) **inferring** epistasis from dat
 variants to **maximise fitness**. It is empty on the intersection we target: **selecting variants,
 under a fixed budget and before any measurement, to maximise information about the epistatic structure
 itself.** `epibudget` is an experimental-design front-end (what to measure) that feeds inference tools
-like MoCHI (what the measurements mean), using an ESM-2 zero-shot uncertainty prior and a
-loop-closure / BALD-style acquisition.
+like MoCHI (what the measurements mean), using a loop-closure / BALD-style acquisition.
 
 ## Landscape
 
@@ -21,7 +20,7 @@ loop-closure / BALD-style acquisition.
 | **ALDE** (Nat. Commun. 2025), **BO-EVO** (Brief. Bioinform. 2023) | Active learning / Bayesian optimisation to reach **high-fitness** variants | Different objective (fitness, not epistasis information). epibudget's `--lambda` slider can reproduce fitness-greedy as a special case, used as the baseline to beat. |
 | **MULTI-evolve** (Arc Institute) | Heuristic: pick 15–20 beneficial singles, test **all** their pairwise combinations | The current practical design. A fixed heuristic, not information-optimal; epibudget generalises and (claim) improves on it at equal budget. |
 | **Amir et al. 2024** (arXiv:2405.06645, `InteractionRecovery`) | Walsh–Hadamard **recovery** of higher-order interactions **from ESM-2** predictions | **Closest prior art.** Shares the ESM-2 + WH machinery. Does *recovery/interpretation*, not budgeted experimental design, and does not use uncertainty to select experiments. We reuse their kind of decomposition but for a different job. |
-| **PLMs Capture Epistasis Zero-Shot** (bioRxiv 2025.09.14.676130) | Characterises what epistasis PLMs capture zero-shot | Justifies our ESM-2 uncertainty prior; descriptive, no design method. |
+| **PLMs Capture Epistasis Zero-Shot** (bioRxiv 2025.09.14.676130) | Characterises what epistasis PLMs capture zero-shot | Justifies our ESM-2 conjoint-score signal; descriptive, no design method. |
 | **BALD** (Houlsby et al. 2011), **D-optimal design**, **Statistical Guide to DMS design** (Genetics 2016) | General optimal-experimental-design theory | The method we import. Not previously applied to *epistasis-structure* selection in sequence space as a package. |
 | **Benchmarking UQ for Protein Engineering** (PLOS CB 2025) and few-shot fitness works | Uncertainty for **fitness** prediction | Adjacent; targets fitness UQ, not epistasis-term UQ for design. |
 
@@ -37,8 +36,14 @@ loop-closure / BALD-style acquisition.
 1. **Objective reframing.** Allocate a fixed budget to maximise **reduction of uncertainty about the
    epistasis coefficients** (a factor-graph / loop-closure information objective), rather than to
    maximise predicted fitness.
-2. **Zero-shot uncertainty prior.** Seed interaction uncertainties from ESM-2 conjoint-score dispersion
-   under masking perturbations — no wet-lab data required at round 0.
+2. **Zero-shot uncertainty prior — tested, not supported.** Seeding interaction uncertainties from
+   ESM-2 conjoint-score dispersion under masking perturbations was the intended prior. On the
+   downstream-impact benchmark it fails its gate: `info − structural` is 15/20 partitions (below the
+   16/20 sign gate), mean +0.007, so the masking-variance prior adds nothing over structure-aware
+   selection alone
+   ([`experiments/trpb-downstream-generalization-20260716.md`](experiments/trpb-downstream-generalization-20260716.md)).
+   It is reported as a negative result, not a contribution. The separate conjoint-**score** signal
+   claim is unaffected; see `docs/LIMITATIONS.md` §5.
 3. **An open-source, practitioner-facing design tool** that outputs a ranked shortlist of B variants
    with expected information gain, and slots in front of inference tools like MoCHI.
 4. **A null-tolerant benchmark** on the measurable, complete-loop subset of the GB1 four-site dataset:

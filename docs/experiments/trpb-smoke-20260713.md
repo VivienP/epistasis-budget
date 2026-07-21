@@ -349,6 +349,12 @@ neither for nor against the frozen GB1 claim.
 
 ## 8. Corrective status and remaining recommendation
 
+**Partly overtaken on 2026-07-16.** The downstream-impact benchmark has since run: the confirmatory GB1
+run is decision-eligible with `structural_downstream_supported = true`, and an exploratory TrpB downstream
+replication ran at `n_perturbations = 0` (non-decision-eligible). See
+[`trpb-downstream-generalization-20260716.md`](trpb-downstream-generalization-20260716.md). The confirmatory
+TrpB recovery re-run of item 3 below and Phase 2 remain blocked; the rest of this section stands.
+
 The WT anchor and zero-GPU GB1 corrective gate are complete. The gate separates seeded structural
 tie-breaks from method-specific and shared-slope regimes, but its registered decision is inconclusive and
 ineligible for public claims. `structural − fitness` remains the primary downstream contrast, so

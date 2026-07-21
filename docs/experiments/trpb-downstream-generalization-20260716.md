@@ -63,8 +63,9 @@ as above.)
 Two biochemically independent combinatorial landscapes give the same result: at equal budget, a
 structure-aware plate is a better training set for ranking held-out epistasis than a **random** plate
 (GB1 +0.175, TrpB +0.135; 20/20 partitions each) and than **fitness-greedy** (GB1 +0.342, TrpB +0.286;
-20/20 each), while fitness-greedy is worse than random on both. The GB1 finding is therefore not
-GB1-specific; it replicates on a second landscape.
+20/20 each), while fitness-greedy is worse than random on both. The direction therefore replicates on
+a second landscape, but the TrpB run is exploratory (`n_perturbations = 0`, non-decision-eligible):
+it corroborates that the GB1 finding is not GB1-specific rather than establishing it.
 
 ## Robustness controls
 

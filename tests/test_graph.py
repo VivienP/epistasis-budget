@@ -14,8 +14,8 @@ from itertools import pairwise
 
 import pytest
 
-from epibudget.graph import EpistasisFactorGraph
-from epibudget.types import Interaction, Mutation, Variant
+from epibudget.graph import EpistasisFactorGraph, selection_graph, variant_variance
+from epibudget.types import Interaction, Mutation, ScoredVariant, Variant
 
 MUT_I: Mutation = (0, "A", "C")
 MUT_J: Mutation = (1, "D", "E")
@@ -158,3 +158,36 @@ def test_info_gain_zero_and_total_unchanged_for_candidate_outside_every_loop() -
     assert graph.info_gain(frozenset(), outsider) == pytest.approx(0.0)
     base = graph.total_uncertainty(frozenset())
     assert graph.total_uncertainty(frozenset({outsider})) == pytest.approx(base)
+
+
+def _scored_toy() -> list[ScoredVariant]:
+    """Two singles and their double, with distinct τ² so the two weightings must disagree."""
+    return [
+        ScoredVariant(variant=_v(MUT_I), delta_g=0.5, var_delta_g=0.25),
+        ScoredVariant(variant=_v(MUT_J), delta_g=0.1, var_delta_g=4.0),
+        ScoredVariant(variant=_v(MUT_I, MUT_J), delta_g=0.9, var_delta_g=1.0),
+    ]
+
+
+def test_variant_variance_info_carries_dispersion_and_structural_is_unit() -> None:
+    scored = _scored_toy()
+    assert variant_variance(scored, "info") == {sv.variant: sv.var_delta_g for sv in scored}
+    assert variant_variance(scored, "structural") == {sv.variant: 1.0 for sv in scored}
+
+
+def test_variant_variance_rejects_an_unknown_method() -> None:
+    with pytest.raises(ValueError, match="unknown selection method"):
+        variant_variance(_scored_toy(), "fitness")  # type: ignore[arg-type]
+
+
+def test_structural_selection_graph_ranks_by_loops_braced_alone() -> None:
+    # With τ² ≡ 1 the weight is exactly n(v): both singles brace the one pairwise loop, so they tie
+    # at 1.0 regardless of their very different dispersions — which is what `info` would rank on.
+    scored = _scored_toy()
+    structural = selection_graph(scored, 2, "structural")
+    gains = {sv.variant: structural.info_gain(frozenset(), sv.variant) for sv in scored}
+    assert gains[_v(MUT_I)] == pytest.approx(1.0)
+    assert gains[_v(MUT_J)] == pytest.approx(1.0)
+
+    info = selection_graph(scored, 2, "info")
+    assert info.info_gain(frozenset(), _v(MUT_J)) > info.info_gain(frozenset(), _v(MUT_I))

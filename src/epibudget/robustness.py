@@ -34,10 +34,9 @@ from epibudget.epistasis import (
     epsilon_third,
     ground_truth_epistasis,
     interaction_loop,
-    predicted_epistasis,
     wt_centered_log_fitness,
 )
-from epibudget.graph import EpistasisFactorGraph
+from epibudget.graph import selection_graph
 from epibudget.provenance import write_json_exclusive
 from epibudget.scoring_plan import variant_key
 from epibudget.types import Interaction, ScoredVariant, Variant
@@ -551,9 +550,7 @@ def _truth_by_term(
 def _deterministic_selections(
     scored: Sequence[ScoredVariant], budget: int, max_order: int
 ) -> dict[str, list[Variant]]:
-    graph = EpistasisFactorGraph(
-        predicted_epistasis(scored, max_order), {sv.variant: sv.var_delta_g for sv in scored}
-    )
+    graph = selection_graph(scored, max_order, "info")
     structural = structural_graph(scored, max_order)
     return {
         "info": allocate(graph, scored, budget, lambda_=0.0).selected,

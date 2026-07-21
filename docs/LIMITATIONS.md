@@ -165,7 +165,9 @@ corrective Gate 2 report but remain constraints on interpreting the historical a
   unreplicated draw with no variance over its tie-break. Gate 2 retains that legacy prefix as diagnostic
   only and evaluates 100 seeded permutations of each exact score stratum. Its registered τ²-contribution
   decision is inconclusive, so neither direction is promoted to a public claim. The same structural graph
-  remains the control in the downstream benchmark's primary contrast; that benchmark stays blocked.
+  remains the control in the downstream benchmark's primary contrast; that benchmark has since run on GB1
+  (confirmatory, decision-eligible) and TrpB (exploratory) — see
+  [`experiments/trpb-downstream-generalization-20260716.md`](experiments/trpb-downstream-generalization-20260716.md).
 
 - **A per-method calibration slope can set low-coverage recovery signs.** With no measured loop member,
   ε̂ = b · ε̂_ESM exactly, so a near-zero-coverage method reports `sign(b) · ρ_prior` — the sign of a
@@ -181,16 +183,29 @@ corrective Gate 2 report but remain constraints on interpreting the historical a
 
 ## 7. Not yet done (scope, not failure)
 
-- **No confirmatory downstream-impact result** — a downstream-impact benchmark (does a structure-aware
-  budget's map support a *better decision* on held-out mutants?) is implemented and fully specified
-  (`src/epibudget/downstream.py`, `docs/specs/downstream.md`), but no confirmatory R=20 downstream result
-  has yet been produced or scientifically validated. This is the one test that escapes the recovery
-  tautology §4 describes; it is the highest-value next step precisely because §4 makes the recovery
-  headline thin on its own.
-- **No second-landscape result.** The TrpB path is implemented and an exploratory smoke has run, but it is
-  off-protocol (`B ∈ {24, 48}`, 5 seeds vs the frozen 48/96/192, ≥ 20). TrpB scientific transfer is
-  **unestablished in either direction**. Its historical recovery and truth-map summaries are invalidated by
-  the old anchor, while its selections, coverage, hit-rate and configuration remain descriptive. The old
-  `var_epsilon` field is truth variance and cannot establish the predicted-epistasis CLI invariant.
+- **The confirmatory downstream-impact result is GB1-only, unregistered, and does not support the
+  masking-variance prior.** The R=20 GB1 run (`report/20260715T111312Z/downstream.json`, 650M,
+  `n_perturbations = 16`, `B ∈ {48, 96, 192}`, 20 partitions × 20 seeds) matches the frozen confirmatory
+  profile exactly and passes the 7-point robustness gate on `structural − fitness` S_macro-AUC (20/20
+  partitions positive, mean +0.342), so `structural_downstream_supported = true`. This is the one test that
+  escapes the recovery tautology §4 describes. Three gaps remain: the artifact is `status = provisional`
+  under the git-ignored `report/` and is not registered in `artifacts/`; the `info − structural` gate on
+  S_macro at B = 192 fails (15/20, below the 16/20 sign threshold), so `esm_uncertainty_supported = false`
+  and the masking-variance prior stays unsupported; and the second landscape is exploratory only. See
+  [`experiments/trpb-downstream-generalization-20260716.md`](experiments/trpb-downstream-generalization-20260716.md).
+- **No second-landscape *recovery* result; the downstream replication is corroborating only.** The
+  pre-registered TrpB recovery run ([`VALIDATION.md`](VALIDATION.md) §"Second landscape — TrpB", frozen at
+  `B ∈ {48, 96, 192}`, ≥ 20 seeds) remains deferred; the only recovery run executed is off-protocol
+  (`B ∈ {24, 48}`, 5 seeds — [`experiments/trpb-smoke-20260713.md`](experiments/trpb-smoke-20260713.md))
+  and uninterpretable. Separately, the downstream-impact benchmark *has* run on TrpB at its own full
+  protocol scale (R=20 × K=5 × 20 seeds, budgets {48, 96, 192}) and reproduces the GB1 direction —
+  structural − random 20/20 positive (+0.135), structural − fitness 20/20 (+0.286), with a permutation
+  null leaving ~90% of the effect as real signal. That run is scored at `n_perturbations = 0` (its only
+  protocol mismatch), so it is `decision_eligible = false`: TrpB transfer is **corroborated, not
+  established**, and no `info`/masking-variance conclusion is available from it at n=0. See
+  [`experiments/trpb-downstream-generalization-20260716.md`](experiments/trpb-downstream-generalization-20260716.md).
+  Its historical recovery and truth-map summaries are invalidated by the old anchor, while its selections,
+  coverage, hit-rate and configuration remain descriptive. The old `var_epsilon` field is truth variance
+  and cannot establish the predicted-epistasis CLI invariant.
 - **No background-averaged ε, no MoCHI handoff, no multi-round sequential design** — all deliberately out
   of scope for v1.

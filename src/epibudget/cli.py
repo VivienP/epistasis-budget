@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import typer
 from rich.console import Console
@@ -14,6 +14,7 @@ from typer.core import TyperCommand
 from epibudget.types import Mutation, Variant
 
 if TYPE_CHECKING:
+    from epibudget.graph import SelectionMethod
     from epibudget.scored_cache import CacheIdentity
     from epibudget.validate import Report
 
@@ -180,6 +181,10 @@ def allocate(
     ),
     budget: int = typer.Option(..., help="Number of variants to select (B wells)."),
     model: str = typer.Option("esm2_t33_650M", help="ESM-2 checkpoint short name or HF id."),
+    method: str = typer.Option(
+        "info",
+        help="Selection weighting: info (ESM dispersion x loops-braced) or structural (loops only)",
+    ),
     lambda_: float = typer.Option(0.0, "--lambda", min=0.0, max=1.0, help="0=info, 1=fitness."),
     max_order: int = typer.Option(3, help="Max interaction order (2 or 3)."),
     alphabet: str = typer.Option(_AA20, help="Per-site candidate alphabet."),
@@ -192,9 +197,13 @@ def allocate(
     """Rank the B most epistasis-informative variants for a target."""
     from epibudget.acquisition import allocate as allocate_variants  # noqa: PLC0415
     from epibudget.data import enumerate_candidates  # noqa: PLC0415
-    from epibudget.epistasis import predicted_epistasis  # noqa: PLC0415
-    from epibudget.graph import EpistasisFactorGraph  # noqa: PLC0415
+    from epibudget.graph import SELECTION_METHODS, selection_graph  # noqa: PLC0415
     from epibudget.scoring import ConjointScorer  # noqa: PLC0415
+
+    if method not in SELECTION_METHODS:
+        raise typer.BadParameter(
+            f"--method must be one of {', '.join(SELECTION_METHODS)}, got {method!r}"
+        )
 
     wt = read_fasta_sequence(Path(fasta))
     sites = [int(p) - 1 for p in positions.split(",")]
@@ -212,13 +221,13 @@ def allocate(
         num_threads=threads if threads > 0 else None,
     )
     scored = scorer.score_batch(wt, candidates)
-    graph = EpistasisFactorGraph(
-        predicted_epistasis(scored, max_order), {sv.variant: sv.var_delta_g for sv in scored}
+    graph = selection_graph(scored, max_order, cast("SelectionMethod", method))
+    result = allocate_variants(
+        graph, scored, budget, lambda_=lambda_, seed=seed, model_id=model, method=method
     )
-    result = allocate_variants(graph, scored, budget, lambda_=lambda_, seed=seed, model_id=model)
 
     dg_of = {sv.variant: sv.delta_g for sv in scored}
-    table = Table(title=f"allocate B={budget} λ={lambda_} model={model}")
+    table = Table(title=f"allocate B={budget} method={method} λ={lambda_} model={model}")
     for column, justify in (("rank", "right"), ("variant", "left"), ("order", "left")):
         table.add_column(column, justify=justify)  # type: ignore[arg-type]
     table.add_column("ΔG", justify="right")

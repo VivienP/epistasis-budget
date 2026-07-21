@@ -1,13 +1,14 @@
-"""GB1 validation harness. Frozen protocol in docs/VALIDATION.md.
+"""Landscape validation harness (dataset-generic; registered landscapes in data.DATASETS).
 
-Compares five methods at each budget: info-optimal, fitness-greedy, structural-only, random, and
-practice. Recovery is evaluated against eligible GB1 ground-truth terms. Info, fitness, and random
-form the frozen decision rule; structural and practice are companions.
+Frozen protocol in docs/VALIDATION.md. Compares five methods at each budget: info-optimal,
+fitness-greedy, structural-only, random, and practice. Recovery is evaluated against the eligible
+ground-truth terms of the selected landscape. Info, fitness, and random form the frozen decision
+rule; structural and practice are companions.
 
 Isolation. The SAME ``infer_epistasis`` runs per method; only the *selected set* differs, so the
 comparison isolates selection, not inference. Selection is zero-shot (ESM predictions + the factor
 graph). Measured fitness enters exactly once, via ``data.reveal_measured_fitness``, strictly after a
-method has returned its selection (docs/skills/no-label-leakage).
+method has returned its selection (docs/VALIDATION.md threats table).
 
 Inference (docs/VALIDATION.md §Simulation). ``infer_epistasis`` is the closed-form posterior mean of
 the linear-Gaussian model in graph.py: measuring a variant pins its ΔG, and every unmeasured loop
@@ -37,7 +38,7 @@ from epibudget.epistasis import (
     predicted_epistasis,
     wt_centered_log_fitness,
 )
-from epibudget.graph import EpistasisFactorGraph
+from epibudget.graph import EpistasisFactorGraph, selection_graph, variant_variance
 from epibudget.provenance import write_json_exclusive
 from epibudget.types import Interaction, Mutation, ScoredVariant, Variant
 
@@ -72,7 +73,7 @@ class OrderMetric(BaseModel):
 
 
 class MethodResult(BaseModel):
-    method: str  # "info" | "fitness" | "random" | "practice"
+    method: str  # "info" | "fitness" | "structural" | "random" | "practice"
     budget: int
     ci_method: str  # "bootstrap-over-terms" | "bootstrap-over-seeds"
     hit_rate: float
@@ -365,9 +366,7 @@ def structural_graph(scored: Sequence[ScoredVariant], max_order: int = 3) -> Epi
     interaction loops a variant braces. If info-optimal (which uses the real τ²) does not beat
     selection by this graph, the ESM uncertainty prior contributes nothing to the allocation.
     """
-    return EpistasisFactorGraph(
-        predicted_epistasis(scored, max_order), {sv.variant: 1.0 for sv in scored}
-    )
+    return selection_graph(scored, max_order, "structural")
 
 
 def hit_rate(selected: Sequence[Variant], fitness: Mapping[Variant, float], budget: int) -> float:
@@ -445,9 +444,9 @@ def run_validation(
     predicted_epistasis_signal = any(
         abs(interaction.epsilon_hat) > predicted_epistasis_tolerance for interaction in predicted
     )
-    graph = EpistasisFactorGraph(predicted, {sv.variant: sv.var_delta_g for sv in scored})
+    graph = EpistasisFactorGraph(predicted, variant_variance(scored, "info"))
     # τ² ≡ const ablation
-    structural = EpistasisFactorGraph(predicted, {sv.variant: 1.0 for sv in scored})
+    structural = EpistasisFactorGraph(predicted, variant_variance(scored, "structural"))
     candidate_fitness = _candidate_fitness(scored, landscape)
 
     results: list[MethodResult] = []

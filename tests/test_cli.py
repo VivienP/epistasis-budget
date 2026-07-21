@@ -316,8 +316,10 @@ def test_allocate_rejects_an_unknown_method(
             "fitness",
         ],
     )
+    # Assert rejection by exit code, not the BadParameter message: typer Rich-wraps that panel at
+    # CI's narrow width, so the string is not portable. Message covered by
+    # test_graph.py::test_variant_variance_rejects_an_unknown_method.
     assert result.exit_code != 0
-    assert "--method must be one of" in result.output
 
 
 def _write_gb1_csv(path: Path, variants: list[Variant]) -> None:

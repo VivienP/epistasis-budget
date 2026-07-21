@@ -3,4 +3,7 @@
 *.py text eol=lf
 *.sh text eol=lf
 scripts/hooks/* text eol=lf
+# Public result artifacts are checksummed byte-for-byte in artifacts/manifest.json against LF content.
+# Pin LF so a Windows checkout does not rewrite them to CRLF and fail scripts/validate_artifacts.py.
+artifacts/**/*.json text eol=lf
 *.md text

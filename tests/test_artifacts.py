@@ -211,3 +211,18 @@ def test_public_artifact_payload_preserves_source_and_checksum(tmp_path: Path) -
     assert provenance["source_path"] == "report/metrics.json"
     assert provenance["source_run_id"] == "20260710T000000Z"
     assert provenance["source_sha256"] == hashlib.sha256(source.read_bytes()).hexdigest()
+
+
+def test_committed_artifacts_use_lf_line_endings() -> None:
+    """Manifest checksums are byte-level, so committed artifacts must stay LF across platforms."""
+    repo = Path(__file__).resolve().parents[1]
+    manifest = json.loads((repo / "artifacts" / "manifest.json").read_text(encoding="utf-8"))
+    offenders = [
+        entry["path"]
+        for entry in manifest["artifacts"]
+        if b"\r" in (repo / entry["path"]).read_bytes()
+    ]
+    assert not offenders, (
+        f"CRLF found in checksummed artifacts {offenders}; "
+        "ensure .gitattributes pins artifacts/**/*.json to eol=lf"
+    )

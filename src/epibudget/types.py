@@ -82,6 +82,9 @@ class Allocation(BaseModel):
     epistasis_map: list[Interaction]
     seed: int
     model_id: str
+    method: str = Field(
+        default="info", description="Selection method that built the graph: info or structural"
+    )
 
 
 class Config(BaseModel):

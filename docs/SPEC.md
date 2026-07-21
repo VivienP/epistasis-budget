@@ -275,8 +275,8 @@ to show we don't catastrophically sacrifice fitness discovery.
 
 ```
 epibudget allocate --fasta FILE --positions 39,40,41,54 --budget 96 \
-                   [--model esm2_t33_650M] [--lambda 0.0] [--max-order 3] [--seed 0] \
-                   [--out allocation.json]
+                   [--model esm2_t33_650M] [--method info|structural] [--lambda 0.0] \
+                   [--max-order 3] [--seed 0] [--out allocation.json]
 
 epibudget validate --dataset gb1_wu2016 --budgets 48,96,192 \
                    [--model esm2_t12_35M] [--seeds 20] [--out report/]
@@ -296,7 +296,12 @@ epibudget score   --fasta FILE --variants variants.csv        # debug: dump conj
 ```
 
 `allocate` prints a rich table (rank, variant, order, ΔG, marginal info gain) and writes
-`Allocation` JSON. `validate` writes `report/<run_id>/metrics.json` (one row per method × budget, with
+`Allocation` JSON. `--method` picks the τ² weighting the selection graph is built from (§5): `info`
+uses the ESM masking-perturbation dispersion, `structural` sets τ² ≡ 1 so the weight is loops-braced
+n(v) alone. `structural` is the selection the downstream-impact benchmark evaluates; `info` has not
+been shown to improve on it. The resolved method is recorded on the `Allocation`; `--lambda` is
+orthogonal, blending the chosen method's info-gain with predicted fitness. `validate` writes
+`report/<run_id>/metrics.json` (one row per method × budget, with
 per-order correlations, CIs, and coverage) and prints a rich summary; no figure-rendering step is
 committed, so `metrics.json` is the artifact. Any empirical claim must trace to a
 `metrics.json` written by this command. `gate2` re-analyses a completed 650M GB1 cache — it validates the

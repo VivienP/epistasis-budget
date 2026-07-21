@@ -42,8 +42,9 @@ package. See [`docs/PRIOR_ART.md`](docs/PRIOR_ART.md) for the full novelty lands
 ```bash
 pip install -e ".[dev]"
 
-# Rank B=96 variants by the ESM-dispersion × loops-braced weight (the `info` selection)
-epibudget allocate --fasta target.fasta --positions 39,40,41,54 --budget 96 --model esm2_t33_650M
+# Rank B=96 variants by the structure-only weight the benchmark validates (loops-braced alone)
+epibudget allocate --fasta target.fasta --positions 39,40,41,54 --budget 96 \
+  --model esm2_t33_650M --method structural
 
 # data/proteingym/ is git-ignored — fetch the landscape before any dataset command
 python scripts/fetch_gb1.py
@@ -59,8 +60,10 @@ epibudget downstream --dataset gb1_wu2016 --scored-cache scored_650m.jsonl \
   --n-perturbations 16 --partitions 20 --seeds 20 --budgets 48,96,192 --max-order 3
 ```
 
-`allocate` emits only the `info` selection; the structure-only one the benchmark validates is not
-exposed there (see "How it works").
+`--method structural` is the selection the downstream benchmark validates (τ² ≡ 1, loops-braced
+alone); the default `--method info` also weights by ESM masking-perturbation dispersion, which the
+benchmark found adds nothing over it. `--lambda` is orthogonal — it blends the chosen method with
+predicted fitness.
 
 ## The hypothesis under evaluation
 
@@ -124,11 +127,10 @@ are in
    interaction ε gets an uncertainty seeded from ESM-2 masking-perturbation dispersion.
 3. **Modular allocation heuristic.** Under the v1 independent-noise model the variance-reduction
    objective is an exact sort by ESM dispersion × loops-braced, optionally blended with fitness via
-   `--lambda`. It is not a calibrated posterior-optimal design. The variant the downstream benchmark
-   validates is the structure-only one (τ² ≡ 1, so the weight reduces to loops-braced alone),
-   constructed only inside the benchmark harnesses — `downstream.py`, `validate.structural_graph`,
-   `gate2.py`. `allocate` always weights the graph by `var_delta_g`, and `--lambda` interpolates only
-   between that info weight and fitness.
+   `--lambda`. It is not a calibrated posterior-optimal design. The selection the downstream benchmark
+   validates is the structure-only one (τ² ≡ 1, so the weight reduces to loops-braced alone); it is
+   `allocate --method structural`, while the default `--method info` keeps the `var_delta_g` factor
+   the benchmark found adds nothing.
 
 Full math and pseudocode: [`docs/SPEC.md`](docs/SPEC.md). Background on epistasis, the Walsh-Hadamard
 formalism, and why this is well-posed: [`docs/RESEARCH_EPISTASIS.md`](docs/RESEARCH_EPISTASIS.md).

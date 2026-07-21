@@ -35,7 +35,7 @@ from scipy.stats import t as student_t
 from epibudget.acquisition import allocate, fitness_greedy
 from epibudget.data import GB1_SITES, GB1_WT_AT_SITES, reveal_measured_fitness
 from epibudget.epistasis import predicted_epistasis
-from epibudget.graph import EpistasisFactorGraph
+from epibudget.graph import EpistasisFactorGraph, variant_variance
 from epibudget.provenance import write_json_atomic
 from epibudget.scored_cache import candidate_sha256
 from epibudget.types import Interaction, ScoredVariant, Variant
@@ -2725,8 +2725,8 @@ def downstream_report(
     space = FeatureSpace(sites, wt_at_sites, alphabet)
     land = dict(landscape)
     universe = [sv.variant for sv in scored_sorted]
-    var_map = {sv.variant: sv.var_delta_g for sv in scored_sorted}
-    unit_map: dict[Variant, float] = {sv.variant: 1.0 for sv in scored_sorted}
+    var_map = variant_variance(scored_sorted, "info")
+    unit_map = variant_variance(scored_sorted, "structural")
     esm_of = {sv.variant: sv.delta_g for sv in scored_sorted}
     all_interactions = predicted_epistasis(scored_sorted, max_order)
     aware = {

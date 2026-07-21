@@ -23,9 +23,13 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Mapping, Sequence
+from typing import Literal, get_args
 
-from epibudget.epistasis import interaction_loop
-from epibudget.types import Interaction, Mutation, Variant
+from epibudget.epistasis import interaction_loop, predicted_epistasis
+from epibudget.types import Interaction, Mutation, ScoredVariant, Variant
+
+SelectionMethod = Literal["info", "structural"]
+SELECTION_METHODS: tuple[str, ...] = get_args(SelectionMethod)
 
 
 class EpistasisFactorGraph:
@@ -86,3 +90,28 @@ class EpistasisFactorGraph:
     def info_gain(self, measured: frozenset[Variant], candidate: Variant) -> float:
         """Reduction in total uncertainty from measuring ``candidate`` (≥ 0, modular)."""
         return self.total_uncertainty(measured) - self.total_uncertainty(measured | {candidate})
+
+
+def variant_variance(
+    scored: Sequence[ScoredVariant], method: SelectionMethod = "info"
+) -> dict[Variant, float]:
+    """The τ² map a selection method weights loops by, keyed by variant.
+
+    ``"info"`` uses the ESM masking-perturbation dispersion, so ``info_gain(∅, v) = τ_v²·n(v)``.
+    ``"structural"`` sets τ² ≡ 1, so ``info_gain(∅, v) = n(v)`` — ranking by how many interaction
+    loops a variant braces, with no ESM uncertainty prior. Neither reads a measured label.
+    """
+    if method == "info":
+        return {sv.variant: sv.var_delta_g for sv in scored}
+    if method == "structural":
+        return {sv.variant: 1.0 for sv in scored}
+    raise ValueError(f"unknown selection method {method!r}; expected one of {SELECTION_METHODS}")
+
+
+def selection_graph(
+    scored: Sequence[ScoredVariant], max_order: int = 3, method: SelectionMethod = "info"
+) -> EpistasisFactorGraph:
+    """Build the factor graph ``method`` selects from, over the ESM-predicted interactions."""
+    return EpistasisFactorGraph(
+        predicted_epistasis(scored, max_order), variant_variance(scored, method)
+    )

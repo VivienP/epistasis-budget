@@ -18,7 +18,7 @@ from epibudget.epistasis import (
     predicted_epistasis,
     wht_spectrum,
 )
-from epibudget.graph import EpistasisFactorGraph
+from epibudget.graph import EpistasisFactorGraph, selection_graph, variant_variance
 from epibudget.types import Allocation, Interaction, Mutation, ScoredVariant, Variant
 from epibudget.validate import infer_epistasis, map_recovery, run_validation
 
@@ -39,5 +39,7 @@ __all__ = [
     "map_recovery",
     "predicted_epistasis",
     "run_validation",
+    "selection_graph",
+    "variant_variance",
     "wht_spectrum",
 ]

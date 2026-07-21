@@ -230,6 +230,94 @@ def test_allocate_command_runs_offline_and_writes_json(
     written = json.loads(out.read_text(encoding="utf-8"))
     assert written["budget"] == _ALLOC_BUDGET
     assert len(written["selected"]) == _ALLOC_BUDGET
+    assert written["method"] == "info"  # the default weighting is recorded on the artifact
+
+
+class _DispersionSkewScorer(_FakeScorer):
+    """τ² concentrated on the last-enumerated variant, so `info` and `structural` must disagree.
+
+    Enumeration is ordered by interaction order, so the boosted variant is a highest-order one: it
+    braces the fewest loops, and `structural` ranks it last while `info` ranks it first.
+    """
+
+    def score_batch(self, wt: str, variants: Sequence[Variant]) -> list[ScoredVariant]:
+        last = len(variants) - 1
+        return [
+            ScoredVariant(variant=v, delta_g=0.1 * i, var_delta_g=100.0 if i == last else 0.01)
+            for i, v in enumerate(variants)
+        ]
+
+
+def _allocate_selection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, method: str
+) -> list[list[list[object]]]:
+    monkeypatch.setattr(scoring, "ConjointScorer", _DispersionSkewScorer)
+    fasta = tmp_path / "wt.fasta"
+    fasta.write_text(">toy\nADG\n", encoding="utf-8")
+    out = tmp_path / f"allocation_{method}.json"
+    result = CliRunner().invoke(
+        app,
+        [
+            "allocate",
+            "--fasta",
+            str(fasta),
+            "--positions",
+            "1,2,3",
+            "--budget",
+            "4",
+            "--alphabet",
+            "ACG",
+            "--method",
+            method,
+            "--out",
+            str(out),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    written = json.loads(out.read_text(encoding="utf-8"))
+    assert written["method"] == method
+    selected: list[list[list[object]]] = written["selected"]
+    return selected
+
+
+def test_allocate_structural_method_selects_by_loops_braced_not_esm_dispersion(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The `structural` selection is reachable from `allocate` and is not the `info` selection.
+
+    `structural` is the method the downstream benchmark validates; before `--method` existed the CLI
+    could only ever emit `info`. A scorer whose dispersion is concentrated on one variant separates
+    them: `info` is dominated by that τ², `structural` ignores τ² entirely.
+    """
+    info = _allocate_selection(tmp_path, monkeypatch, "info")
+    structural = _allocate_selection(tmp_path, monkeypatch, "structural")
+    assert info != structural
+
+
+def test_allocate_rejects_an_unknown_method(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(scoring, "ConjointScorer", _FakeScorer)
+    fasta = tmp_path / "wt.fasta"
+    fasta.write_text(">toy\nADG\n", encoding="utf-8")
+    result = CliRunner().invoke(
+        app,
+        [
+            "allocate",
+            "--fasta",
+            str(fasta),
+            "--positions",
+            "1,2,3",
+            "--budget",
+            "4",
+            "--alphabet",
+            "ACG",
+            "--method",
+            "fitness",
+        ],
+    )
+    assert result.exit_code != 0
+    assert "--method must be one of" in result.output
 
 
 def _write_gb1_csv(path: Path, variants: list[Variant]) -> None:

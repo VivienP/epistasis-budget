@@ -32,7 +32,7 @@ from epibudget.epistasis import (
     predicted_epistasis,
     wt_centered_log_fitness,
 )
-from epibudget.graph import EpistasisFactorGraph
+from epibudget.graph import EpistasisFactorGraph, variant_variance
 from epibudget.robustness import variant_fold
 from epibudget.scored_cache import candidate_sha256
 from epibudget.types import Mutation, ScoredVariant, Variant
@@ -290,10 +290,8 @@ def _graphs_and_scores(
     scored: Sequence[ScoredVariant], max_order: int
 ) -> tuple[EpistasisFactorGraph, EpistasisFactorGraph, dict[str, float], dict[str, int]]:
     interactions = predicted_epistasis(scored, max_order)
-    info_graph = EpistasisFactorGraph(
-        interactions, {item.variant: item.var_delta_g for item in scored}
-    )
-    structural_graph = EpistasisFactorGraph(interactions, {item.variant: 1.0 for item in scored})
+    info_graph = EpistasisFactorGraph(interactions, variant_variance(scored, "info"))
+    structural_graph = EpistasisFactorGraph(interactions, variant_variance(scored, "structural"))
     info_scores = {
         canonical_id(item.variant): info_graph.info_gain(frozenset(), item.variant)
         for item in scored

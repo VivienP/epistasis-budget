@@ -82,6 +82,7 @@ class Allocation(BaseModel):
     epistasis_map: list[Interaction]        # final uncertainty map
     seed: int
     model_id: str
+    method: str = "info"
 ```
 
 ---
@@ -260,14 +261,16 @@ validate(dataset, budgets, model_id, seeds) -> Report:
         for method in {info, fitness, structural, random, practice}:
             selected = allocate(method, B)                  # zero-shot; never sees labels
             revealed = reveal_measured_fitness(selected)    # simulate wet-lab from GB1
-            inferred = infer_epistasis(revealed)            # least-squares / MoCHI-style fit
-            score[method, B] = map_recovery(inferred, truth)   # Spearman/Pearson over ε terms
+            inferred = infer_epistasis(revealed, scored)     # pin measured values; retain calibrated ESM prior elsewhere
+            score[method, B] = map_recovery(inferred, truth) # pairwise and third-order, plus pooled diagnostic
     return Report(scores, figures)
 ```
 
-**Primary metric** `map_recovery`: correlation between inferred and ground-truth ε coefficients over
-all pairwise + third-order terms. **Secondary:** hit-rate@B (fraction of top-fitness variants captured)
-to show we don't catastrophically sacrifice fitness discovery.
+`infer_epistasis` fits a through-origin calibration slope on revealed WT-centred log fitness. Measured
+variants are pinned to their revealed values; unmeasured loop members retain the scaled ESM prior.
+`map_recovery` reports pairwise and third-order correlations separately. The pooled correlation is a
+diagnostic because the two orders have different coverage and power. **Secondary:** hit-rate@B (fraction
+of top-fitness variants captured) measures the fitness-discovery trade-off.
 
 ---
 
@@ -298,16 +301,14 @@ epibudget score   --fasta FILE --variants variants.csv        # debug: dump conj
 `allocate` prints a rich table (rank, variant, order, ΔG, marginal info gain) and writes
 `Allocation` JSON. `--method` picks the τ² weighting the selection graph is built from (§5): `info`
 uses the ESM masking-perturbation dispersion, `structural` sets τ² ≡ 1 so the weight is loops-braced
-n(v) alone. `structural` is the selection the downstream-impact benchmark evaluates; `info` has not
-been shown to improve on it. The resolved method is recorded on the `Allocation`; `--lambda` is
+n(v) alone. The resolved method is recorded on the `Allocation`; `--lambda` is
 orthogonal, blending the chosen method's info-gain with predicted fitness. `validate` writes
 `report/<run_id>/metrics.json` (one row per method × budget, with
 per-order correlations, CIs, and coverage) and prints a rich summary; no figure-rendering step is
-committed, so `metrics.json` is the artifact. Any empirical claim must trace to a
-`metrics.json` written by this command. `gate2` re-analyses a completed 650M GB1 cache — it validates the
+committed, so `metrics.json` is the command's result artifact. `gate2` re-analyses a completed 650M GB1 cache — it validates the
 cache identity (model, scorer seed, perturbation count) against the enumerated candidate universe before
-any fitness label is read — and writes `report/<run_id>/gate2.json`; it is GB1-only and reports
-`public_claim_eligible=False`.
+any fitness label is read — and writes `report/<run_id>/gate2.json`. Result status belongs in
+[`VALIDATION.md`](VALIDATION.md), not in this architecture specification.
 
 ---
 
@@ -337,7 +338,7 @@ Deterministic given `(model_id, seed, config)`. Every output embeds the resolved
 | `epistasis.py` | ε terms, WHT ground truth | `test_epistasis`: inclusion–exclusion identities; WHT round-trip |
 | `graph.py` | Gaussian factor graph, variance updates | `test_graph`: variance is non-increasing in measurements; submodularity |
 | `acquisition.py` | greedy selection, λ slider | `test_acquisition`: λ=1 ≡ fitness-greedy; gains monotone-nonincreasing |
-| `validate.py` | GB1 harness, baselines | `test_validate` (slow/data): info ≥ random; report schema |
+| `validate.py` | GB1 harness, baselines | `test_validate`: estimator identities, per-order metrics, report schema |
 | `cli.py` | UX | `test_cli`: `allocate` on a tiny toy returns B variants |
 
 ## 11. Out of scope for v1
@@ -347,6 +348,6 @@ Deterministic given `(model_id, seed, config)`. Every output embeds the resolved
   (see `docs/RESEARCH_EPISTASIS.md#3`).
 - Orders > 3.
 - Multi-round / sequential design (v1 is single-shot budget allocation at round 0).
-- Any GPU-specific path.
+- Distributed or multi-GPU execution.
 - A second PLM or a learned surrogate — the uncertainty prior is ESM-2 zero-shot by design.
 - Any web API / hosted service — v1 is a CPU-first, GPU-capable CLI + library.

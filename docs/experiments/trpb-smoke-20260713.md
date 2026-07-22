@@ -9,7 +9,8 @@ configuration remain valid descriptive outputs. The serialized `var_epsilon` is 
 predicted-epistasis invariant used by the current CLI.
 
 This run executes the production `epibudget validate` harness on the TrpB landscape at reduced settings
-(`B ∈ {24, 48}`, 5 seeds), per `docs/specs/trpb-exploratory.md`. It is **not** the frozen second-landscape
+(`B ∈ {24, 48}`, 5 seeds), per the archived
+[`trpb-exploratory-plan.md`](trpb-exploratory-plan.md). It is **not** the frozen second-landscape
 benchmark of `docs/VALIDATION.md` §"Second landscape — TrpB", which freezes `B ∈ {48, 96, 192}` and ≥ 20
 seeds and states the run is deferred. It therefore violates its own pre-registered budget grid and seed
 count, and no number in it may be reported as *the* TrpB result regardless of its quality.

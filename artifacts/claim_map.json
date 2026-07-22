@@ -8,7 +8,7 @@
   "claims": [
     {
       "id": "dataset.measured_rows",
-      "document": "README.md",
+      "document": "docs/SIGNAL_GATE.md",
       "artifact": "artifacts/dataset_gb1.json",
       "json_pointer": "/measured_rows",
       "transform": {"name": "grouped"},
@@ -17,34 +17,34 @@
     },
     {
       "id": "signal.pairwise_spearman",
-      "document": "README.md",
+      "document": "docs/RND_RECORD.md",
       "artifact": "artifacts/signal_650m.json",
       "json_pointer": "/result/spearman_pairwise",
       "transform": {"name": "round", "digits": 3},
       "rendered": "0.302",
-      "anchor": "pairwise Spearman **0.302**"
+      "anchor": "spearman_pairwise = 0.302"
     },
     {
       "id": "signal.third_spearman",
-      "document": "README.md",
+      "document": "docs/RND_RECORD.md",
       "artifact": "artifacts/signal_650m.json",
       "json_pointer": "/result/spearman_third",
       "transform": {"name": "round", "digits": 3},
       "rendered": "0.249",
-      "anchor": "third-order Spearman **0.249**"
+      "anchor": "spearman_third = 0.249"
     },
     {
       "id": "calibration650.spearman",
-      "document": "README.md",
+      "document": "docs/LIMITATIONS.md",
       "artifact": "artifacts/calibration_650m.json",
       "json_pointer": "/result/spearman_sigma2_abserror",
       "transform": {"name": "round", "digits": 3, "unicode_minus": true},
       "rendered": "−0.113",
-      "anchor": "Spearman(σ², |error|) is **−0.113"
+      "anchor": "Spearman is −0.113"
     },
     {
       "id": "calibration650.spearman_ci_lo",
-      "document": "README.md",
+      "document": "docs/LIMITATIONS.md",
       "artifact": "artifacts/calibration_650m.json",
       "json_pointer": "/result/spearman_ci95/0",
       "transform": {"name": "round", "digits": 3, "unicode_minus": true},
@@ -53,7 +53,7 @@
     },
     {
       "id": "calibration650.spearman_ci_hi",
-      "document": "README.md",
+      "document": "docs/LIMITATIONS.md",
       "artifact": "artifacts/calibration_650m.json",
       "json_pointer": "/result/spearman_ci95/1",
       "transform": {"name": "round", "digits": 3, "unicode_minus": true},
@@ -62,16 +62,16 @@
     },
     {
       "id": "calibration650.pearson",
-      "document": "README.md",
+      "document": "docs/LIMITATIONS.md",
       "artifact": "artifacts/calibration_650m.json",
       "json_pointer": "/result/pearson_sigma2_abserror",
       "transform": {"name": "round", "digits": 3, "unicode_minus": true},
       "rendered": "−0.100",
-      "anchor": "Pearson is **−0.100"
+      "anchor": "Pearson is −0.100"
     },
     {
       "id": "calibration650.pearson_ci_lo",
-      "document": "README.md",
+      "document": "docs/LIMITATIONS.md",
       "artifact": "artifacts/calibration_650m.json",
       "json_pointer": "/result/pearson_ci95/0",
       "transform": {"name": "round", "digits": 3, "unicode_minus": true},
@@ -80,7 +80,7 @@
     },
     {
       "id": "calibration650.pearson_ci_hi",
-      "document": "README.md",
+      "document": "docs/LIMITATIONS.md",
       "artifact": "artifacts/calibration_650m.json",
       "json_pointer": "/result/pearson_ci95/1",
       "transform": {"name": "round", "digits": 3},
@@ -89,75 +89,75 @@
     },
     {
       "id": "calibration650.n",
-      "document": "README.md",
+      "document": "docs/RND_RECORD.md",
       "artifact": "artifacts/calibration_650m.json",
       "json_pointer": "/result/n",
       "transform": {"name": "identity"},
       "rendered": "300",
-      "anchor": "n=300"
+      "anchor": "n=300 covered GB1 variants"
     },
     {
       "id": "calibration35.spearman",
-      "document": "README.md",
+      "document": "docs/RND_RECORD.md",
       "artifact": "artifacts/calibration_35m.json",
       "json_pointer": "/result/spearman_sigma2_abserror",
       "transform": {"name": "round", "digits": 3, "show_plus": true},
       "rendered": "+0.042",
-      "anchor": "Spearman is **+0.042"
+      "anchor": "| 35M  | +0.042 | [−0.078, +0.157] | +0.049 | [−0.083, +0.180] | 1.131 |"
     },
     {
       "id": "calibration35.spearman_ci_lo",
-      "document": "README.md",
+      "document": "docs/RND_RECORD.md",
       "artifact": "artifacts/calibration_35m.json",
       "json_pointer": "/result/spearman_ci95/0",
       "transform": {"name": "round", "digits": 3, "unicode_minus": true},
       "rendered": "−0.078",
-      "anchor": "[−0.078, +0.157]"
+      "anchor": "| 35M  | +0.042 | [−0.078, +0.157] | +0.049 | [−0.083, +0.180] | 1.131 |"
     },
     {
       "id": "calibration35.spearman_ci_hi",
-      "document": "README.md",
+      "document": "docs/RND_RECORD.md",
       "artifact": "artifacts/calibration_35m.json",
       "json_pointer": "/result/spearman_ci95/1",
       "transform": {"name": "round", "digits": 3, "show_plus": true},
       "rendered": "+0.157",
-      "anchor": "[−0.078, +0.157]"
+      "anchor": "| 35M  | +0.042 | [−0.078, +0.157] | +0.049 | [−0.083, +0.180] | 1.131 |"
     },
     {
       "id": "calibration35.pearson",
-      "document": "README.md",
+      "document": "docs/RND_RECORD.md",
       "artifact": "artifacts/calibration_35m.json",
       "json_pointer": "/result/pearson_sigma2_abserror",
       "transform": {"name": "round", "digits": 3, "show_plus": true},
       "rendered": "+0.049",
-      "anchor": "**+0.049, 95% CI"
+      "anchor": "| 35M  | +0.042 | [−0.078, +0.157] | +0.049 | [−0.083, +0.180] | 1.131 |"
     },
     {
       "id": "calibration35.pearson_ci_lo",
-      "document": "README.md",
+      "document": "docs/RND_RECORD.md",
       "artifact": "artifacts/calibration_35m.json",
       "json_pointer": "/result/pearson_ci95/0",
       "transform": {"name": "round", "digits": 3, "unicode_minus": true},
       "rendered": "−0.083",
-      "anchor": "[−0.083, +0.180]"
+      "anchor": "| 35M  | +0.042 | [−0.078, +0.157] | +0.049 | [−0.083, +0.180] | 1.131 |"
     },
     {
       "id": "calibration35.pearson_ci_hi",
-      "document": "README.md",
+      "document": "docs/RND_RECORD.md",
       "artifact": "artifacts/calibration_35m.json",
       "json_pointer": "/result/pearson_ci95/1",
       "transform": {"name": "round", "digits": 3, "show_plus": true},
       "rendered": "+0.180",
-      "anchor": "[−0.083, +0.180]"
+      "anchor": "| 35M  | +0.042 | [−0.078, +0.157] | +0.049 | [−0.083, +0.180] | 1.131 |"
     },
     {
       "id": "calibration35.n",
-      "document": "README.md",
+      "document": "docs/RND_RECORD.md",
       "artifact": "artifacts/calibration_35m.json",
       "json_pointer": "/result/n",
       "transform": {"name": "identity"},
       "rendered": "300",
-      "anchor": "n=300"
+      "anchor": "n=300 covered GB1 variants"
     }
   ]
 }

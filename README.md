@@ -1,152 +1,111 @@
 # epibudget
 
-**Experimental-design methods for budgeted protein-epistasis mapping with zero-shot ESM-2 signals,
-evaluated on public four-site landscapes (GB1, TrpB).**
+> Rank a shortlist of *B* protein variants for a DMS campaign designed to reveal epistatic
+> structure, rather than maximize predicted fitness.
 
-`epibudget` ranks candidate protein variants under a fixed budget of *B* wells and compares allocation
-heuristics for mapping pairwise and third-order epistasis. It is zero-shot (ESM-2), CPU-first and
-GPU-capable, and is evaluated on the measured public GB1 four-site landscape (ε-based analyses are
-restricted to its viable, log-transformable subset), with an exploratory replication on TrpB.
-
----
+`epibudget` is a Python CLI for budgeted protein experimental design. It combines conjoint ESM-2
+scores with an epistasis factor graph, then compares the resulting allocation with fitness-greedy,
+structure-only, random, and practice-oriented baselines on public GB1 and TrpB landscapes.
 
 ## The idea in one picture
 
-Standard practice ranks variants by **predicted fitness** and tests the top *B*. Mapping epistasis asks a
-different question: which measurements expose interaction structure across singles, doubles and triples?
+![epibudget workflow from protein target to ranked experimental shortlist](figures/epibudget_illustration.png)
 
-The design principle comes from **geodetic triangulation surveys**: the weakest link in a measurement
-network is never the least-precise instrument — it is the *poorly-braced triangle*, the loop that fails
-to close. Surveyors don't buy better instruments; they measure the **redundant loops** that localise and
-cancel error. Transposed to a protein, this means prioritising variants that *close epistatic loops*, and
-benchmarking that structural heuristic against fitness-greedy, random, and ESM-weighted selection.
-
-`epibudget` builds a factor graph over candidate mutations, seeds each interaction with an
-ESM-2-derived dispersion, and ranks variants by a fixed modular weight: ESM dispersion times the number
-of epistatic loops braced. A slider (`--lambda`) trades this heuristic against predicted fitness.
+The design borrows from geodetic triangulation: a measurement network becomes informative when it
+closes poorly constrained loops. In a protein landscape, selected variants brace interaction loops
+across singles, doubles, and triples.
 
 ## Where it sits (and where it doesn't)
 
-| Tool | Question it answers | Stage |
-|------|---------------------|-------|
-| ALDE / BO-EVO | which variants maximise **fitness** next round? | design (fitness) |
-| **epibudget** | how do budgeted allocation heuristics expose **epistasis structure**? | **design (structure)** |
-| [MoCHI](https://github.com/lehner-lab/MoCHI) | given measurements, **infer** energies & couplings | analysis |
+| Tool | Question | Stage |
+|---|---|---|
+| ALDE / BO-EVO | Which variants maximize fitness next? | fitness design |
+| **epibudget** | Which variants expose epistatic structure under budget? | structure design |
+| [MoCHI](https://github.com/lehner-lab/MoCHI) | Which energies and couplings explain measured data? | inference |
 
-`epibudget` is the **experimental-design front-end** to inference tools like MoCHI: choose what to
-measure, then analyse the measurements. It is not a fitness optimiser and not an epistasis-inference
-package. See [`docs/PRIOR_ART.md`](docs/PRIOR_ART.md) for the full novelty landscape.
+`epibudget` selects measurements. It is neither a fitness optimizer nor an epistasis-inference
+package. See [Prior art](docs/PRIOR_ART.md) for the full comparison.
 
 ## Quick start
 
+Install from source with Python 3.12 or later:
+
 ```bash
-pip install -e ".[dev]"
-
-# Rank B=96 variants by the structure-only weight the benchmark validates (loops-braced alone)
-epibudget allocate --fasta target.fasta --positions 39,40,41,54 --budget 96 \
-  --model esm2_t33_650M --method structural
-
-# data/proteingym/ is git-ignored — fetch the landscape before any dataset command
-python scripts/fetch_gb1.py
-
-# Score the GB1 candidate universe once at the frozen settings. This writes the cache
-# `downstream` requires; a cache scored at other settings is rejected on its identity check.
-epibudget validate --dataset gb1_wu2016 --model esm2_t33_650M --alphabet ACDEFGHIKLMNPQRSTVWY \
-  --budgets 48,96,192 --seeds 20 --n-perturbations 16 --device cuda --scored-cache scored_650m.jsonl
-
-# The live, decision-eligible result: does a structure-aware budget build a better
-# training set for ranking held-out doubles and triples?
-epibudget downstream --dataset gb1_wu2016 --scored-cache scored_650m.jsonl \
-  --n-perturbations 16 --partitions 20 --seeds 20 --budgets 48,96,192 --max-order 3
+git clone https://github.com/VivienP/epistasis-budget.git
+cd epistasis-budget
+python -m pip install .
 ```
 
-`--method structural` is the selection the downstream benchmark validates (τ² ≡ 1, loops-braced
-alone); the default `--method info` also weights by ESM masking-perturbation dispersion, which the
-benchmark found adds nothing over it. `--lambda` is orthogonal — it blends the chosen method with
-predicted fitness.
+Rank variants for a target FASTA and write the shortlist to `allocation.json`:
 
-## The hypothesis under evaluation
+```bash
+epibudget allocate --fasta path/to/target.fasta --positions 39,40,41,54 \
+  --budget 96 --model esm2_t12_35M --n-perturbations 2 --out allocation.json
+```
 
-> At equal budget *B*, variants selected by `epibudget` recover the ground-truth epistasis map of GB1
-> (Wu et al. 2016, 149,361 measured genotypes from a theoretical 20⁴ space) **better** than the same budget spent on the highest
-> predicted-fitness variants, and better than random.
+Run a smoke-scale GB1 validation after fetching the public dataset:
 
-Metric: order-stratified correlation and squared-error change between the prior and the epistasis map
-inferred after revealing *B* measurements, at *B* ∈ {48, 96, 192}. See
-[`docs/VALIDATION.md`](docs/VALIDATION.md).
+```bash
+python scripts/fetch_gb1.py
+epibudget validate --dataset gb1_wu2016 --model esm2_t12_35M --alphabet ACDGV \
+  --budgets 48 --seeds 3 --n-perturbations 2 --device cpu
+```
+
+This smoke command is not the registered benchmark. Use the frozen settings in
+[the validation protocol](docs/VALIDATION.md) to reproduce scientific results.
+
+## The claim we test
+
+> At equal budget *B*, does the ESM-weighted loop-bracing allocation recover the pairwise epistasis
+> map of GB1 better than fitness-greedy and random allocation?
+
+The benchmark reports Spearman and Pearson recovery separately for pairwise and third-order terms at
+*B* in {48, 96, 192}. Measured fitness enters only after selection.
 
 ## Result
 
-<!-- artifact-claims:start -->
-**Conjoint-score signal.** On the viable GB1 terms available in the local public-data artifact,
-ESM-2 650M conjoint ε has pairwise Spearman **0.302** and third-order Spearman **0.249**
-([provisional artifact](artifacts/signal_650m.json)). This supports an epistatic signal in the
-scores; it does not validate the masking-variance uncertainty prior.
-
-**Masking-variance calibration.** At 650M, Spearman(σ², |error|) is **−0.113, 95% CI
-[−0.220, −0.002]** and Pearson is **−0.100, 95% CI [−0.198, 0.003]**, n=300
-([provisional artifact](artifacts/calibration_650m.json)). This is weak negative rank association, not
-evidence of positive uncertainty calibration; Pearson remains compatible with zero, so it is not a
-general claim of anti-calibration. At 35M, Spearman is **+0.042, 95% CI [−0.078, +0.157]** and Pearson
-is **+0.049, 95% CI [−0.083, +0.180]**, n=300
-([provisional artifact](artifacts/calibration_35m.json)). Cross-fitted and order-stratified analyses are
-pending.
-
-**Comparative allocation status.** No comparative recovery claim is current. The existing 650M recovery
-artifacts require re-reporting because the structural control has exact within-order ties and the
-method-specific calibration slope confounds low-coverage comparisons. Pairwise and third-order results
-must remain separate, and pooled recovery is diagnostic only.
-<!-- artifact-claims:end -->
-
-The defensible current position is narrower: conjoint ESM-2 scores contain epistatic signal, while
-masking-perturbation variance has not demonstrated positive calibration or acquisition value.
-
-A separate downstream-impact benchmark asks the more practical question: does a structure-aware budget
-build a better *training set* for ranking held-out double and triple mutants?
-([`docs/specs/downstream.md`](docs/specs/downstream.md))
-
-On GB1 this is a decision-eligible result. Structure-aware selection beats both fitness-greedy and random
-across all 20 salted partitions (S_macro-AUC Δ +0.342 vs fitness, +0.175 vs random), and the
-masking-variance prior adds nothing.
-
-An exploratory replication on TrpB (Johnston 2024, an enzyme-catalysis landscape) reproduces the
-direction: structure-aware wins 20/20 over both baselines (Δ +0.135 vs random, +0.286 vs fitness), and
-fitness-greedy trails random on both proteins. That run is not decision-eligible, so it corroborates
-rather than proves.
-
-Both results are provisional and not yet registered artifacts; the full numbers, controls, and caveats
-are in
-[`docs/experiments/trpb-downstream-generalization-20260716.md`](docs/experiments/trpb-downstream-generalization-20260716.md).
+**Inconclusive.** The current corrective GB1 analysis found mixed evidence, remains provisional, and
+is not eligible for a public comparative claim. The separate downstream GB1 and exploratory TrpB
+reports are also provisional and do not change this map-recovery verdict. See
+[the validation protocol](docs/VALIDATION.md) for the decision rules and evidence boundaries.
 
 ## How it works
 
-1. **Conjoint ESM-2 scoring.** Each candidate variant is scored by mutating *all* its positions onto
-   the background and reading the conditional log-likelihood — so genuine, context-dependent epistasis
-   appears (additive per-site scoring would make every interaction term identically zero).
-2. **Epistasis factor graph.** Nodes = candidate mutations, edges = pairs, hyper-edges = triplets. Each
-   interaction ε gets an uncertainty seeded from ESM-2 masking-perturbation dispersion.
-3. **Modular allocation heuristic.** Under the v1 independent-noise model the variance-reduction
-   objective is an exact sort by ESM dispersion × loops-braced, optionally blended with fitness via
-   `--lambda`. It is not a calibrated posterior-optimal design. The selection the downstream benchmark
-   validates is the structure-only one (τ² ≡ 1, so the weight reduces to loops-braced alone); it is
-   `allocate --method structural`, while the default `--method info` keeps the `var_delta_g` factor
-   the benchmark found adds nothing.
+1. **Score conjointly.** Apply every mutation in a variant before reading ESM-2 conditional
+   log-likelihoods, preserving context-dependent interaction signal.
+2. **Build the factor graph.** Represent candidate mutations as nodes and pairwise or third-order
+   interactions as edges and hyperedges.
+3. **Allocate the budget.** Use `--method structural` to rank by loops braced alone, or the default
+   `--method info` to weight those loops by masking-perturbation dispersion. `--lambda` blends the
+   info weight with predicted fitness.
 
-Full math and pseudocode: [`docs/SPEC.md`](docs/SPEC.md). Background on epistasis, the Walsh-Hadamard
-formalism, and why this is well-posed: [`docs/RESEARCH_EPISTASIS.md`](docs/RESEARCH_EPISTASIS.md).
-Every approach tried, including the killed ones and why: [`docs/RND_RECORD.md`](docs/RND_RECORD.md).
+See [the specification](docs/SPEC.md) for the model and pseudocode.
 
 ## Constraints
 
-Python 3.12+ · CPU-first, GPU-capable (`--device auto|cuda`) · public data only (GB1, TrpB, UniProt) · no
-claim that the full 650M variance-inclusive run is practically CPU-tractable.
+- Python 3.12 or later; CPU by default, CUDA opt-in with `--device cuda` or `--device auto`.
+- Public protein landscapes only; GB1 epistasis analyses use complete, positive-fitness loops.
+- The full ESM-2 650M variance-inclusive workflow is not presented as CPU-practical.
+- Masking-perturbation variance has not demonstrated positive uncertainty calibration.
+- `allocate` exposes both the ESM-weighted and structure-only allocation modes.
+
+See [Constraints & limitations](docs/LIMITATIONS.md) and the [roadmap](docs/ROADMAP.md).
+
+## Reproducing the benchmarks
+
+The [validation protocol](docs/VALIDATION.md) defines the frozen settings and decision rules. GPU run
+instructions live in [the 650M runbook](docs/headline_650m_colab.md), with notebooks indexed in
+[notebooks/README.md](notebooks/README.md).
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the development setup, offline quality gate, and pull-request
+requirements.
 
 ## Citation & prior art
 
-This tool stands on: Wu et al. 2016 (GB1 landscape), Poelwijk et al. 2016/2019 (Walsh-Hadamard
-epistasis formalism), Faure & Lehner 2024 (MoCHI), and recent work on epistasis in protein language
-models (Amir et al. 2024). Full references in [`docs/RESEARCH_EPISTASIS.md`](docs/RESEARCH_EPISTASIS.md)
-and [`docs/PRIOR_ART.md`](docs/PRIOR_ART.md).
+The scientific background and references are in [Research: epistasis](docs/RESEARCH_EPISTASIS.md).
+The positioning against adjacent methods is in [Prior art](docs/PRIOR_ART.md).
 
 ## License
 

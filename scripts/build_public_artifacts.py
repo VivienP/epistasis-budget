@@ -337,7 +337,7 @@ def main() -> None:
             "sha256": _sha256(claim_map_path),
             "source_run_id": "claim-map-v1",
             "generation_command": (
-                "maintained with README.md; validated by python scripts/validate_artifacts.py"
+                "maintained with public docs; validated by python scripts/validate_artifacts.py"
             ),
             "base_commit_sha": _BASE_COMMIT_SHA,
             "code_state": "dirty",

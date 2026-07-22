@@ -46,6 +46,7 @@ models/
 figures/*.png
 figures/*.pdf
 !figures/.gitkeep
+!figures/epibudget_illustration.png
 
 # Generated run reports (metrics JSON) — regenerated from the fetched data, never committed
 report/

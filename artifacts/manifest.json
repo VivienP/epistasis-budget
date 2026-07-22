@@ -215,12 +215,12 @@
     },
     {
       "path": "artifacts/claim_map.json",
-      "sha256": "89ae2b1ea47ada02c5a2ae7186b7fe704bf9082215954255e743bc136aa001ff",
+      "sha256": "277463f60137d8c05aa0a339ca0f371d623aa0c3c3ef41746edc4f07aa07f4d9",
       "source_run_id": "claim-map-v1",
-      "generation_command": "maintained with README.md; validated by python scripts/validate_artifacts.py",
-      "base_commit_sha": "1a1f30aabd11bb50af6208bef983f2d017352b97",
+      "generation_command": "maintained with public docs; validated by python scripts/validate_artifacts.py",
+      "base_commit_sha": "6fdfd5726c57faeb904cf7929d5dd201b0d583de",
       "code_state": "dirty",
-      "code_diff_sha256": "ccc9f93990540048aad2c1f5f880a6db34d718c2ed538455ff440cf7df91a102",
+      "code_diff_sha256": "41ac665b144ec12244975d9ecba566c99276e9acb127017844472dd895d0e908",
       "model_id": null,
       "data_sha256": null,
       "configuration": {

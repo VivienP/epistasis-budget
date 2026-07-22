@@ -89,7 +89,7 @@ See [the specification](docs/SPEC.md) for the model and pseudocode.
 - Masking-perturbation variance has not demonstrated positive uncertainty calibration.
 - `allocate` exposes both the ESM-weighted and structure-only allocation modes.
 
-See [Constraints & limitations](docs/LIMITATIONS.md) and the [roadmap](docs/ROADMAP.md).
+See [Constraints & limitations](docs/LIMITATIONS.md).
 
 ## Reproducing the benchmarks
 

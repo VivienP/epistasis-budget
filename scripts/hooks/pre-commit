@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # epibudget pre-commit gate. Opt in with:  git config core.hooksPath scripts/hooks
 #
-# Runs the checks epibudget's credibility depends on: format, lint, types, the OFFLINE test suite
-# (including the invariant-#1 guard), and a secret scan. A missing tool blocks source/test/script commits
-# and is tolerated only when the staged unit contains no executable project code.
+# Source/test/script changes run format, lint, types, and the offline tests. Documentation-only changes
+# retain the artifact and secret gates without paying for unrelated source checks. A missing tool blocks
+# source/test/script commits and is tolerated only when no executable project code is staged.
 set -uo pipefail
 
 fail=0
@@ -41,10 +41,14 @@ if have git; then
   fi
 fi
 
-run "ruff format --check" ruff format --check src/ tests/ scripts/
-run "ruff check"          ruff check src/ tests/ scripts/
-run "mypy --strict"       mypy --strict src/
-run "pytest (offline)"    pytest -q -m "not slow and not data"
+if [ -n "$source_staged" ]; then
+  run "ruff format --check" ruff format --check src/ tests/ scripts/
+  run "ruff check"          ruff check src/ tests/ scripts/
+  run "mypy --strict"       mypy --strict src/
+  run "pytest (offline)"    pytest -q -m "not slow and not data"
+else
+  echo "  [skip] source quality checks (no source/test/script file staged)"
+fi
 run "artifact claims"     python scripts/validate_artifacts.py
 
 # Secret scan on staged content (best-effort; blocks on a likely key). The hook scripts are excluded

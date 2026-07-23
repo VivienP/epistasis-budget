@@ -105,6 +105,11 @@ The [validation protocol](docs/VALIDATION.md) defines the frozen settings and de
 instructions live in [the 650M runbook](docs/headline_650m_colab.md), with notebooks indexed in
 [notebooks/README.md](notebooks/README.md).
 
+## Future Works
+
+- Benchmark structural allocation on 4–6 independent combinatorial protein landscapes before generalizing
+  the design model to arbitrary candidate libraries.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the development setup, offline quality gate, and pull-request

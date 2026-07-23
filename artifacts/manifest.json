@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at_utc": "2026-07-11T11:11:19.135343Z",
+  "generated_at_utc": "2026-07-23T12:36:32.8489589Z",
   "provisional": true,
   "requires_remanifest_after_commit": true,
   "artifacts": [
@@ -214,13 +214,36 @@
       "evidence_classification": "traceable_not_rerun"
     },
     {
-      "path": "artifacts/claim_map.json",
-      "sha256": "277463f60137d8c05aa0a339ca0f371d623aa0c3c3ef41746edc4f07aa07f4d9",
-      "source_run_id": "claim-map-v1",
-      "generation_command": "maintained with public docs; validated by python scripts/validate_artifacts.py",
-      "base_commit_sha": "6fdfd5726c57faeb904cf7929d5dd201b0d583de",
+      "path": "artifacts/structural_allocation_650m.json",
+      "sha256": "21898332fd47f0eeaa3e1083ff1cd0d824191e226c2c2f1a16d7b765c8b9c05b",
+      "source_run_id": "structural-allocation-20260723",
+      "generation_command": "extract registered fields from report/20260715T111312Z/downstream.json, report/20260723T084615Z/metrics.json, and report/20260723T084615Z/downstream.json; verify source SHA-256",
+      "base_commit_sha": "038e3d02f4466112ec0a7c0734f2be7fb334af7d",
       "code_state": "dirty",
-      "code_diff_sha256": "41ac665b144ec12244975d9ecba566c99276e9acb127017844472dd895d0e908",
+      "code_diff_sha256": "3582f8d1f556ba3a57038eef061c60e9154344f0d0f1e8ef90657f8d2a2499e8",
+      "model_id": "facebook/esm2_t33_650M_UR50D",
+      "data_sha256": null,
+      "configuration": {
+        "datasets": ["gb1_wu2016", "trpb_johnston2024"],
+        "alphabet": "ACDEFGHIKLMNPQRSTVWY",
+        "budgets": [48, 96, 192],
+        "n_perturbations": 16,
+        "max_order": 3,
+        "random_seeds": 20,
+        "downstream_partitions": 20,
+        "downstream_outer_folds": 5
+      },
+      "status": "primary",
+      "evidence_classification": "traceable_not_rerun"
+    },
+    {
+      "path": "artifacts/claim_map.json",
+      "sha256": "d002ce2711c040d49b505b5350b503db95e4bd79c8ed3acba773d86831c37c84",
+      "source_run_id": "claim-map-v2",
+      "generation_command": "maintained with public docs; validated by python scripts/validate_artifacts.py",
+      "base_commit_sha": "038e3d02f4466112ec0a7c0734f2be7fb334af7d",
+      "code_state": "dirty",
+      "code_diff_sha256": "3582f8d1f556ba3a57038eef061c60e9154344f0d0f1e8ef90657f8d2a2499e8",
       "model_id": null,
       "data_sha256": null,
       "configuration": {

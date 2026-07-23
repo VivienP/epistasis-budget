@@ -96,16 +96,19 @@ protocol and result status live in [`VALIDATION.md`](VALIDATION.md); tracked evi
   `inconclusive_zero_gpu` with `public_claim_eligible=false`. Neither an advantage nor a disadvantage of
   masking dispersion is a public claim.
 
-- **The GB1 downstream result is provisional and unregistered.** It supports the structural control on
-  its frozen downstream gate but not the masking-dispersion contrast. Because its result file is not in
-  the tracked artifact registry, it is not a public headline result.
+- **The downstream evidence supports structural allocation, not masking dispersion.** The registered
+  gates support structural selection over fitness-greedy on GB1 and TrpB. Neither landscape supports the
+  added ESM masking-dispersion weight. The compact result is tracked in
+  [`structural_allocation_650m.json`](../artifacts/structural_allocation_650m.json) and remains provisional.
 
-- **The completed TrpB downstream run is exploratory.** It used `n_perturbations=0`, so it cannot evaluate
-  masking dispersion and is not decision-eligible. Its interpretation and provenance are recorded in
+- **The earlier TrpB downstream run is exploratory.** It used `n_perturbations=0`, so it cannot evaluate
+  masking dispersion and is not decision-eligible. Its historical interpretation is recorded in
   [`trpb-downstream-generalization-20260716.md`](experiments/trpb-downstream-generalization-20260716.md).
 
-- **TrpB 650M scoring with `n_perturbations=16` is in progress outside the repository.** It is not yet a
-  map-recovery or downstream result. Its artifacts and status will be reviewed before any result claim.
+- **The TrpB 650M `n_perturbations=16` profile is complete but provisional.** Its map-recovery result
+  supports `info` over fitness-greedy and random, while the structural ablation shows that masking
+  dispersion does not carry the gain. See
+  [`trpb-650m-n16-20260723.md`](experiments/trpb-650m-n16-20260723.md).
 
 - **The earlier TrpB recovery smoke run is not confirmatory.** Its old WT anchoring invalidates its
   recovery coefficients and truth-map summaries. Selection identities, coverage, hit rate, and run

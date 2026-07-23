@@ -20,3 +20,7 @@ commit SHA and clean code state.
 Run `python scripts/validate_artifacts.py` to verify schemas, checksums, public-document claim mappings,
 and banned historical values. `report/` remains ignored and is the location for transient or large
 outputs.
+
+`structural_allocation_650m.json` is the compact, provisional summary of the GB1 and TrpB downstream
+gates and the TrpB map-recovery decision. It records hashes for the large source reports instead of
+copying their raw fold and partition records into the repository.

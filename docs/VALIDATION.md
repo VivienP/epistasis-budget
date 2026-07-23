@@ -119,8 +119,16 @@ perturbation count, baselines, metrics, and decision rule. Its reference is the 
 871 of 160,000 source values are imputed and unflagged in the public mirror, so any result must retain
 that limitation.
 
-**TrpB status: IN PROGRESS.** TrpB 650M scoring with `n_perturbations=16` is in progress outside the
-repository; it is not yet a map-recovery or downstream result.
+## Current TrpB map-recovery decision
+
+The full 650M TrpB profile is complete. `info` satisfies the frozen pairwise rule against `fitness` and
+`random`. The structural ablation exceeds `info` at budgets 96 and 192 for both Pearson and Spearman, so
+the masking-dispersion prior earns no contribution claim. The result is provisional and must retain the
+TrpB imputation caveat.
+
+The decision-bearing summary and source hashes are tracked in
+[`structural_allocation_650m.json`](../artifacts/structural_allocation_650m.json); the run-specific reading
+is in [`trpb-650m-n16-20260723.md`](experiments/trpb-650m-n16-20260723.md).
 
 ## Current GB1 map-recovery decision
 
@@ -156,11 +164,16 @@ Missing, duplicate, unexpected, wrongly versioned, or divergent raw-record cells
 status precedence defined in the authoritative spec. A nonconforming recipe cannot become
 decision-eligible from favorable descriptive values.
 
-The current amended GB1 downstream report is decision-eligible and sets
-`structural_downstream_supported=true`; the ESM uncertainty contribution is not supported. The report is
-provisional and local, so this status does not change the public map-recovery verdict. The TrpB
-`n_perturbations=16` downstream result is pending that scoring cache; no result is claimed. Run evidence is
-indexed in [the downstream experiment record](experiments/trpb-downstream-generalization-20260716.md).
+The amended GB1 and TrpB reports conform to the frozen downstream profile. Both set
+`structural_downstream_supported=true` and do not support the ESM uncertainty contribution. On TrpB, the
+structural-minus-fitness gate is positive in 20/20 partitions with mean AUC difference +0.286; the
+info-minus-structural gate is positive in 0/20 partitions at B=192 with mean difference −0.025.
+
+Both results remain provisional. The compact evidence is tracked in
+[`structural_allocation_650m.json`](../artifacts/structural_allocation_650m.json), with the complete reading
+in [`trpb-650m-n16-20260723.md`](experiments/trpb-650m-n16-20260723.md). The earlier
+[`trpb-downstream-generalization-20260716.md`](experiments/trpb-downstream-generalization-20260716.md) is
+the nonconforming `n_perturbations=0` historical run.
 
 ## Threats to validity
 

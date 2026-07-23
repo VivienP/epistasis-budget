@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "provenance": {
+    "evidence_classification": "traceable_not_rerun",
+    "status": "provisional",
+    "sources": {
+      "gb1_downstream": {
+        "path": "report/20260715T111312Z/downstream.json",
+        "sha256": "7641424bf6f56141587b1b07026b9de671236a8278e6a6318633cff028d10d52",
+        "execution_commit": "fc6436a90911080e83b439f9e776d3086c393dcf",
+        "code_state": "dirty"
+      },
+      "trpb_map_recovery": {
+        "path": "report/20260723T084615Z/metrics.json",
+        "sha256": "1f5b57f9c8c3151a0dfaf5479dfaf4c9a869e65e4abd67dfd05528ae19613f82",
+        "execution_commit": "6fdfd5726c57faeb904cf7929d5dd201b0d583de",
+        "code_state": "clean"
+      },
+      "trpb_downstream": {
+        "path": "report/20260723T084615Z/downstream.json",
+        "sha256": "efc2e0ca80dbecf295a97c1c4f2d80e9ebd7038d132c8ad187f16919279cc1a1",
+        "execution_commit": "6fdfd5726c57faeb904cf7929d5dd201b0d583de",
+        "code_state": "clean"
+      }
+    }
+  },
+  "configuration": {
+    "model_id": "facebook/esm2_t33_650M_UR50D",
+    "alphabet": "ACDEFGHIKLMNPQRSTVWY",
+    "budgets": [48, 96, 192],
+    "n_perturbations": 16,
+    "max_order": 3,
+    "random_seeds": 20,
+    "downstream_partitions": 20,
+    "downstream_outer_folds": 5
+  },
+  "results": {
+    "gb1": {
+      "map_recovery_status": "inconclusive_zero_gpu",
+      "downstream": {
+        "protocol_profile_conforming": true,
+        "structural_downstream_supported": true,
+        "structural_vs_fitness_positive_partitions": 20,
+        "structural_vs_fitness_mean_auc_delta": 0.3422903257144479,
+        "esm_uncertainty_supported": false,
+        "info_vs_structural_positive_partitions_at_192": 15,
+        "info_vs_structural_mean_delta_at_192": 0.007390820815059291
+      }
+    },
+    "trpb": {
+      "data_sha256": "e94e2bed0a128f505eeedd8890cad64b3113c4a17562908ad8a121fa2a8e205f",
+      "n_candidates": 29678,
+      "n_truth_terms": 17709,
+      "map_recovery": {
+        "info_vs_fitness_supported": true,
+        "info_vs_random_supported": true,
+        "esm_uncertainty_contribution_supported": false,
+        "registered_nonoverlap_wins": {
+          "info_vs_fitness": {"pearson": 3, "spearman": 2},
+          "info_vs_random": {"pearson": 3, "spearman": 3},
+          "info_vs_structural": {"pearson": 1, "spearman": 0}
+        },
+        "pairwise": {
+          "48": {
+            "info": {"pearson": 0.24054607069611408, "spearman": 0.19419874738222515},
+            "structural": {"pearson": 0.13930984850171213, "spearman": 0.17708094039685243},
+            "fitness": {"pearson": 0.054546479784788195, "spearman": 0.13153628123029779},
+            "random": {"pearson": -0.10736605479414822, "spearman": -0.12466367311444496}
+          },
+          "96": {
+            "info": {"pearson": 0.5122568950649813, "spearman": 0.4030733034444484},
+            "structural": {"pearson": 0.6585150495360109, "spearman": 0.579705707674346},
+            "fitness": {"pearson": 0.03500545811120204, "spearman": 0.13393801786312134},
+            "random": {"pearson": -0.1067067312842008, "spearman": -0.12600596652625523}
+          },
+          "192": {
+            "info": {"pearson": 0.6978415619813318, "spearman": 0.5890808737801637},
+            "structural": {"pearson": 0.7736702933583482, "spearman": 0.701908183477662},
+            "fitness": {"pearson": 0.10051417782186821, "spearman": 0.1549751940543929},
+            "random": {"pearson": -0.04373747098603973, "spearman": -0.1118907704627943}
+          }
+        }
+      },
+      "downstream": {
+        "protocol_profile_conforming": true,
+        "structural_downstream_supported": true,
+        "structural_vs_fitness_positive_partitions": 20,
+        "structural_vs_fitness_mean_auc_delta": 0.28637371402998113,
+        "esm_uncertainty_supported": false,
+        "info_vs_structural_positive_partitions_at_192": 0,
+        "info_vs_structural_mean_delta_at_192": -0.025088876203686793
+      },
+      "conditioning_caveat": "The public mirror contains 871 imputed fitness values that are not identified row by row."
+    }
+  }
+}

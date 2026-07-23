@@ -158,6 +158,78 @@
       "transform": {"name": "identity"},
       "rendered": "300",
       "anchor": "n=300 covered GB1 variants"
+    },
+    {
+      "id": "trpb.downstream.structural_partitions.validation",
+      "document": "docs/VALIDATION.md",
+      "artifact": "artifacts/structural_allocation_650m.json",
+      "json_pointer": "/results/trpb/downstream/structural_vs_fitness_positive_partitions",
+      "transform": {"name": "identity"},
+      "rendered": "20",
+      "anchor": "20/20 partitions"
+    },
+    {
+      "id": "trpb.downstream.structural_delta.validation",
+      "document": "docs/VALIDATION.md",
+      "artifact": "artifacts/structural_allocation_650m.json",
+      "json_pointer": "/results/trpb/downstream/structural_vs_fitness_mean_auc_delta",
+      "transform": {"name": "round", "digits": 3, "show_plus": true},
+      "rendered": "+0.286",
+      "anchor": "mean AUC difference +0.286"
+    },
+    {
+      "id": "trpb.downstream.esm_partitions.validation",
+      "document": "docs/VALIDATION.md",
+      "artifact": "artifacts/structural_allocation_650m.json",
+      "json_pointer": "/results/trpb/downstream/info_vs_structural_positive_partitions_at_192",
+      "transform": {"name": "identity"},
+      "rendered": "0",
+      "anchor": "0/20 partitions"
+    },
+    {
+      "id": "trpb.downstream.esm_delta.validation",
+      "document": "docs/VALIDATION.md",
+      "artifact": "artifacts/structural_allocation_650m.json",
+      "json_pointer": "/results/trpb/downstream/info_vs_structural_mean_delta_at_192",
+      "transform": {"name": "round", "digits": 3, "unicode_minus": true},
+      "rendered": "−0.025",
+      "anchor": "mean difference −0.025"
+    },
+    {
+      "id": "trpb.downstream.structural_partitions.experiment",
+      "document": "docs/experiments/trpb-650m-n16-20260723.md",
+      "artifact": "artifacts/structural_allocation_650m.json",
+      "json_pointer": "/results/trpb/downstream/structural_vs_fitness_positive_partitions",
+      "transform": {"name": "identity"},
+      "rendered": "20",
+      "anchor": "20/20 partitions"
+    },
+    {
+      "id": "trpb.downstream.structural_delta.experiment",
+      "document": "docs/experiments/trpb-650m-n16-20260723.md",
+      "artifact": "artifacts/structural_allocation_650m.json",
+      "json_pointer": "/results/trpb/downstream/structural_vs_fitness_mean_auc_delta",
+      "transform": {"name": "round", "digits": 3, "show_plus": true},
+      "rendered": "+0.286",
+      "anchor": "AUC difference of +0.286"
+    },
+    {
+      "id": "trpb.downstream.esm_partitions.experiment",
+      "document": "docs/experiments/trpb-650m-n16-20260723.md",
+      "artifact": "artifacts/structural_allocation_650m.json",
+      "json_pointer": "/results/trpb/downstream/info_vs_structural_positive_partitions_at_192",
+      "transform": {"name": "identity"},
+      "rendered": "0",
+      "anchor": "0/20 partitions"
+    },
+    {
+      "id": "trpb.downstream.esm_delta.experiment",
+      "document": "docs/experiments/trpb-650m-n16-20260723.md",
+      "artifact": "artifacts/structural_allocation_650m.json",
+      "json_pointer": "/results/trpb/downstream/info_vs_structural_mean_delta_at_192",
+      "transform": {"name": "round", "digits": 3, "unicode_minus": true},
+      "rendered": "−0.025",
+      "anchor": "mean difference −0.025"
     }
   ]
 }

@@ -47,6 +47,7 @@ figures/*.png
 figures/*.pdf
 !figures/.gitkeep
 !figures/epibudget_illustration.png
+!figures/trpb_pairwise_map_recovery_by_experimental_budget.png
 
 # Generated run reports (metrics JSON) — regenerated from the fetched data, never committed
 report/

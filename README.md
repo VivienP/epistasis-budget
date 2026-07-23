@@ -70,6 +70,8 @@ the ESM-weighted method beats fitness-greedy and random for pairwise map recover
 is better at the two larger budgets. Downstream tests on GB1 and TrpB support structural selection over
 fitness-greedy and do not support an added benefit from masking dispersion.
 
+![TrpB pairwise map recovery versus experimental budget for structural, info, fitness-greedy, and random allocation](figures/trpb_pairwise_map_recovery_by_experimental_budget.png)
+
 The corrective GB1 map-recovery result remains inconclusive. All current comparative results are
 provisional; see the [validation protocol](docs/VALIDATION.md) and the
 [tracked evidence](artifacts/structural_allocation_650m.json).

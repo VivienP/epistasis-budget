@@ -77,6 +77,9 @@ from masking dispersion.
 In the tracked artifacts, `structural` means interaction-loop coverage, not protein 3D structure. All
 comparative findings remain provisional and limited to the evaluated landscapes, learner, and protocol.
 
+Read the [project write-up](https://vivienperrelle.com/journal/designing-protein-experiments-for-epistasis)
+for a longer account of the work.
+
 ## How it works
 
 1. **Score conjointly.** Apply every mutation in a variant before reading ESM-2 conditional

@@ -65,16 +65,17 @@ learner to rank held-out double and triple mutants. Measured fitness enters only
 
 ## Result
 
-**Partial: structural allocation works; ESM uncertainty does not.** On the completed TrpB 650M profile,
-the ESM-weighted method beats fitness-greedy and random for pairwise map recovery, but structure-only
-is better at the two larger budgets. Downstream tests on GB1 and TrpB support structural selection over
-fitness-greedy and do not support an added benefit from masking dispersion.
+Partial: interaction-loop coverage works as an experimental-design baseline; the current ESM-2
+masking-dispersion prior does not establish an added benefit beyond loop coverage. On TrpB, the
+registered map-recovery comparison is satisfied against fitness-greedy and random allocation. The
+corrective GB1 map-recovery analysis remains inconclusive. Downstream evaluations on both GB1 and TrpB
+support structural selection over fitness-greedy selection and do not support an incremental benefit
+from masking dispersion.
 
-![TrpB pairwise map recovery versus experimental budget for structural, info, fitness-greedy, and random allocation](figures/trpb_pairwise_map_recovery_by_experimental_budget.png)
+![Pairwise epistasis-map recovery across experimental budgets on TrpB and GB1 for structural, information-weighted, fitness-greedy, and random allocation](figures/map_recovery_trpb_vs_gb1.svg)
 
-The corrective GB1 map-recovery result remains inconclusive. All current comparative results are
-provisional; see the [validation protocol](docs/VALIDATION.md) and the
-[tracked evidence](artifacts/structural_allocation_650m.json).
+In the tracked artifacts, `structural` means interaction-loop coverage, not protein 3D structure. All
+comparative findings remain provisional and limited to the evaluated landscapes, learner, and protocol.
 
 ## How it works
 

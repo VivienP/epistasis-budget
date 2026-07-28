@@ -214,13 +214,19 @@ def test_public_artifact_payload_preserves_source_and_checksum(tmp_path: Path) -
 
 
 def test_committed_artifacts_use_lf_line_endings() -> None:
-    """Manifest checksums are byte-level, so committed artifacts must stay LF across platforms."""
+    """Manifest checksums are byte-level, so committed TEXT artifacts must stay LF across platforms.
+
+    Binary figures (PNG, JPEG, WebP) are excluded: a CR byte inside compressed image data is not a
+    line ending, and Git never rewrites it. SVG is text and stays in scope.
+    """
     repo = Path(__file__).resolve().parents[1]
     manifest = json.loads((repo / "artifacts" / "manifest.json").read_text(encoding="utf-8"))
+    binary_suffixes = {".png", ".jpg", ".jpeg", ".webp"}
     offenders = [
         entry["path"]
         for entry in manifest["artifacts"]
-        if b"\r" in (repo / entry["path"]).read_bytes()
+        if Path(entry["path"]).suffix.lower() not in binary_suffixes
+        and b"\r" in (repo / entry["path"]).read_bytes()
     ]
     assert not offenders, (
         f"CRLF found in checksummed artifacts {offenders}; "

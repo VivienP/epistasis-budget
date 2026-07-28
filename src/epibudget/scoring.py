@@ -286,7 +286,12 @@ class ConjointScorer:
         seq_len: int,
         muts: Sequence[Mutation],
     ) -> float:
-        """Dispersion of the conjoint ΔG across ``n_perturbations`` background-context maskings."""
+        """Dispersion of the conjoint ΔG across ``n_perturbations`` background-context maskings.
+
+        ``np.var`` with the default ``ddof=0`` (population variance). The denominator is recorded
+        because the number must be reproducible; it is a uniform K/(K−1) factor across candidates,
+        so it cannot change any ranking. This is masking dispersion, not calibrated uncertainty.
+        """
         if self.n_perturbations <= 0:
             return 0.0
         bg = [q for q in range(seq_len) if q not in set(sites)]

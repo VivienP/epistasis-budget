@@ -33,14 +33,15 @@ from epibudget.downstream import (
     PartitionAggregate,
     RandomFoldSeedRecord,
     RobustnessGate,
+    _det_key,
     assign_outer_folds,
     canonical_id,
     downstream_report,
     fit_ridge,
-    learning_curve_auc,
     macro_spearman,
     method_budget_summaries,
     ndcg_at_k,
+    normalized_log2_budget_auc,
     partition_salt,
     percentile_relevance,
     raw_record_coverage,
@@ -437,12 +438,32 @@ def test_macro_spearman_averages_the_two_orders() -> None:
     assert macro_spearman(0.4, None) is None
 
 
-def test_percentile_relevance_keeps_zeros_and_averages_ties() -> None:
+def test_percentile_relevance_zeroes_inactive_and_ranks_actives_by_hand_oracle() -> None:
+    """Audit L-1: inactive (f <= 0) variants carry relevance 0; actives rank within the actives.
+
+    Hand oracle for [0.0, 1.0, 2.0, 3.0]: one inactive -> 0.0; three actives with ranks 1, 2, 3 over
+    n_active = 3 -> 1/3, 2/3, 3/3. Under the previous all-rows convention the inactive row scored
+    0.0 here only by luck of being the minimum; on GB1 its 29,477 dead rows each scored ~0.10.
+    """
     rel = percentile_relevance(np.array([0.0, 1.0, 2.0, 3.0]))
     assert rel[0] == pytest.approx(0.0)
-    assert rel[-1] == pytest.approx(1.0)
-    tied = percentile_relevance(np.array([0.0, 0.0, 2.0]))
-    assert tied[0] == pytest.approx(0.25) and tied[1] == pytest.approx(0.25)
+    assert rel[1] == pytest.approx(1 / 3)
+    assert rel[2] == pytest.approx(2 / 3)
+    assert rel[3] == pytest.approx(1.0)
+
+    # A TrpB-style negative label is inactive too, not merely low-ranked.
+    trpb_like = percentile_relevance(np.array([-0.16, -0.01, 4.0]))
+    assert trpb_like[0] == pytest.approx(0.0)
+    assert trpb_like[1] == pytest.approx(0.0)
+    assert trpb_like[2] == pytest.approx(1.0)
+
+    # Ties among actives are averaged; inactives stay pinned at zero.
+    tied = percentile_relevance(np.array([0.0, 2.0, 2.0]))
+    assert tied[0] == pytest.approx(0.0)
+    assert tied[1] == pytest.approx(0.75) and tied[2] == pytest.approx(0.75)
+
+    # An all-inactive fold has no relevance signal at all.
+    assert percentile_relevance(np.array([0.0, -0.2, -0.1])).tolist() == [0.0, 0.0, 0.0]
 
 
 def test_ndcg_is_one_for_the_ideal_order_and_handles_ties() -> None:
@@ -463,8 +484,8 @@ def test_ndcg_all_tied_relevance_is_one_by_convention() -> None:
 
 
 def test_learning_curve_auc_equal_trapezoid_weights() -> None:
-    assert learning_curve_auc([0.4, 0.5, 0.6]) == pytest.approx(0.5)
-    assert learning_curve_auc([0.4, None, 0.6]) is None
+    assert normalized_log2_budget_auc([0.4, 0.5, 0.6]) == pytest.approx(0.5)
+    assert normalized_log2_budget_auc([0.4, None, 0.6]) is None
 
 
 # --- corrected-CV sensitivity companion (never the primary gate) ---------------------------------
@@ -536,12 +557,14 @@ def _fold_record(
         selected_identity_hash="selected-hash",
         selectable_pool_size=selectable_pool_size,
         revealed_count=effective_train_size,
-        live_count=effective_train_size,
-        dead_count=0,
-        missing_count=0,
-        unusable_count=0,
+        valid_positive=effective_train_size,
+        valid_zero=0,
+        valid_negative_in_domain=0,
+        outside_transform_domain=0,
+        non_finite=0,
+        missing=0,
         effective_train_size=effective_train_size,
-        train_live_fraction=1.0,
+        train_active_fraction=1.0,
         selected_singles=0,
         selected_doubles=budget,
         selected_triples=0,
@@ -806,6 +829,56 @@ def test_downstream_runs_on_nongb1_landscape_with_nonunit_wt_and_negative_labels
     ]
     assert s_macros  # the benchmark produced defined S_macro values on the negative-label landscape
     assert all(isfinite(x) for x in s_macros)  # no NaN/inf from log1p on negative (> -1) fitness
+
+
+def test_every_selected_row_lands_in_exactly_one_accounting_bucket() -> None:
+    """Audit H-3: the plate buckets must partition ``selected_count`` on a negative-label landscape.
+
+    The previous accounting split revealed labels into positive / exact-zero / non-finite only,
+    so a finite negative label belonged to no bucket: it vanished from the training set, from every
+    count, and from ``train_live_fraction``, which read 1.000 however inactive the plate was.
+    """
+    pool = _pool()
+    landscape = _landscape_trpb_like(pool)
+    assert any(f < 0.0 for f in landscape.values())
+    report = downstream_report(
+        pool,
+        landscape,
+        budgets=[4, 6],
+        seeds=2,
+        n_folds=2,
+        partitions=2,
+        sites=_SITES,
+        wt_at_sites=_WT,
+        alphabet=_ALPHABET,
+        grid_main=[1.0, 10.0],
+        grid_pair=[1.0, 10.0],
+        n_inner=2,
+    )
+    records = [*report.deterministic_records, *report.random_records]
+    assert records
+    for record in records:
+        buckets = (
+            record.valid_positive
+            + record.valid_zero
+            + record.valid_negative_in_domain
+            + record.outside_transform_domain
+            + record.non_finite
+            + record.missing
+        )
+        assert buckets == record.selected_count, record
+        assert record.effective_train_size == (
+            record.valid_positive + record.valid_zero + record.valid_negative_in_domain
+        )
+    # The negative (inactive) rows are training data here, not discarded rows.
+    assert any(r.valid_negative_in_domain > 0 for r in records)
+    trained_on_negatives = [r for r in records if r.valid_negative_in_domain > 0]
+    assert all(r.effective_train_size >= r.valid_negative_in_domain for r in trained_on_negatives)
+    # ...and the retired 1.000-always fraction is now a real active fraction below 1.
+    fractions = [
+        r.train_active_fraction for r in trained_on_negatives if r.train_active_fraction is not None
+    ]
+    assert fractions and min(fractions) < 1.0
 
 
 def test_downstream_report_retains_all_methods_estimands_and_regimes() -> None:
@@ -1372,7 +1445,7 @@ def test_protocol_profile_conformance_flags_extra_budget() -> None:
 
 
 def test_protocol_profile_conformance_flags_reordered_budgets_same_set() -> None:
-    # Budget order matters: learning_curve_auc trapezoidal-integrates over budgets in given order.
+    # Budget order matters: the log2-budget trapezoid integrates over budgets in given order.
     result = ds.protocol_profile_conformance(**_profile_kwargs(budgets=[96, 48, 192]))  # type: ignore[arg-type]
     assert not result.conforming
     assert "budgets" in result.mismatches
@@ -1475,12 +1548,14 @@ def _synthetic_common_fields(
         selected_identity_hash="selected-hash",
         selectable_pool_size=budget * 10,
         revealed_count=budget,
-        live_count=budget,
-        dead_count=0,
-        missing_count=0,
-        unusable_count=0,
+        valid_positive=budget,
+        valid_zero=0,
+        valid_negative_in_domain=0,
+        outside_transform_domain=0,
+        non_finite=0,
+        missing=0,
         effective_train_size=budget,
-        train_live_fraction=1.0,
+        train_active_fraction=1.0,
         selected_singles=0,
         selected_doubles=budget,
         selected_triples=0,
@@ -2662,3 +2737,30 @@ def test_missing_cell_and_divergent_duplicate_together_are_nonconforming() -> No
     _assert_gates_unavailable(decision)
     assert aggregates == []
     assert companions == []
+
+
+def test_v1_records_are_not_pooled_with_v2_records() -> None:
+    """Audit remediation: the protocol version is the guard against mixing incompatible records.
+
+    v2 changed the raw-record label buckets, the NDCG relevance convention, the learning-curve
+    aggregate's name and the selection tie-break. A v1 record carries different semantics under the
+    same field names, so it must never contribute to a v2 summary. ``protocol_version`` is part of
+    the identity key, so a stale record is simultaneously an unexpected cell and a missing one.
+    """
+    assert ds.PROTOCOL_VERSION == "epibudget-downstream-v2"
+    assert "epibudget-downstream-v1" in ds.SUPERSEDED_PROTOCOL_VERSIONS
+    assert ds.PROTOCOL_VERSION not in ds.SUPERSEDED_PROTOCOL_VERSIONS
+
+    fresh = _fold_record(
+        method="structural",
+        budget=48,
+        partition_index=0,
+        fold_index=0,
+        s_macro=0.5,
+        selectable_pool_size=100,
+        effective_train_size=48,
+        n_eval=50,
+    )
+    stale = fresh.model_copy(update={"protocol_version": "epibudget-downstream-v1"})
+    assert _det_key(stale) != _det_key(fresh)  # the version is part of the identity key
+    assert "epibudget-downstream-v1" in _det_key(stale)

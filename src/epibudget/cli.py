@@ -204,6 +204,15 @@ def allocate(
         raise typer.BadParameter(
             f"--method must be one of {', '.join(SELECTION_METHODS)}, got {method!r}"
         )
+    if method == "info" and n_perturbations <= 0:
+        # Audit M-2: n_perturbations=0 makes var_delta_g exactly 0 for every candidate, so the
+        # dispersion-weighted weight is constant and the "allocation" is the enumeration order.
+        raise typer.BadParameter(
+            "--method info needs --n-perturbations > 0: with 0 masking passes every "
+            "var_delta_g is exactly 0, the dispersion weight is constant across all candidates, "
+            "and the ranking would be decided by enumeration order alone. Use "
+            "--method structural for a dispersion-free run."
+        )
 
     wt = read_fasta_sequence(Path(fasta))
     sites = [int(p) - 1 for p in positions.split(",")]

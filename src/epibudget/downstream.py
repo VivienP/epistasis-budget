@@ -22,7 +22,7 @@ from collections import Counter, defaultdict
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from itertools import combinations
-from math import isfinite, isnan, log2, sqrt
+from math import isnan, log2, sqrt
 from pathlib import Path
 from typing import NamedTuple
 
@@ -36,8 +36,10 @@ from epibudget.acquisition import allocate, fitness_greedy
 from epibudget.data import GB1_SITES, GB1_WT_AT_SITES, reveal_measured_fitness
 from epibudget.epistasis import predicted_epistasis
 from epibudget.graph import EpistasisFactorGraph, variant_variance
+from epibudget.labels import account, is_trainable
 from epibudget.provenance import write_json_atomic
 from epibudget.scored_cache import candidate_sha256
+from epibudget.tie_break import DEFAULT_TIE_SEED, TIE_BREAK_VERSION
 from epibudget.types import Interaction, ScoredVariant, Variant
 from epibudget.validate import esm_prior_mu, practice_heuristic, random_selection
 
@@ -53,7 +55,11 @@ _INNER_SALT = hashlib.sha256(b"epibudget-downstream-inner:v1").hexdigest()
 
 # --------------------------------------------------------------------- frozen protocol amendment 1
 
-PROTOCOL_VERSION = "epibudget-downstream-v1"
+# v2 (2026-07-28, audit remediation): the raw-record schema, the NDCG relevance convention and the
+# learning-curve aggregate all changed, and selection now resolves ties through a declared seed.
+# v1 and v2 records are NOT interchangeable and must never be pooled -- the version is the guard.
+PROTOCOL_VERSION = "epibudget-downstream-v2"
+SUPERSEDED_PROTOCOL_VERSIONS: tuple[str, ...] = ("epibudget-downstream-v1",)
 AMENDMENT_VERSION = "protocol-amendment-1"
 N_INNER_FOLDS = 3
 GRID_MAIN: tuple[float, ...] = (0.1, 1.0, 10.0)
@@ -493,12 +499,29 @@ def macro_spearman(rho_doubles: float | None, rho_triples: float | None) -> floa
 
 
 def percentile_relevance(fitness: FloatArray) -> FloatArray:
-    """Deterministic percentile rank of raw fitness in [0, 1] (zeros included, ties averaged)."""
+    """NDCG relevance: 0 for every inactive variant, percentile rank among the actives otherwise.
+
+    The scientific target of the ranking metrics is functional variants, and both registered
+    landscapes encode non-functionality as a non-positive label (GB1 as an exact zero, TrpB as a
+    small negative — ``scripts/fetch_trpb.py``: "<= 0 is inactive"). The previous convention ranked
+    every row together, so on GB1 each of the 29,477 dead genotypes carried relevance ~0.10 and,
+    with linear NDCG gain, a ranker was rewarded for placing dead variants highly.
+
+    Actives receive ``rank / n_active`` over the active subset (average ties), so relevance lies in
+    (0, 1] for actives and is exactly 0 for inactives. Ordering among actives is unchanged, so this
+    only removes credit for retrieving non-functional variants.
+    """
     n = len(fitness)
-    if n <= 1:
-        return np.zeros(n, dtype=np.float64)
-    ranks: FloatArray = np.asarray(rankdata(fitness, method="average"), dtype=np.float64)
-    return (ranks - 1.0) / (n - 1)
+    out: FloatArray = np.zeros(n, dtype=np.float64)
+    if n == 0:
+        return out
+    active = fitness > 0.0
+    n_active = int(active.sum())
+    if n_active == 0:
+        return out
+    ranks: FloatArray = np.asarray(rankdata(fitness[active], method="average"), dtype=np.float64)
+    out[active] = ranks / n_active
+    return out
 
 
 def ndcg_at_k(pred: FloatArray, relevance: FloatArray, k: int, tiebreak: Sequence[str]) -> float:
@@ -523,12 +546,37 @@ def ndcg_at_k(pred: FloatArray, relevance: FloatArray, k: int, tiebreak: Sequenc
     return _dcg(ranked) / idcg if idcg > 0.0 else 0.0
 
 
-def learning_curve_auc(values: Sequence[float | None]) -> float | None:
-    """Equal-weight trapezoidal average over ordered-budget values (None if any point undefined)."""
+def normalized_log2_budget_auc(
+    values: Sequence[float | None], budgets: Sequence[int] | None = None
+) -> float | None:
+    """Normalized trapezoidal average of a metric over the **log2(budget)** axis.
+
+    The registered grid (48, 96, 192) doubles at each step, so it is *equally spaced on log2(B)*
+    (5.585, 6.585, 7.585) and the equal-weight trapezoid below is the exact normalized trapezoidal
+    integral on that axis:
+
+        AUC = [v_0 + 2*v_1 + ... + 2*v_{m-2} + v_{m-1}] / (2 (m - 1))
+
+    so the registered weights are (1/4, 1/2, 1/4). This is NOT the integral on the raw-budget axis,
+    which would weight the grid (1/6, 1/2, 1/3); the previous name ``learning_curve_auc`` did not
+    say which axis it used. ``budgets`` is validated when supplied so a future non-doubling
+    grid cannot silently inherit the equal-spacing assumption.
+
+    Returns ``None`` if any budget point is undefined; no baseline point is ever inserted.
+    """
     if any(v is None for v in values) or len(values) < _PAIRWISE_ORDER:
         return None
     vals = [float(v) for v in values if v is not None]
     m = len(vals)
+    if budgets is not None:
+        if len(budgets) != m:
+            raise ValueError(f"budgets has {len(budgets)} entries but {m} values were given")
+        spacing = np.diff(np.log2(np.asarray(budgets, dtype=np.float64)))
+        if not np.allclose(spacing, spacing[0]):
+            raise ValueError(
+                f"budgets {list(budgets)} are not equally spaced on log2; the normalized "
+                f"log2-budget trapezoid does not apply to this grid"
+            )
     weighted = vals[0] + vals[-1] + 2.0 * sum(vals[1:-1])
     return weighted / (2.0 * (m - 1))
 
@@ -671,12 +719,14 @@ class DeterministicFoldRecord(BaseModel):
     selected_identity_hash: str
     selectable_pool_size: int
     revealed_count: int
-    live_count: int
-    dead_count: int
-    missing_count: int
-    unusable_count: int
+    valid_positive: int
+    valid_zero: int
+    valid_negative_in_domain: int
+    outside_transform_domain: int
+    non_finite: int
+    missing: int
     effective_train_size: int
-    train_live_fraction: float | None
+    train_active_fraction: float | None
 
     selected_singles: int
     selected_doubles: int
@@ -740,12 +790,14 @@ class RandomFoldSeedRecord(BaseModel):
     selected_identity_hash: str
     selectable_pool_size: int
     revealed_count: int
-    live_count: int
-    dead_count: int
-    missing_count: int
-    unusable_count: int
+    valid_positive: int
+    valid_zero: int
+    valid_negative_in_domain: int
+    outside_transform_domain: int
+    non_finite: int
+    missing: int
     effective_train_size: int
-    train_live_fraction: float | None
+    train_active_fraction: float | None
 
     selected_singles: int
     selected_doubles: int
@@ -832,7 +884,7 @@ class ConfirmatoryProfile(BaseModel):
     protocol_version: str
     partitions: int
     outer_folds: int
-    budgets: tuple[int, ...]  # order-sensitive: learning_curve_auc trapezoidal-integrates in order
+    budgets: tuple[int, ...]  # order-sensitive: the log2-budget trapezoid integrates in order
     alphabet: str
     max_order: int
     n_perturbations: int  # scoring recipe: the cache's masking passes (0 disables the info prior)
@@ -951,12 +1003,14 @@ class _RawBundle:
     selected_identity_hash: str
     selectable_pool_size: int
     revealed_count: int
-    live_count: int
-    dead_count: int
-    missing_count: int
-    unusable_count: int
+    valid_positive: int
+    valid_zero: int
+    valid_negative_in_domain: int
+    outside_transform_domain: int
+    non_finite: int
+    missing: int
     effective_train_size: int
-    train_live_fraction: float | None
+    train_active_fraction: float | None
     selected_singles: int
     selected_doubles: int
     selected_triples: int
@@ -1073,15 +1127,11 @@ def _evaluate_selection(
 
     Returns the immutable bundle a raw fold record is built from.
     """
-    live_ids = {v for v, f in revealed.items() if isfinite(f) and f > 0.0}
-    dead_ids = {v for v, f in revealed.items() if isfinite(f) and f == 0.0}
-    unusable_ids = {v for v, f in revealed.items() if not isfinite(f)}
-    train_variants = sorted(live_ids | dead_ids, key=canonical_id)
+    accounting, trainable = account(selected, revealed)
+    train_variants = sorted(trainable, key=canonical_id)
     train_fit = np.array([revealed[v] for v in train_variants], dtype=np.float64)
-    n_missing = len(selected) - len(revealed)
     s_singles, s_doubles, s_triples = _order_counts(selected)
     t_singles, t_doubles, t_triples = _order_counts(train_variants)
-    live_fraction = float(len(live_ids)) / len(train_variants) if train_variants else None
     warns: list[str] = []
 
     empty_alpha = AlphaChoice(
@@ -1097,12 +1147,14 @@ def _evaluate_selection(
         selected_identity_hash=candidate_sha256(selected),
         selectable_pool_size=pool_size,
         revealed_count=len(revealed),
-        live_count=len(live_ids),
-        dead_count=len(dead_ids),
-        missing_count=n_missing,
-        unusable_count=len(unusable_ids),
-        effective_train_size=len(train_variants),
-        train_live_fraction=live_fraction,
+        valid_positive=accounting.valid_positive,
+        valid_zero=accounting.valid_zero,
+        valid_negative_in_domain=accounting.valid_negative_in_domain,
+        outside_transform_domain=accounting.outside_transform_domain,
+        non_finite=accounting.non_finite,
+        missing=accounting.missing,
+        effective_train_size=accounting.effective_train_size,
+        train_active_fraction=accounting.active_fraction,
         selected_singles=s_singles,
         selected_doubles=s_doubles,
         selected_triples=s_triples,
@@ -1183,12 +1235,14 @@ def _evaluate_selection(
         selected_identity_hash=candidate_sha256(selected),
         selectable_pool_size=pool_size,
         revealed_count=len(revealed),
-        live_count=len(live_ids),
-        dead_count=len(dead_ids),
-        missing_count=n_missing,
-        unusable_count=len(unusable_ids),
-        effective_train_size=len(train_variants),
-        train_live_fraction=live_fraction,
+        valid_positive=accounting.valid_positive,
+        valid_zero=accounting.valid_zero,
+        valid_negative_in_domain=accounting.valid_negative_in_domain,
+        outside_transform_domain=accounting.outside_transform_domain,
+        non_finite=accounting.non_finite,
+        missing=accounting.missing,
+        effective_train_size=accounting.effective_train_size,
+        train_active_fraction=accounting.active_fraction,
         selected_singles=s_singles,
         selected_doubles=s_doubles,
         selected_triples=s_triples,
@@ -1240,7 +1294,7 @@ def _transfer_triples(
     excluded from this sub-test's training rows (never used to predict held-out triples).
     """
     train = sorted(
-        (v for v, f in revealed.items() if isfinite(f) and len(v) <= _PAIRWISE_ORDER),
+        (v for v, f in revealed.items() if is_trainable(f) and len(v) <= _PAIRWISE_ORDER),
         key=canonical_id,
     )
     n_singles, n_doubles, _n_triples = _order_counts(train)
@@ -1322,7 +1376,7 @@ def _esm_circular(
     predicted value here is exactly ``b*esm[v]``, never a pinned measured value.
     """
     # TODO: use a downstream-specific calibration scale; log1p labels do not satisfy esm_prior_mu's WT-centered log-fitness contract.  # noqa: E501
-    calibration = {v: float(np.log1p(f)) for v, f in revealed.items() if isfinite(f)}
+    calibration = {v: float(np.log1p(f)) for v, f in revealed.items() if is_trainable(f)}
     if not calibration:
         return None
     identities = set(ctx.eval_variants) | set(calibration)
@@ -1402,7 +1456,7 @@ class MethodBudgetSummary(BaseModel):
     uplift: float | None
     transfer_rho_triples: float | None
     effective_train_size: float | None
-    train_live_fraction: float | None
+    train_active_fraction: float | None
     esm_circular_s_macro: float | None
     esm_zero_shot_s_macro: float | None
     esm_offset_s_macro: float | None
@@ -1442,6 +1496,9 @@ class RobustnessGate(BaseModel):
     median_positive: bool
     min_effect_size: float
     effect_size_pass: bool
+    # True when min_effect_size == 0.0, i.e. effect_size_pass duplicates
+    # global_mean_positive and is therefore excluded from the `supported` conjunction (H-4).
+    effect_size_is_redundant: bool = True
     decision_eligible: bool
     supported: bool | None
     status: str
@@ -1534,6 +1591,10 @@ class DownstreamReport(BaseModel):
     grid_main: list[float]
     grid_pair: list[float]
     n_inner_folds: int
+    # The declared tie seed the selections used (audit H-1). One seed is one draw of any
+    # method whose acquisition score has an exact stratum crossing the budget cut.
+    tie_seed: int = DEFAULT_TIE_SEED
+    tie_break_version: str = TIE_BREAK_VERSION
     note: str
     provenance: dict[str, object]
     deterministic_records: list[DeterministicFoldRecord]
@@ -1585,7 +1646,7 @@ def method_budget_summaries(records: Sequence[FoldRecord]) -> list[MethodBudgetS
                 uplift=_mean_opt([r.uplift for r in rs]),
                 transfer_rho_triples=_mean_opt([r.transfer_rho_triples for r in rs]),
                 effective_train_size=_mean_opt([float(r.effective_train_size) for r in rs]),
-                train_live_fraction=_mean_opt([r.train_live_fraction for r in rs]),
+                train_active_fraction=_mean_opt([r.train_active_fraction for r in rs]),
                 esm_circular_s_macro=_mean_opt([r.esm_circular_s_macro for r in rs]),
                 esm_zero_shot_s_macro=_mean_opt([r.esm_zero_shot_s_macro for r in rs]),
                 esm_offset_s_macro=_mean_opt([r.esm_offset_s_macro for r in rs]),
@@ -1626,8 +1687,8 @@ def _paired_cell_deltas(
         all_cells = set().union(*(set(c) for c in by_budget_a.values()))
         auc_out: dict[tuple[int, int], float | None] = {}
         for cell in all_cells:
-            auc_a = learning_curve_auc([by_budget_a[b].get(cell) for b in budgets])
-            auc_b = learning_curve_auc([by_budget_b[b].get(cell) for b in budgets])
+            auc_a = normalized_log2_budget_auc([by_budget_a[b].get(cell) for b in budgets], budgets)
+            auc_b = normalized_log2_budget_auc([by_budget_b[b].get(cell) for b in budgets], budgets)
             auc_out[cell] = None if (auc_a is None or auc_b is None) else auc_a - auc_b
         return auc_out
     at_max_a = _s_macro_cells(records, estimand, regime, method_a, max_budget)
@@ -1724,12 +1785,22 @@ def robustness_gate(
     median_delta = float(np.median(partition_means)) if partition_means else None
     median_positive = median_delta is not None and median_delta > 0.0
     effect_pass = global_mean is not None and global_mean > min_effect_size
+    # Audit H-4: with the frozen ``MIN_STRUCTURAL_EFFECT_SIZE = 0.0`` this condition is
+    # bit-identical to ``global_mean_positive``, so the advertised gate had 6 distinct
+    # conditions, not 7. It is
+    # dropped from the conjunction (a numerical no-op at threshold 0.0) and retained as a reported
+    # field, so a future amendment can set a preregistered non-zero practical-effect threshold and
+    # have it actually bind. ``effect_size_is_redundant`` records which of the two regimes applied.
+    effect_size_redundant = min_effect_size == 0.0
     eligible = complete
     if not eligible:
         supported: bool | None = None
         status = "insufficient_valid_partitions"
     else:
-        supported = bool(sign_pass and global_positive and median_positive and effect_pass)
+        conditions = [sign_pass, global_positive, median_positive]
+        if not effect_size_redundant:
+            conditions.append(effect_pass)
+        supported = bool(all(conditions))
         status = "ok"
     return RobustnessGate(
         estimand=aggregates[0].estimand if aggregates else "",
@@ -1749,6 +1820,7 @@ def robustness_gate(
         median_positive=median_positive,
         min_effect_size=min_effect_size,
         effect_size_pass=effect_pass,
+        effect_size_is_redundant=effect_size_redundant,
         decision_eligible=eligible,
         supported=supported,
         status=status,
@@ -2462,12 +2534,14 @@ def _record_from_bundle(
         "selected_identity_hash": bundle.selected_identity_hash,
         "selectable_pool_size": bundle.selectable_pool_size,
         "revealed_count": bundle.revealed_count,
-        "live_count": bundle.live_count,
-        "dead_count": bundle.dead_count,
-        "missing_count": bundle.missing_count,
-        "unusable_count": bundle.unusable_count,
+        "valid_positive": bundle.valid_positive,
+        "valid_zero": bundle.valid_zero,
+        "valid_negative_in_domain": bundle.valid_negative_in_domain,
+        "outside_transform_domain": bundle.outside_transform_domain,
+        "non_finite": bundle.non_finite,
+        "missing": bundle.missing,
         "effective_train_size": bundle.effective_train_size,
-        "train_live_fraction": bundle.train_live_fraction,
+        "train_active_fraction": bundle.train_active_fraction,
         "selected_singles": bundle.selected_singles,
         "selected_doubles": bundle.selected_doubles,
         "selected_triples": bundle.selected_triples,
@@ -2518,12 +2592,13 @@ def _shared_method_records(
     fold: int,
     fold_hash: str,
     regime: str,
+    tie_seed: int,
 ) -> list[FoldRecord]:
     """fitness / practice / random are estimand-invariant: evaluate once, emit under both labels."""
     out: list[FoldRecord] = []
     for budget in budgets:
         det = {
-            "fitness": ev(fitness_greedy(pool, budget), budget),
+            "fitness": ev(fitness_greedy(pool, budget, tie_seed), budget),
             "practice": ev(practice_heuristic(pool, budget), budget),
         }
         random_bundles = [ev(random_selection(pool, budget, s), budget) for s in range(seeds)]
@@ -2572,12 +2647,19 @@ def _graph_method_records(
     fold_hash: str,
     regime: str,
     estimand: str,
+    tie_seed: int,
 ) -> list[FoldRecord]:
-    """info / structural depend on the estimand's graph; rank once at max budget, then slice."""
+    """info / structural depend on the estimand's graph; rank once at max budget, then slice.
+
+    ``structural``'s loop-coverage score is three-valued on a four-site landscape, so its plate is
+    decided entirely by ``tie_seed`` (audit H-1). One seed is one draw, not the method.
+    """
     max_budget = max(budgets)
     ranked = {
-        "info": allocate(graphs["info"], pool, max_budget, lambda_=0.0).selected,
-        "structural": allocate(graphs["structural"], pool, max_budget, lambda_=0.0).selected,
+        "info": allocate(graphs["info"], pool, max_budget, lambda_=0.0, tie_seed=tie_seed).selected,
+        "structural": allocate(
+            graphs["structural"], pool, max_budget, lambda_=0.0, tie_seed=tie_seed
+        ).selected,
     }
     out: list[FoldRecord] = []
     for budget in budgets:
@@ -2620,6 +2702,7 @@ def _fold_records(
     grid_main: Sequence[float],
     grid_pair: Sequence[float],
     n_inner: int,
+    tie_seed: int,
 ) -> list[FoldRecord]:
     """All records from one held-out fold (both estimands, both regimes, all methods)."""
     eval_measured = [v for v in sorted(e_j, key=canonical_id) if v in land]
@@ -2671,6 +2754,7 @@ def _fold_records(
                 fold,
                 ctx.fold_identity_hash,
                 regime,
+                tie_seed,
             )
         )
         for estimand, graphs in estimand_graphs.items():
@@ -2686,6 +2770,7 @@ def _fold_records(
                     ctx.fold_identity_hash,
                     regime,
                     estimand,
+                    tie_seed,
                 )
             )
     return out
@@ -2706,6 +2791,7 @@ def downstream_report(
     grid_main: Sequence[float] = GRID_MAIN,
     grid_pair: Sequence[float] = GRID_PAIR,
     n_inner: int = N_INNER_FOLDS,
+    tie_seed: int = DEFAULT_TIE_SEED,
     n_perturbations: int = 16,
     dataset: str = "gb1_wu2016",
     model_id: str = "",
@@ -2770,6 +2856,7 @@ def downstream_report(
                     grid_main,
                     grid_pair,
                     n_inner,
+                    tie_seed,
                 )
             )
 
@@ -2831,6 +2918,7 @@ def downstream_report(
         grid_main=list(grid_main),
         grid_pair=list(grid_pair),
         n_inner_folds=n_inner,
+        tie_seed=tie_seed,
         note=_REPORT_NOTE,
         provenance=dict(provenance) if provenance is not None else {},
         deterministic_records=forensic_deterministic_records,

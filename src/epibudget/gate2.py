@@ -19,7 +19,7 @@ import numpy.typing as npt
 from pydantic import BaseModel, ConfigDict, Field
 from scipy.stats import pearsonr, spearmanr
 
-from epibudget.acquisition import allocate, fitness_greedy
+from epibudget.acquisition import fitness_greedy
 from epibudget.data import (
     GB1_SITES,
     GB1_WT_AT_SITES,
@@ -400,6 +400,26 @@ def _selection_id(
     )
 
 
+def _legacy_prefix(
+    structural_graph: EpistasisFactorGraph, original: Sequence[ScoredVariant], budget: int
+) -> list[Variant]:
+    """Reproduce the HISTORICAL structural prefix: a plain stable sort that keeps the input order.
+
+    This is the diagnostic the tie-degeneracy finding rests on — it is what the pre-correction code
+    actually selected, and the corrective replay compares the seeded resolutions against it. It is
+    deliberately NOT routed through :func:`epibudget.acquisition.allocate` any more: `allocate` now
+    resolves exact ties through a declared seed (audit H-1), so calling it here would silently make
+    the "legacy" prefix input-order invariant and destroy the very contrast this record exists to
+    show. Encoding the old behaviour explicitly is what stops a future change to the acquisition
+    path from erasing the finding without any test noticing.
+    """
+    weight = {
+        item.variant: structural_graph.info_gain(frozenset(), item.variant) for item in original
+    }
+    ranked = sorted(original, key=lambda item: weight[item.variant], reverse=True)
+    return [item.variant for item in ranked[:budget]]
+
+
 def _build_selection_records(
     scored: Sequence[ScoredVariant],
     budgets: Sequence[int],
@@ -440,13 +460,7 @@ def _build_selection_records(
         info_selected = [item.variant for item in info_order[:budget]]
         fitness_selected = fitness_greedy(canonical, budget)
         practice_selected = practice_heuristic(canonical, budget)
-        legacy_selected = allocate(
-            structural_graph,
-            original,
-            budget,
-            lambda_=0.0,
-            model_id=model_id,
-        ).selected
+        legacy_selected = _legacy_prefix(structural_graph, original, budget)
         records.extend(
             (
                 _selection_record(

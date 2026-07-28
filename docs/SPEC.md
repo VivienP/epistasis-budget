@@ -13,11 +13,17 @@ allowed amino-acid set per position), an integer budget `B`, and an ESM-2 checkp
 
 **Output:** an ordered list of `B` variants (each a set of point mutations over `P`, of order 1–3),
 ranked by the v1 dispersion × loop-coverage proxy, plus the corresponding per-interaction dispersion map
-and modular score of the selected batch.
+and modular score of the selected batch. On a four-site landscape the loop-coverage factor n(v) is
+three-valued (1140 / 39 / 1), so the ranking reduces to mutation order with a seeded tie-break; the
+`tie_seed` is part of the method, not an implementation detail (see `src/epibudget/tie_break.py`).
 
-**Objective (informal):** compare a structure-aware allocation proxy with ranking by predicted fitness.
-The v1 score is exact for its independent-variant variance objective (§5), but is not calibrated posterior
-uncertainty for the landscape-recovery estimand.
+**Objective (informal):** compare a coverage-driven allocation proxy with ranking by predicted fitness.
+The v1 score is exact for its independent-variant **prior trace reduction** objective (§5). It is an
+A-optimal trace reduction under a diagonal, uncalibrated masking-dispersion prior — not an expected
+information gain, and not calibrated posterior uncertainty for the landscape-recovery estimand. It
+contains no loop-closure term, so it does not reward making any interaction identifiable: at B=48 on
+the four-site universe the objective-optimal plate identifies exactly zero interaction contrasts,
+while a plate that fully identifies 16 of them scores strictly lower.
 
 ---
 
@@ -118,8 +124,13 @@ by the variant, and the variance of the conjoint `ΔG` across those passes is ta
 ```
 delta_g      = conjoint_score(v)                                 # one unperturbed pass; deterministic
 scores = [conjoint_score(v, perturbation=k) for k in range(K)]   # K ≈ 16–32
-var_delta_g  = var(scores)      # zero-shot proxy for "how unsure is the model here"
+var_delta_g  = var(scores, ddof=0)   # population variance; masking dispersion, NOT calibrated uncertainty
 ```
+
+`ddof=0` (numpy's default) is deliberate and recorded: it is a uniform K/(K−1) factor across every
+candidate, so it cannot change any ranking, but the denominator must be stated for the number to be
+reproducible. Call the quantity **masking dispersion**, not uncertainty: measured against real
+prediction error it is weakly *anti*-correlated (Spearman −0.113, 95% CI [−0.220, −0.002]).
 
 Batching, caching (per-sequence forward passes are reused across variants that share a context), and a
 small-model fast path (`esm2_t12_35M`) keep the reduced-alphabet pass CPU-tractable. The full 20-letter

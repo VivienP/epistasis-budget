@@ -26,6 +26,13 @@ protocol and result status live in [`VALIDATION.md`](VALIDATION.md); tracked evi
   theoretical grid of 160,000. Replication comes from amino-acid combinations, not from many independent
   protein positions, so conclusions do not establish whole-protein positional generality.
 
+- **Inactive genotypes are training data downstream, and excluded from the log-ratio upstream.** The
+  committed TrpB provenance records `<= 0` as inactive, so TrpB's 35,643 negative labels are the same
+  biological class as GB1's 29,477 exact zeros; all are `> -1`, so `log1p` is defined and they are
+  valid downstream training rows (audit H-3; the previous code silently discarded them and reported a
+  training "live fraction" of 1.000). The map-recovery log-ratio is undefined at `f <= 0`, so its
+  eligible population is declared separately and before selection.
+
 - **Dead and missing genotypes are not imputed.** Fitness-zero rows cannot be log-transformed, and some
   genotypes are absent. Any interaction whose inclusion-exclusion loop touches an unavailable value has
   no recoverable ground truth and is excluded. This restricts evaluation to viable, complete loops.
@@ -39,13 +46,18 @@ protocol and result status live in [`VALIDATION.md`](VALIDATION.md); tracked evi
 
 ## Model
 
-- **The v1 acquisition score is modular.** With independent variant noise,
-  `info_gain(v) = var_delta_g(v) * n(v)` does not depend on previous selections. Allocation is therefore
-  a fixed ranking, not a general diminishing-returns or correlated-posterior design.
+- **The acquisition score is a prior trace reduction, not an information gain.** With independent
+  variant noise, `weight(v) = var_delta_g(v) * n(v)` does not depend on previous selections, so
+  allocation is a fixed ranking. It is an A-optimal trace reduction under a diagonal, uncalibrated
+  masking-dispersion prior — not an expected information gain, and it contains **no loop-closure
+  term**: at B=48 on the four-site universe the objective-optimal plate identifies exactly zero
+  interaction contrasts, and a plate that fully identifies 16 of them scores strictly lower.
 
-- **Loop coverage strongly favors low mutation orders.** The number of interaction loops braced by a
-  single or double mutant is much larger than for a triple. This structural factor dominates the
-  across-order ranking; masking dispersion mainly changes rankings within an order.
+- **The coverage score is three-valued on a four-site landscape.** `n(v)` is exactly 1140 for every
+  single, 39 for every double and 1 for every triple, so `structural` reduces to "singles, then
+  doubles, then triples" and every within-order comparison is a tie (audit H-1). The as-run tie draw
+  fell outside the range of 100 seeded resolutions at TrpB B=48 and B=192. A declared `tie_seed` is
+  now part of the method, and tie-dominated methods are reported as a seed distribution.
 
 - **Epistasis is WT-referenced.** Background-averaged epistasis and a MoCHI handoff are not implemented.
   Results should not be interpreted as estimates of ensemble epistasis across genetic backgrounds.
@@ -60,19 +72,28 @@ protocol and result status live in [`VALIDATION.md`](VALIDATION.md); tracked evi
 
 ## Metrics and inference
 
-- **Map recovery combines breadth and prediction.** An interaction is exact when its complete loop has
-  been measured. Reports must separate pinned-loop breadth from correlation on informed but unpinned
-  terms so that direct measurement is not presented as predictive accuracy.
+- **Map recovery is confounded by the purchased contrast component (audit C-1).** The inferred and the
+  true contrast both contain `k(S)`, the signed sum of the measured loop members' true values. The
+  breadth/precision split does *not* remove it: once all singles are bought, essentially every term is
+  informed-not-pinned and still carries `k(S)`. On TrpB a model-free plate that buys the singles and
+  assigns prior 0 scores Pearson 0.798, above every method originally reported. Use
+  `relative_sse_gain` as the wording gate and the skeleton-controlled association as the corrective
+  diagnostic; see [`AUDIT_REMEDIATION_20260728.md`](AUDIT_REMEDIATION_20260728.md).
 
 - **Pairwise and third-order results have different power.** They are reported separately. The pooled
   correlation is diagnostic only and cannot replace an order-specific decision.
 
-- **Precision sets differ by method.** Direct method comparisons use the intersection of terms informed
-  by both methods. Uninformed terms contribute to coverage, not to an invented correlation value.
+- **Precision sets differ by method.** The decision-bearing `validate.map_recovery` split computed each
+  method's precision on *its own* informed-not-pinned terms — 1,669 for structural against 107 for
+  fitness at TrpB B=192 — and compared the two as if they estimated the same quantity (audit M-3).
+  Only the post-hoc robustness suite intersected them. `recovery.common_term_subset` now evaluates a
+  comparison on terms in the same state for both methods, with the size and SHA-256 recorded.
 
-- **Confidence intervals have different sampling meanings.** Random-baseline intervals include
-  selection variability across seeds. Deterministic-method bootstrap intervals resample interaction
-  terms and measure leverage in the correlation, not repeated-budget variability.
+- **Confidence intervals have different sampling meanings, and the term bootstrap is too narrow.**
+  Random-baseline intervals include selection variability across seeds; deterministic-method bootstrap
+  intervals resample interaction terms and measure leverage only. For TrpB `structural` at B=192 the
+  reported interval [0.749, 0.795] is **disjoint from** the 100-seed tie-break range [0.676, 0.736]
+  (audit H-4). Comparative uncertainty now uses paired differences on identical units.
 
 - **Calibration slopes can dominate sparse selections.** When no loop member is measured, the inferred
   interaction is a scaled ESM prior. A method-specific slope can therefore determine the sign of a

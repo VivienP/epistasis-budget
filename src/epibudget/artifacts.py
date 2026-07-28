@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, Field
+
+# Markdown image/link targets, e.g. ![alt](figures/x.svg) or [text](figures/x.svg).
+_FIGURE_REFERENCE = re.compile(r"!?\[[^\]]*\]\((?P<target>[^)\s]+\.(?:svg|png|jpg|jpeg|webp))\)")
 
 Sha256 = str
 
@@ -25,11 +29,21 @@ class ArtifactEntry(BaseModel):
     generation_command: str
     base_commit_sha: str = Field(pattern=r"^[0-9a-f]{40}$")
     code_state: Literal["clean", "dirty"]
-    code_diff_sha256: Sha256 = Field(pattern=r"^[0-9a-f]{64}$")
+    # None when there is no generating code diff to hash (a clean commit, or a hand-authored
+    # asset). A sentinel of 64 zeros would be indistinguishable from a real hash.
+    code_diff_sha256: Sha256 | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     model_id: str | None
     data_sha256: Sha256 | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     configuration: dict[str, object]
     status: Literal["primary", "supplementary", "smoke_test", "benchmark"]
+    # Set when a finding invalidated the artifact's interpretation. The file itself is retained for
+    # traceability and its checksum still verified; only its scientific standing changes.
+    superseded_by: str | None = None
+    # Required for any result figure a public document displays: the script that regenerates it.
+    renderer: str | None = None
+    # "result" figures carry numbers and need a renderer plus claim-map coverage; "illustration"
+    # figures are hand-authored diagrams that assert no quantity and need only a manifest entry.
+    figure_kind: Literal["result", "illustration"] | None = None
     evidence_classification: Literal[
         "reproduced",
         "traceable_not_rerun",
@@ -161,6 +175,53 @@ def _render_claim(artifact: object, claim: ClaimEntry) -> str:
     return _format_number(numeric, claim.transform)
 
 
+def _validate_referenced_figures(  # noqa: PLR0912
+    repo: Path,
+    listed: dict[str, Path],
+    manifest: ArtifactManifest,
+    claim_map: ClaimMap,
+) -> None:
+    """Every figure a public document displays needs a manifest entry and a committed renderer.
+
+    Audit L-4: the former headline figure had no renderer, no manifest entry and no claim-map
+    coverage, so the most public artifact in the repository was the least traceable one.
+    """
+    by_path = {entry.path: entry for entry in manifest.artifacts}
+    documents = [repo / "README.md", *(repo / "docs").rglob("*.md")]
+    referenced: set[str] = set()
+    for document in documents:
+        if not document.is_file():
+            continue
+        for match in _FIGURE_REFERENCE.finditer(document.read_text(encoding="utf-8")):
+            target = match.group("target").split("#")[0]
+            if not target.startswith(("http://", "https://")):
+                resolved = (document.parent / target).resolve()
+                if resolved.is_relative_to(repo / "figures"):
+                    referenced.add(resolved.relative_to(repo).as_posix())
+    for figure in sorted(referenced):
+        entry = by_path.get(figure)
+        if entry is None:
+            raise ArtifactValidationError(
+                f"figure {figure} is displayed by a public document but is not in the manifest"
+            )
+        if entry.figure_kind is None:
+            raise ArtifactValidationError(f"figure {figure} does not declare a figure_kind")
+        if figure not in listed:
+            raise ArtifactValidationError(f"figure {figure} is not checksum-verified")
+        if entry.figure_kind == "illustration":
+            continue  # asserts no quantity: a manifest entry and a checksum are the whole contract
+        if not entry.renderer:
+            raise ArtifactValidationError(
+                f"result figure {figure} has no committed renderer recorded in the manifest"
+            )
+        if not (repo / entry.renderer).is_file():
+            raise ArtifactValidationError(
+                f"renderer {entry.renderer} for figure {figure} does not exist"
+            )
+        if not any(claim.artifact == figure for claim in claim_map.claims):
+            raise ArtifactValidationError(f"result figure {figure} has no claim-map coverage")
+
+
 def validate_public_artifacts(repo: Path) -> None:
     """Validate manifest checksums, claim rendering, and banned historical literals."""
     artifacts_dir = repo / "artifacts"
@@ -199,6 +260,8 @@ def validate_public_artifacts(repo: Path) -> None:
         text = document.read_text(encoding="utf-8")
         if claim.anchor not in text or claim.rendered not in claim.anchor:
             raise ArtifactValidationError(f"documented claim missing for {claim.id}")
+
+    _validate_referenced_figures(repo, listed, manifest, claim_map)
 
     public_markdown = [repo / "README.md"]
     public_markdown.extend(

@@ -4,16 +4,18 @@
 > predicts as fit.
 
 `epibudget` is a Python CLI for budgeted protein experimental design. Its supported strategy selects
-variants by the interaction loops they cover. Conjoint ESM-2 scores provide optional fitness and
-masking-dispersion signals, and the benchmark keeps those contributions separate.
+variants by the number of interaction contrasts they appear in. Conjoint ESM-2 scores provide optional
+fitness and masking-dispersion signals, and the benchmark keeps those contributions separate.
 
 ## The idea in one picture
 
 ![epibudget workflow from protein target to ranked experimental shortlist](figures/epibudget_illustration.png)
 
-The design borrows from geodetic triangulation: a measurement network becomes informative when it
-closes poorly constrained loops. In a protein landscape, selected variants brace interaction loops
-across singles, doubles, and triples.
+The design borrows from geodetic triangulation: a measurement network becomes more informative as it
+covers more of the contrasts you want to estimate. In a protein landscape, selected variants cover
+interaction contrasts across singles, doubles, and triples. The implemented objective rewards that
+coverage additively; it contains no term for *completing* a contrast, so it does not by itself make
+any interaction identifiable.
 
 ## Where it sits (and where it doesn't)
 
@@ -57,25 +59,60 @@ This smoke command is not the registered benchmark. Use the frozen settings in
 
 ## The claims we test
 
-> At equal budget *B*, does loop-bracing recover epistatic structure better than fitness-greedy and
-> random allocation? Does ESM masking dispersion improve on loop coverage alone?
+> At equal budget *B*, does a coverage-driven plate train a fixed learner to rank held-out double and
+> triple mutants better than fitness-greedy and random allocation? Does ESM masking dispersion improve
+> on mutation-order coverage alone?
 
-The benchmark decides GB1 and TrpB separately. It also tests whether each selected plate trains a fixed
-learner to rank held-out double and triple mutants. Measured fitness enters only after selection.
+The benchmark decides GB1 and TrpB separately. Measured fitness enters only after selection. The
+epistasis-contrast comparison that this project originally headlined is now reported only as a
+labelled diagnostic; see [the remediation record](docs/AUDIT_REMEDIATION_20260728.md) and
+[protocol amendment 2](docs/specs/prospective-amendment-2.md).
 
 ## Result
 
-Partial: interaction-loop coverage works as an experimental-design baseline; the current ESM-2
-masking-dispersion prior does not establish an added benefit beyond loop coverage. On TrpB, the
-registered map-recovery comparison is satisfied against fitness-greedy and random allocation. The
-corrective GB1 map-recovery analysis remains inconclusive. Downstream evaluations on both GB1 and TrpB
-support structural selection over fitness-greedy selection and do not support an incremental benefit
-from masking dispersion.
+An [independent mathematical audit](docs/AUDIT_REMEDIATION_20260728.md) withdrew the former
+map-recovery claim. The original epistasis-contrast correlation is reproducible, but it is dominated
+by lower-order measurements shared algebraically with the ground-truth contrast, and it is sensitive
+to method-specific calibration. It is retained as a diagnostic and is **not** interpreted as
+epistasis-map reconstruction. The TrpB H1 result is non-decision-eligible under the audit.
 
-![Pairwise epistasis-map recovery across experimental budgets on TrpB and GB1 for structural, information-weighted, fitness-greedy, and random allocation](figures/map_recovery_trpb_vs_gb1.svg)
+What survives is the downstream benchmark, which asks a different question — does a plate train a
+fixed learner to rank held-out variants? On two complete four-site landscapes, prioritising
+lower-order variants produced training sets from which the same fixed main-effects-plus-pairwise
+ridge ranked held-out double and triple mutants better than plates chosen by ESM-2 zero-shot fitness,
+random sampling, or the tested practice heuristic:
 
-In the tracked artifacts, `structural` means interaction-loop coverage, not protein 3D structure. All
-comparative findings remain provisional and limited to the evaluated landscapes, learner, and protocol.
+| log2-budget AUC of S_macro | GB1 | TrpB |
+|---|---:|---:|
+| `structural` − `fitness` | +0.342 (20/20 partitions) | +0.313 (20/20) |
+| `info` − `structural` at B=192 | +0.007 (15/20) | −0.028 (0/20) |
+
+This is a descriptive within-landscape result on two biological case studies, not a cross-protein
+generalisation, and the advantage follows primarily from mutation order rather than from
+protein-language-model masking dispersion. Both figures come from `epibudget-downstream-v1`; the
+seeded tie-break landed afterwards, so they await reproduction under v2 from a clean commit.
+
+For scale: an ESM-2 zero-shot ranking that spends **no budget at all** scores 0.323 on TrpB, against
+0.364 for a 48-variant plate and 0.465 for a 192-variant plate.
+
+Scope, stated plainly:
+
+- the former map-recovery claim does not survive the audit in its original form;
+- no result establishes that protein language models are generally ineffective for experimental design;
+- no result yet establishes cross-protein generalisation — GB1 and TrpB are two biological case
+  studies, and the 20 downstream partitions are within-landscape rerandomisations, not 20 independent
+  biological replicates;
+- the method performs static one-plate allocation, not sequential closed-loop active learning.
+
+In the tracked artifacts, `structural` means interaction-loop coverage, not protein 3D structure. On a
+four-site landscape that coverage score takes only three values, so `structural` reduces to "singles,
+then doubles, then triples" with a seeded tie-break.
+
+One structural limit is worth stating plainly: a contrast over a residue pair the plate never assays
+is **exactly unidentifiable** by this learner — its predicted value is a constant, not an estimate.
+With 2,166 pairwise terms and a budget of 192, at most ~9% of pairwise contrasts can ever be
+identified. That is why this project reports variant ranking and not landscape reconstruction. All
+findings remain provisional and limited to the evaluated landscapes, learner, and protocol.
 
 Read the [project write-up](https://vivienperrelle.com/journal/designing-protein-experiments-for-epistasis)
 for a longer account of the work.
@@ -86,9 +123,11 @@ for a longer account of the work.
    log-likelihoods, preserving context-dependent interaction signal.
 2. **Build the factor graph.** Represent candidate mutations as nodes and pairwise or third-order
    interactions as edges and hyperedges.
-3. **Allocate the budget.** Use `--method structural` for the supported loop-coverage strategy.
-   `--method info` tests the ESM masking-dispersion weight; `--lambda` blends either graph score with
-   predicted fitness.
+3. **Allocate the budget.** Use `--method structural` for the supported coverage strategy.
+   `--method info` weights that coverage by ESM masking dispersion (it requires
+   `--n-perturbations > 0`); `--lambda` blends either graph score with predicted fitness. The
+   objective is a prior trace reduction under a diagonal masking-dispersion prior — it contains no
+   loop-closure term, so it does not reward completing a contrast.
 
 See [the specification](docs/SPEC.md) for the model and pseudocode.
 
@@ -98,7 +137,10 @@ See [the specification](docs/SPEC.md) for the model and pseudocode.
 - Public protein landscapes only; GB1 epistasis analyses use complete, positive-fitness loops.
 - The full ESM-2 650M variance-inclusive workflow is not presented as CPU-practical.
 - Evidence is limited to two complete four-site landscapes and one fixed downstream learner.
-- Masking-perturbation dispersion has not improved on structural allocation.
+- Masking-perturbation dispersion has not improved on structural allocation, and it is not a
+  calibrated uncertainty: it correlates -0.113 (95% CI [-0.220, -0.002]) with real prediction error.
+- On a four-site landscape the coverage score is three-valued, so `structural` needs a declared
+  tie seed to be reproducible.
 - `allocate` retains both modes so the ESM contribution remains testable and reproducible.
 
 See [Constraints & limitations](docs/LIMITATIONS.md).

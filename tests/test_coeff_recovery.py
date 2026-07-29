@@ -21,6 +21,7 @@ from epibudget.coeff_recovery import (
     _cd_lasso_path_with_status,
     _design_matrix,
     _doptimal_order,
+    _fista_lasso_path_with_status,
     _kernel_cross,
     _order_symmetric_kernel,
     _reconstruct,
@@ -35,6 +36,7 @@ _TIGHT = 1e-9
 _HIGH_CORR = 0.9
 _MAX_SPARSE_SUPPORT = 12  # a 6-sparse recovery must not blow up the support
 _Q3 = "ACD"  # 3-letter alphabet: WT 'A' + two contrasts
+_SUPPORT_THRESHOLD = 1e-12
 
 
 def _corr(a: np.ndarray, b: np.ndarray) -> float:
@@ -67,6 +69,59 @@ def test_diagnostic_lasso_reoptimizes_every_lambda_on_the_path() -> None:
     expected = [_soft_threshold(2.0, lam / 2.0) for lam in lambda_path]
     assert converged is True
     assert [float(beta[0]) for beta in path] == pytest.approx(expected)
+
+
+def test_fista_lasso_path_reports_iteration_exhaustion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    design = np.eye(2, dtype=np.float64)
+    response = np.array([1.0, -1.0], dtype=np.float64)
+    monkeypatch.setattr(coeff_recovery, "_FISTA_MAX_ITERATIONS", 0)
+
+    _path, converged = _fista_lasso_path_with_status(design, response, [0.1])
+
+    assert converged is False
+
+
+def test_fista_lasso_satisfies_kkt_on_correlated_underdetermined_design() -> None:
+    rng = np.random.default_rng(17)
+    latent = rng.normal(size=(24, 6))
+    design = latent @ rng.normal(size=(6, 120)) + 1e-2 * rng.normal(size=(24, 120))
+    truth = np.zeros(120, dtype=np.float64)
+    truth[[2, 19, 77]] = (1.5, -0.8, 0.4)
+    response = design @ truth
+    lambda_max = 2.0 * float(np.max(np.abs(design.T @ response)))
+    lambda_path = [lambda_max * ratio for ratio in (1.0, 0.1, 0.01, 0.001)]
+
+    path, converged = _fista_lasso_path_with_status(design, response, lambda_path)
+
+    assert converged is True
+    for lam, beta in zip(lambda_path, path, strict=True):
+        residual = response - design @ beta
+        gradient = 2.0 * (design.T @ residual)
+        active = np.abs(beta) > _SUPPORT_THRESHOLD
+        active_error = (
+            float(np.max(np.abs(gradient[active] - lam * np.sign(beta[active]))))
+            if np.any(active)
+            else 0.0
+        )
+        inactive_error = (
+            float(np.max(np.maximum(np.abs(gradient[~active]) - lam, 0.0)))
+            if np.any(~active)
+            else 0.0
+        )
+        assert max(active_error, inactive_error) <= 1e-5 * max(1.0, lam)
+
+
+def test_fista_lasso_rejects_nonfinite_intermediates() -> None:
+    design = np.array([[1e308]], dtype=np.float64)
+    response = np.array([1.0], dtype=np.float64)
+
+    with (
+        np.errstate(over="raise", invalid="raise"),
+        pytest.raises(FloatingPointError, match="non-finite FISTA intermediate"),
+    ):
+        _fista_lasso_path_with_status(design, response, [0.1])
 
 
 def test_lasso_equals_soft_thresholded_ols_on_orthonormal_design() -> None:

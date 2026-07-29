@@ -15,8 +15,8 @@ from scipy.stats import spearmanr
 
 from epibudget.coeff_recovery import (
     _build_fourier_config,
-    _cd_lasso_path_with_status,
     _design_matrix,
+    _fista_lasso_path_with_status,
     _FourierConfig,
     _full_modes,
     _order_symmetric_kernel,
@@ -182,7 +182,7 @@ def decide_recovery(  # noqa: PLR0912, PLR0915
     passing: list[tuple[str, int]] = []
     for (method, budget), group in sorted(grouped.items()):
         failed_cells = [
-            cell.error or "coordinate descent did not converge"
+            cell.error or "registered estimator did not converge"
             for cell in group
             if cell.error is not None or not cell.converged
         ]
@@ -855,7 +855,7 @@ def evaluate_plate(
     response = np.array([training_target(revealed[variant]) for variant in selected])
     fit = fit_pairwise_lasso(config, selected, response, n_folds=n_folds)
     if not fit.converged:
-        raise RuntimeError("coordinate descent did not converge")
+        raise RuntimeError("FISTA did not converge")
     metrics = coefficient_metrics(fit.pairwise_coefficients, truth)
     return RecoveryCell(
         method=method,
@@ -928,7 +928,7 @@ def fit_pairwise_lasso(  # noqa: PLR0912, PLR0915
             unscaled_path = [
                 centered_design_train.shape[0] * ratio * fold_lambda_max for ratio in ratios
             ]
-            path, fold_converged = _cd_lasso_path_with_status(
+            path, fold_converged = _fista_lasso_path_with_status(
                 centered_design_train, centered_train, unscaled_path
             )
             converged = converged and fold_converged
@@ -946,7 +946,7 @@ def fit_pairwise_lasso(  # noqa: PLR0912, PLR0915
         beta = np.zeros(design.shape[1], dtype=np.float64)
     else:
         unscaled_path = [len(measured) * ratio * full_lambda_max for ratio in ratios[: best + 1]]
-        full_path, full_converged = _cd_lasso_path_with_status(
+        full_path, full_converged = _fista_lasso_path_with_status(
             centered_design, centered_all, unscaled_path
         )
         converged = converged and full_converged

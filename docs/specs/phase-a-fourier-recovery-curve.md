@@ -72,6 +72,10 @@ ratios are `geomspace(1, 1e-3, 20)`. Each ratio therefore denotes `ratio * lambd
 Select the ratio with the smallest summed held-out SSE, breaking an exact tie toward the larger penalty,
 then refit the full plate with its own response and character means and `lambda_max` at that ratio.
 
+Optimization uses warm-started FISTA with deterministic backtracking. Each lambda must reach a maximum
+active/inactive KKT residual no greater than `1e-5 * max(1, lambda)` within 5,000 iterations; otherwise
+the fit is non-converged and fails closed.
+
 Fold identity is `variant_fold(variant, 5)`. A missing train or validation fold, non-convergence, a
 constant response, or a non-finite intermediate fails the cell closed. No estimator may replace a
 fitted value or coefficient with a measured truth value.

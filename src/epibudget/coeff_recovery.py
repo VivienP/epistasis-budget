@@ -64,6 +64,12 @@ _LAMBDA_RATIO_MIN = 1e-3
 _MAX_ACTIVE_SET_ROUNDS = 50
 _CD_MAX_SWEEPS = 200
 _CD_TOL = 1e-7
+_FISTA_MAX_ITERATIONS = 5_000
+_FISTA_MAX_BACKTRACKING = 100
+_FISTA_CHECK_INTERVAL = 10
+_FISTA_KKT_RTOL = 1e-5
+_FISTA_SUPPORT_THRESHOLD = 1e-12
+_MATRIX_NDIM = 2
 
 # Kernel-ridge: λ by K-fold CV over a fixed log-spaced grid.
 _RIDGE_LAMBDA_GRID: tuple[float, ...] = tuple(float(value) for value in np.logspace(-3, 4, 15))
@@ -378,6 +384,107 @@ def _cd_lasso_path_with_status(
         if not lambda_converged:
             all_converged = False
             logger.warning("coordinate-descent diagnostic did not converge at lambda=%g", lam)
+        betas.append(beta.copy())
+    return betas, all_converged
+
+
+def _require_finite_fista(*values: FloatArray | float) -> None:
+    if any(not bool(np.all(np.isfinite(value))) for value in values):
+        raise FloatingPointError("non-finite FISTA intermediate")
+
+
+def _initial_fista_lipschitz(design: FloatArray) -> float:
+    with np.errstate(over="ignore", invalid="ignore"):
+        column_squared_norms = np.sum(design * design, axis=0)
+    _require_finite_fista(column_squared_norms)
+    return max(2.0 * float(np.max(column_squared_norms)), 1.0)
+
+
+def _fista_backtracking_step(
+    design: FloatArray,
+    y: FloatArray,
+    momentum: FloatArray,
+    gradient: FloatArray,
+    smooth_momentum: float,
+    lam: float,
+    lipschitz: float,
+) -> tuple[FloatArray, float]:
+    for _backtracking in range(_FISTA_MAX_BACKTRACKING):
+        with np.errstate(over="ignore", invalid="ignore"):
+            candidate = momentum - gradient / lipschitz
+            beta_new = np.sign(candidate) * np.maximum(np.abs(candidate) - lam / lipschitz, 0.0)
+            delta = beta_new - momentum
+            residual_new = design @ beta_new - y
+            smooth_new = float(residual_new @ residual_new)
+            quadratic_bound = (
+                smooth_momentum + float(gradient @ delta) + 0.5 * lipschitz * float(delta @ delta)
+            )
+        _require_finite_fista(beta_new, residual_new, smooth_new, quadratic_bound)
+        if smooth_new <= quadratic_bound + 1e-12 * max(1.0, smooth_new):
+            return beta_new, lipschitz
+        lipschitz *= 2.0
+        _require_finite_fista(lipschitz)
+    raise RuntimeError("FISTA backtracking did not converge")
+
+
+def _fista_kkt_error(design: FloatArray, y: FloatArray, beta: FloatArray, lam: float) -> float:
+    residual = y - design @ beta
+    gradient = 2.0 * (design.T @ residual)
+    _require_finite_fista(residual, gradient)
+    active = np.abs(beta) > _FISTA_SUPPORT_THRESHOLD
+    active_error = (
+        float(np.max(np.abs(gradient[active] - lam * np.sign(beta[active]))))
+        if np.any(active)
+        else 0.0
+    )
+    inactive_error = (
+        float(np.max(np.maximum(np.abs(gradient[~active]) - lam, 0.0))) if np.any(~active) else 0.0
+    )
+    return max(active_error, inactive_error)
+
+
+def _fista_lasso_path_with_status(
+    design: FloatArray, y: FloatArray, lambda_path: Sequence[float]
+) -> tuple[list[FloatArray], bool]:
+    """Solve a warm-started LASSO path with backtracking FISTA and KKT checks."""
+    if design.ndim != _MATRIX_NDIM or y.shape != (design.shape[0],):
+        raise ValueError("design and response shapes do not match")
+    if not np.all(np.isfinite(design)) or not np.all(np.isfinite(y)):
+        raise ValueError("design and response must be finite")
+    if any(not np.isfinite(lam) or lam < 0.0 for lam in lambda_path):
+        raise ValueError("lambda path must contain finite non-negative values")
+
+    beta = np.zeros(design.shape[1], dtype=np.float64)
+    betas: list[FloatArray] = []
+    all_converged = True
+    lipschitz = _initial_fista_lipschitz(design)
+    for lam in lambda_path:
+        momentum = beta.copy()
+        acceleration = 1.0
+        lambda_converged = False
+        for iteration in range(1, _FISTA_MAX_ITERATIONS + 1):
+            with np.errstate(over="ignore", invalid="ignore"):
+                fitted_momentum = design @ momentum
+                residual_momentum = fitted_momentum - y
+                gradient = 2.0 * (design.T @ residual_momentum)
+                smooth_momentum = float(residual_momentum @ residual_momentum)
+            _require_finite_fista(residual_momentum, gradient, smooth_momentum)
+            beta_new, lipschitz = _fista_backtracking_step(
+                design, y, momentum, gradient, smooth_momentum, lam, lipschitz
+            )
+            acceleration_new = 0.5 * (1.0 + np.sqrt(1.0 + 4.0 * acceleration**2))
+            momentum = beta_new + ((acceleration - 1.0) / acceleration_new) * (beta_new - beta)
+            beta = beta_new
+            acceleration = acceleration_new
+            _require_finite_fista(momentum, beta)
+            if iteration % _FISTA_CHECK_INTERVAL != 0:
+                continue
+            if _fista_kkt_error(design, y, beta, lam) <= _FISTA_KKT_RTOL * max(1.0, lam):
+                lambda_converged = True
+                break
+        if not lambda_converged:
+            all_converged = False
+            logger.warning("FISTA diagnostic did not converge at lambda=%g", lam)
         betas.append(beta.copy())
     return betas, all_converged
 

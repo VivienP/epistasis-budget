@@ -103,14 +103,14 @@ of the first implementation lot.
 
   From a clean fixed commit, time design construction and one synthetic fit at all eight registered
   budgets. Project the exact 43 fits per budget, bind the candidate hash and matching start/end commit
-  snapshots, and write the v3 preflight exclusively. Use the timings only for resource planning; do not
+  snapshots, and write the v4 preflight exclusively. Use the timings only for resource planning; do not
   inspect TrpB recovery metrics.
 
-- [ ] **Step 3: Decide whether to schedule the curve**
+- [ ] **Step 3: Validate execution readiness**
 
-  Proceed only if the validated v3 preflight covers all 344 fits and fits the available local CPU and
-  memory budget. The v1 and v2 runtime files are superseded and cannot authorize the curve. A future GPU
-  or Colab run is not required by this plan.
+  Proceed only if the validated v4 preflight covers all 344 fits and every synthetic fit converges. The
+  runtime report records time and memory estimates for execution planning but does not encode
+  operator-specific resource ceilings. Earlier runtime schemas cannot authorize the curve.
 
 ### Task 5: Verification
 

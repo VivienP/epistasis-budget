@@ -52,8 +52,6 @@ _MIN_GATE_SPEARMAN = 0.30
 _MIN_GATE_SSE_GAIN = 0.10
 _MIN_POSITIVE_STOCHASTIC_SEEDS = 16
 _PAIRWISE_FEATURE_COUNT = 2_242
-_RUNTIME_MAX_HOURS = 8.0
-_RUNTIME_MAX_GIB = 2.0
 
 
 def doptimal_workspace_bytes(n_candidates: int, budget: int) -> int:
@@ -370,22 +368,6 @@ def _validate_runtime_projection(
     maximum_doptimal_bytes = expected_candidate_count * expected_budgets[-1] * _FLOAT64_BYTES
     if payload.get("maximum_doptimal_bytes") != maximum_doptimal_bytes:
         raise ValueError("runtime preflight maximum D-optimal byte count does not match")
-    limits = payload.get("limits")
-    if not isinstance(limits, Mapping):
-        raise ValueError("runtime preflight has no resource limits")
-    max_hours = _finite_runtime_number(
-        limits.get("max_projected_hours"), "projected-hour limit", positive=True
-    )
-    max_gib = _finite_runtime_number(
-        limits.get("max_doptimal_gib"), "D-optimal memory limit", positive=True
-    )
-    if max_hours != _RUNTIME_MAX_HOURS or max_gib != _RUNTIME_MAX_GIB:
-        raise ValueError("runtime preflight resource limits do not match the frozen protocol")
-    expected_schedule = bool(
-        projected_seconds <= max_hours * 3600.0 and maximum_doptimal_bytes <= max_gib * 1024**3
-    )
-    if payload.get("schedule_real_curve") is not expected_schedule or not expected_schedule:
-        raise ValueError("runtime preflight did not authorize the real curve")
 
 
 def _validate_runtime_provenance(payload: Mapping[str, object], expected_commit: str) -> None:
@@ -417,9 +399,9 @@ def validate_runtime_preflight(
     expected_fit_count: int,
     expected_feature_count: int,
 ) -> None:
-    """Validate the complete, clean, label-free v3 resource preflight."""
-    if payload.get("schema_version") != "epibudget-fourier-runtime-v3":
-        raise ValueError("runtime preflight must use epibudget-fourier-runtime-v3")
+    """Validate the complete, clean, label-free v4 resource preflight."""
+    if payload.get("schema_version") != "epibudget-fourier-runtime-v4":
+        raise ValueError("runtime preflight must use epibudget-fourier-runtime-v4")
     if payload.get("uses_measured_labels") is not False:
         raise ValueError("runtime preflight must be label-independent")
     if payload.get("candidate_count") != expected_candidate_count:

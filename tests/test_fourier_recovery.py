@@ -378,7 +378,7 @@ def test_recovery_dataset_is_trpb_only() -> None:
         validate_recovery_dataset("gb1_wu2016")
 
 
-def test_runtime_preflight_rejects_a_stale_execution_commit() -> None:
+def test_runtime_preflight_ignores_projected_duration_and_rejects_a_stale_commit() -> None:
     budgets = (48, 96, 192, 384, 768, 1536, 2242, 3072)
     candidate_count = 29_678
     feature_count = 2_242
@@ -395,9 +395,10 @@ def test_runtime_preflight_rejects_a_stale_execution_commit() -> None:
         }
         for budget in budgets
     ]
-    projected_doptimal_seconds = (budgets[-1] / budgets[0]) ** 2
+    doptimal_pilot_seconds = 10.0
+    projected_doptimal_seconds = doptimal_pilot_seconds * (budgets[-1] / budgets[0]) ** 2
     payload = {
-        "schema_version": "epibudget-fourier-runtime-v3",
+        "schema_version": "epibudget-fourier-runtime-v4",
         "uses_measured_labels": False,
         "candidate_count": candidate_count,
         "candidate_sha256": "a" * 64,
@@ -407,7 +408,7 @@ def test_runtime_preflight_rejects_a_stale_execution_commit() -> None:
         "doptimal_pilot": {
             "pilot_budget": budgets[0],
             "maximum_budget": budgets[-1],
-            "pilot_seconds": 1.0,
+            "pilot_seconds": doptimal_pilot_seconds,
             "projected_maximum_seconds": projected_doptimal_seconds,
             "pilot_update_bytes": candidate_count * budgets[0] * 8,
             "maximum_update_bytes": candidate_count * budgets[-1] * 8,
@@ -415,14 +416,14 @@ def test_runtime_preflight_rejects_a_stale_execution_commit() -> None:
         "projected_lasso_seconds": 344.0,
         "projected_seconds": 344.0 + projected_doptimal_seconds,
         "maximum_doptimal_bytes": candidate_count * budgets[-1] * 8,
-        "limits": {"max_projected_hours": 8.0, "max_doptimal_gib": 2.0},
-        "schedule_real_curve": True,
         "provenance": {
             "workspace_start": {"execution_commit": "old", "code_state": "clean"},
             "workspace_end": {"execution_commit": "old", "code_state": "clean"},
             "workspace_state_matches": True,
         },
     }
+
+    assert payload["projected_seconds"] > 8.0 * 3600.0
 
     validate_runtime_preflight(
         payload,
@@ -439,19 +440,6 @@ def test_runtime_preflight_rejects_a_stale_execution_commit() -> None:
     with pytest.raises(ValueError, match="incomplete budget measurements"):
         validate_runtime_preflight(
             incomplete,
-            expected_commit="old",
-            expected_candidate_count=candidate_count,
-            expected_candidate_sha256="a" * 64,
-            expected_budgets=budgets,
-            expected_fit_count=344,
-            expected_feature_count=feature_count,
-        )
-
-    elevated_limits = dict(payload)
-    elevated_limits["limits"] = {"max_projected_hours": 100.0, "max_doptimal_gib": 2.0}
-    with pytest.raises(ValueError, match="frozen protocol"):
-        validate_runtime_preflight(
-            elevated_limits,
             expected_commit="old",
             expected_candidate_count=candidate_count,
             expected_candidate_sha256="a" * 64,

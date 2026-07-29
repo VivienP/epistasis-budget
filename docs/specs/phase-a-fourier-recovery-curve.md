@@ -116,10 +116,9 @@ construction and one complete registered fit at all eight registered budgets. Th
 measurements is multiplied by the exact 43 fits per budget, so the projection covers all 344 registered
 fits. It records design bytes, wall time, convergence, the candidate-universe hash, and clean matching
 start/end repository snapshots. A D-optimal pilot builds the full-pool prefix through budget 48 and
-projects its `O(N * B^2)` cost to budget 3,072. The real curve is not scheduled if projected wall time
-exceeds eight hours or the dense D-optimal update matrix exceeds 2 GiB. A stale, dirty, incomplete, or
-commit-mismatched preflight cannot authorize the curve. These are local engineering limits, not
-scientific thresholds. No Colab or GPU run is required.
+projects its `O(N * B^2)` cost to budget 3,072. The preflight reports time and memory estimates without
+embedding operator-specific resource limits. A stale, dirty, incomplete, non-converged, or
+commit-mismatched preflight cannot authorize the curve.
 
 ## Provenance and failure policy
 

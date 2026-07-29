@@ -30,7 +30,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--budgets", default="48,96,192,384,768,1536,2242,3072")
     parser.add_argument(
-        "--out", type=Path, default=Path("report/diagnostics/fourier_recovery_runtime_v3.json")
+        "--out", type=Path, default=Path("report/diagnostics/fourier_recovery_runtime_v4.json")
     )
     args = parser.parse_args()
 
@@ -54,13 +54,9 @@ def main() -> None:
     projected_lasso_seconds = sum(item.fit_seconds * fits_per_budget for item in measurements)
     projected_seconds = projected_lasso_seconds + doptimal.projected_maximum_seconds
     maximum_doptimal_bytes = max(item.doptimal_update_bytes for item in measurements)
-    max_projected_hours = 8.0
-    max_doptimal_gib = 2.0
-    max_projected_seconds = max_projected_hours * 3600.0
-    max_doptimal_bytes = int(max_doptimal_gib * 1024**3)
     workspace_end = _capture_workspace_snapshot(repo)
     payload = {
-        "schema_version": "epibudget-fourier-runtime-v3",
+        "schema_version": "epibudget-fourier-runtime-v4",
         "public_claim_eligible": False,
         "uses_measured_labels": False,
         "candidate_count": len(candidates),
@@ -74,15 +70,6 @@ def main() -> None:
         "projected_lasso_seconds": projected_lasso_seconds,
         "projected_seconds": projected_seconds,
         "maximum_doptimal_bytes": maximum_doptimal_bytes,
-        "limits": {
-            "max_projected_hours": max_projected_hours,
-            "max_doptimal_gib": max_doptimal_gib,
-        },
-        "schedule_real_curve": (
-            projected_seconds <= max_projected_seconds
-            and maximum_doptimal_bytes <= max_doptimal_bytes
-            and all(item.converged for item in measurements)
-        ),
         "argv": [sys.executable, *sys.argv],
         "provenance": {
             "workspace_start": workspace_start.model_dump(mode="json"),

@@ -49,7 +49,7 @@ def main() -> None:  # noqa: PLR0915
     parser.add_argument(
         "--runtime-preflight",
         type=Path,
-        default=Path("report/diagnostics/fourier_recovery_runtime_v3.json"),
+        default=Path("report/diagnostics/fourier_recovery_runtime_v4.json"),
     )
     parser.add_argument(
         "--out", type=Path, default=Path("report/diagnostics/fourier_recovery_trpb.json")

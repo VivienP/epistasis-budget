@@ -12,10 +12,13 @@ from __future__ import annotations
 from itertools import product
 
 import numpy as np
+import pytest
 
+from epibudget import coeff_recovery
 from epibudget.coeff_recovery import (
     _build_fourier_config,
     _cd_lasso_path,
+    _cd_lasso_path_with_status,
     _design_matrix,
     _doptimal_order,
     _kernel_cross,
@@ -42,6 +45,28 @@ def test_soft_threshold() -> None:
     assert _soft_threshold(2.0, 0.5) == 2.0 - 0.5
     assert _soft_threshold(-2.0, 0.5) == -(2.0 - 0.5)
     assert _soft_threshold(0.3, 0.5) == 0.0
+
+
+def test_lasso_path_reports_iteration_exhaustion(monkeypatch: pytest.MonkeyPatch) -> None:
+    design = np.eye(2, dtype=np.float64)
+    response = np.array([1.0, -1.0], dtype=np.float64)
+    monkeypatch.setattr(coeff_recovery, "_MAX_ACTIVE_SET_ROUNDS", 0)
+
+    _path, converged = _cd_lasso_path_with_status(design, response, [0.1])
+
+    assert converged is False
+
+
+def test_diagnostic_lasso_reoptimizes_every_lambda_on_the_path() -> None:
+    design = np.ones((1, 1), dtype=np.float64)
+    response = np.array([2.0], dtype=np.float64)
+    lambda_path = (3.0, 2.0, 1.0)
+
+    path, converged = _cd_lasso_path_with_status(design, response, lambda_path)
+
+    expected = [_soft_threshold(2.0, lam / 2.0) for lam in lambda_path]
+    assert converged is True
+    assert [float(beta[0]) for beta in path] == pytest.approx(expected)
 
 
 def test_lasso_equals_soft_thresholded_ols_on_orthonormal_design() -> None:

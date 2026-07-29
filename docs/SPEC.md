@@ -354,9 +354,15 @@ Deterministic given `(model_id, seed, config)`. Every output embeds the resolved
 
 ## 11. Out of scope for v1
 
-- Background-averaged (ensemble) epistasis (v1 is WT-referenced). It is the bridge to inference tools
-  like MoCHI, and is a future extension only if that integration is pursued
-  (see `docs/RESEARCH_EPISTASIS.md#3`).
+- Background-averaged (ensemble) epistasis as a v1 product output or public biological claim (v1 remains
+  WT-referenced). One non-promotional architecture diagnostic may score recovery of fixed Fourier
+  coefficients on the complete redistributed TrpB target under
+  `docs/specs/phase-a-fourier-feasibility.md`. That exception is always
+  `public_claim_eligible=false`; a clean, provenance-stable result may inform only the registered internal
+  architecture decision. It cannot feed README claims and does not expose background-averaged
+  coefficients through the v1 CLI or library API.
+  A production integration, including the bridge to tools such as MoCHI, remains a future extension only
+  if that integration is pursued (see `docs/RESEARCH_EPISTASIS.md#3`).
 - Orders > 3.
 - Multi-round / sequential design (v1 is single-shot budget allocation at round 0).
 - Distributed or multi-GPU execution.

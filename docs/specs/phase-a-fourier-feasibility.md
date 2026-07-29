@@ -56,8 +56,9 @@ Primary metrics:
 
 The registered budgets are `48, 96, 192, 384, 768, 1536, 2242, 3072`. Acquisition sequences are built
 once at the maximum budget and prefixes are reused. `structural` and `random` use seeds 0 through 19 and
-retain every seed-level record. `info` and pairwise D-optimal are deterministic only if a preflight proves
-that no unresolved score tie crosses a budget boundary.
+retain every seed-level record. `info` and `fitness` fail closed if an exact score tie crosses a registered
+budget. The reduced-model pairwise D-optimal comparator uses the canonical deterministic tie rule frozen
+in `docs/specs/phase-a-fourier-recovery-curve.md`.
 
 A Stage B confirmation study is justified only if the same method and budget achieve all of:
 

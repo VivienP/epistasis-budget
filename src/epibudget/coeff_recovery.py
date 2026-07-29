@@ -329,6 +329,59 @@ def _cd_lasso_path(
     return betas
 
 
+def _cd_lasso_path_with_status(
+    design: FloatArray, y: FloatArray, lambda_path: Sequence[float]
+) -> tuple[list[FloatArray], bool]:
+    """Solve every lambda with active-coordinate sweeps and an explicit convergence result."""
+    p = design.shape[1]
+    z = np.sum(design * design, axis=0)
+    beta = np.zeros(p, dtype=np.float64)
+    residual = y.copy()
+    active: set[int] = set()
+    betas: list[FloatArray] = []
+    all_converged = True
+    for lam in lambda_path:
+        gamma = lam / 2.0
+        lambda_converged = False
+        for _round in range(_MAX_ACTIVE_SET_ROUNDS):
+            rho_full = design.T @ residual
+            inactive_violators = set(
+                np.flatnonzero(
+                    (np.abs(rho_full) > gamma)
+                    & (z > 0.0)
+                    & np.array([index not in active for index in range(p)], dtype=np.bool_)
+                ).tolist()
+            )
+            active |= inactive_violators
+            sweep_converged = False
+            for _sweep in range(_CD_MAX_SWEEPS):
+                max_delta = 0.0
+                for index in active:
+                    column = design[:, index]
+                    rho_index = float(column @ residual) + z[index] * beta[index]
+                    new_beta = _soft_threshold(rho_index, gamma) / z[index]
+                    delta = new_beta - beta[index]
+                    if delta != 0.0:
+                        residual = residual - column * delta
+                        beta[index] = new_beta
+                        max_delta = max(max_delta, abs(delta))
+                if max_delta < _CD_TOL:
+                    sweep_converged = True
+                    break
+            if not sweep_converged:
+                break
+            rho_full = design.T @ residual
+            inactive = np.array([index not in active for index in range(p)], dtype=np.bool_)
+            if not np.any((np.abs(rho_full) > gamma) & (z > 0.0) & inactive):
+                lambda_converged = True
+                break
+        if not lambda_converged:
+            all_converged = False
+            logger.warning("coordinate-descent diagnostic did not converge at lambda=%g", lam)
+        betas.append(beta.copy())
+    return betas, all_converged
+
+
 # --------------------------------------------------------------------- estimators
 
 

@@ -74,17 +74,17 @@ of the first implementation lot.
 - Create only after execution: `report/diagnostics/spectrum_trpb.json`
 - Modify only after validated execution: `docs/ROADMAP.md`
 
-- [ ] **Step 1: Run from a clean scientific tree**
+- [x] **Step 1: Run from a clean scientific tree**
 
   Run the script against `data/proteingym/trpb_johnston2024.csv`. Do not run while source or scientific
   documentation is changing.
 
-- [ ] **Step 2: Independently verify the artifact**
+- [x] **Step 2: Independently verify the artifact**
 
   Recompute Parseval and effective counts from the CSV, compare the input hash, and confirm that all
   160,000 values are finite and in the `log1p` domain.
 
-- [ ] **Step 3: Record the go/no-go decision**
+- [x] **Step 3: Record the go/no-go decision**
 
   Update the roadmap with the measured A0 result. Do not add a README number and do not start Stage A1
   unless the spectrum evidence justifies the compute.
@@ -94,20 +94,23 @@ of the first implementation lot.
 **Files:**
 - Create only after the A0 decision: `docs/specs/phase-a-fourier-recovery-curve.md`
 
-- [ ] **Step 1: Freeze the coefficient estimand and seed identities**
+- [x] **Step 1: Freeze the coefficient estimand and seed identities**
 
   Specify the fixed 2,166 pairwise coefficient population, budgets, exact selection seeds, lambda path,
   fold assignment, constant-vector guard, and seed-level aggregation from the design specification.
 
 - [ ] **Step 2: Benchmark runtime without labels**
 
-  Time design construction and one synthetic fit at budgets 192, 768, and 3,072. Use the timings only
-  for resource planning; do not inspect TrpB recovery metrics.
+  From a clean fixed commit, time design construction and one synthetic fit at all eight registered
+  budgets. Project the exact 43 fits per budget, bind the candidate hash and matching start/end commit
+  snapshots, and write the v3 preflight exclusively. Use the timings only for resource planning; do not
+  inspect TrpB recovery metrics.
 
 - [ ] **Step 3: Decide whether to schedule the curve**
 
-  Proceed only if the registered run fits the available local CPU and memory budget. A future GPU or
-  Colab run is not required by this plan.
+  Proceed only if the validated v3 preflight covers all 344 fits and fits the available local CPU and
+  memory budget. The v1 and v2 runtime files are superseded and cannot authorize the curve. A future GPU
+  or Colab run is not required by this plan.
 
 ### Task 5: Verification
 

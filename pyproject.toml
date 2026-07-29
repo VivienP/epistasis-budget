@@ -39,7 +39,7 @@ dev = [
     "pytest>=8.2",
     "pytest-cov>=5.0",
     "mypy>=1.11",
-    "ruff>=0.6",
+    "ruff==0.16.0",
     "types-tqdm",
     "jupyter>=1.0",         # reproducible demo notebook
 ]
@@ -77,6 +77,7 @@ src = ["src", "tests"]
 select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF", "PL"]
 ignore = [
     "PLR0913",  # allow many-argument scientific functions
+    "PLR0917",  # preserve positional compatibility in scientific and Typer APIs
     "RUF002",   # allow mathematical Unicode (−, –, ΔG) in docstrings — the formulae are the doc
 ]
 

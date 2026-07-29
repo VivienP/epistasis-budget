@@ -2,10 +2,9 @@
 
 Status: **WITHDRAWN on 2026-07-28, before any run on a third landscape.**
 
-This amendment does not govern any experiment and licenses no result. It was registered after the
-independent audit, then withdrawn the same day when counter-review found that its primary estimand
-was not coherent. The registered text remains recoverable from Git history; this file records the
-current disposition so obsolete clauses cannot be mistaken for an active protocol.
+This amendment does not govern any experiment or support any result. It was withdrawn before use
+because its primary estimand was internally inconsistent. The original text remains recoverable from
+Git history; this file records only why it is not an active protocol.
 
 ## Why it was withdrawn
 
@@ -55,5 +54,5 @@ A future protocol would need, before any result is observed:
 - paired uncertainty with term leverage separated from selection variability;
 - complete cache, input, code, and command provenance.
 
-See [`../AUDIT_REMEDIATION_20260728.md`](../AUDIT_REMEDIATION_20260728.md) for the remediation record
+See the [evaluation notes](../AUDIT_REMEDIATION_20260728.md) for the current evidence boundary
 and [`downstream.md`](downstream.md) for the separate downstream protocol.

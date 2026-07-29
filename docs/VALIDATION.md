@@ -1,14 +1,13 @@
 # Validation protocol
 
-> **Audit status (2026-07-28).** An independent mathematical audit withdrew the map-recovery claim
-> below. The original epistasis-contrast correlation is reproducible, but it is dominated by
+> **Current status.** The map-recovery interpretation below is withdrawn. The original
+> epistasis-contrast correlation is reproducible, but it is dominated by
 > lower-order measurements shared algebraically with the ground-truth contrast and is sensitive to
 > method-specific calibration. It is retained as a **reproducible diagnostic** and is not interpreted
 > as epistasis-map reconstruction. The TrpB H1 result is **non-decision-eligible**. The corrected
-> estimands, the disposition of every finding, and the prospective rule for the next landscape are in
-> [`AUDIT_REMEDIATION_20260728.md`](AUDIT_REMEDIATION_20260728.md) and
-> [`specs/prospective-amendment-2.md`](specs/prospective-amendment-2.md). The sections below are
-> retained verbatim as the historical protocol that was actually run.
+> estimands and current evidence boundary are described in the
+> [evaluation notes](AUDIT_REMEDIATION_20260728.md). The sections below retain the historical protocol
+> that was run.
 
 This document is the normative protocol for `epibudget` validation. It defines the claim, data
 conditioning, label boundary, metrics, decision rules, baselines, and confirmatory profiles. Run
@@ -53,7 +52,7 @@ For each method and budget:
 `infer_epistasis` is the posterior mean of the linear-Gaussian graph model. A measured variant pins its
 WT-centred value; an unmeasured member retains the calibrated ESM prior mean. It is identical in form
 across methods; the former implementation refit a **method-specific** through-origin slope, which can
-differ in sign between methods (audit H-2), so it is not identical in effect.
+differ in sign between methods, so it is not identical in effect.
 
 ## Label boundary
 
@@ -133,8 +132,8 @@ that limitation.
 
 ## Current TrpB map-recovery decision
 
-**Superseded by the 2026-07-28 audit: non-decision-eligible.** Retained as the historical record of
-what the frozen rule returned. The rule itself is confounded (audit C-1).
+**Status: non-decision-eligible.** Retained as the historical record of what the frozen rule
+returned. The rule itself shares purchased loop components between prediction and truth.
 
 The full 650M TrpB profile is complete. `info` satisfies the frozen pairwise rule against `fitness` and
 `random`. The structural ablation exceeds `info` at budgets 96 and 192 for both Pearson and Spearman, so

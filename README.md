@@ -64,16 +64,15 @@ This smoke command is not the registered benchmark. Use the frozen settings in
 > on mutation-order coverage alone?
 
 The benchmark decides GB1 and TrpB separately. Measured fitness enters only after selection. The
-epistasis-contrast comparison that this project originally headlined is now reported only as a
-labelled diagnostic; see [the remediation record](docs/AUDIT_REMEDIATION_20260728.md) and
-[protocol amendment 2](docs/specs/prospective-amendment-2.md).
+epistasis-contrast comparison is reported only as a labelled diagnostic; see the
+[evaluation notes](docs/AUDIT_REMEDIATION_20260728.md).
 
 ## Result
 
-An [independent mathematical audit](docs/AUDIT_REMEDIATION_20260728.md) withdrew the former
-map-recovery claim: the epistasis-contrast correlation is reproducible but dominated by lower-order
-measurements shared algebraically with the truth. It remains a diagnostic, not evidence of
-epistasis-map reconstruction.
+The former map-recovery interpretation is withdrawn: the epistasis-contrast correlation is
+reproducible but dominated by lower-order measurements shared algebraically with the truth. It
+remains a diagnostic, not evidence of epistasis-map reconstruction. See the
+[evaluation notes](docs/AUDIT_REMEDIATION_20260728.md).
 
 The historical v1 artifacts evaluate particular coverage-biased plates with a fixed
 main-effects-plus-pairwise ridge:
@@ -93,7 +92,7 @@ design are generally ineffective.
 it reduces to singles, then doubles, then triples, with a seeded tie-break. A contrast over an
 unassayed residue pair is exactly unidentifiable by this learner, so the project reports variant
 ranking rather than map reconstruction. Corrected-recovery numbers remain withheld until validated
-artifacts exist. See the [remediation record](docs/AUDIT_REMEDIATION_20260728.md) and
+artifacts exist. See the [evaluation notes](docs/AUDIT_REMEDIATION_20260728.md) and
 [limitations](docs/LIMITATIONS.md).
 
 Read the [project write-up](https://vivienperrelle.com/journal/designing-protein-experiments-for-epistasis)

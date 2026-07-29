@@ -1,195 +1,106 @@
-# Audit remediation — 2026-07-28
+# Evaluation methodology notes
 
-An independent mathematical audit found two critical and four high-severity defects in the
-map-recovery evaluation, tie handling, calibration comparison, and TrpB label accounting. This
-record distinguishes implementation corrections from empirical results. It does not promote a new
-result.
+This note explains why the original map-recovery interpretation is no longer used and how the
+current validation artifacts should be read. The file path is retained because historical artifacts
+refer to it.
 
-## Current status
+## Evidence status
 
-The original map-recovery interpretation is withdrawn. The tracked downstream v1 results remain
-historical observations on GB1 and TrpB, not estimates over the acquisition method's tie
-distribution. The later v2 reruns are retrospective, single-tie-seed diagnostics whose recorded
-provenance describes the tree at process completion rather than the code loaded at process start.
-They are not public artifacts. No downstream v3 or corrected-recovery artifact exists.
-
-| Evidence class | Current standing |
+| Evidence | Status |
 |---|---|
-| Downstream v1 artifacts | historical, retained for traceability |
-| Downstream v2 reruns | local diagnostic only; one seeded plate per landscape |
-| Downstream v3 | implementation only; no empirical artifact |
-| Corrected recovery | implementation only; no empirical artifact |
+| Downstream v1 artifacts | Historical observations on particular tied plates |
+| Downstream v2 reruns | Local diagnostics using tie seed 0 |
+| Downstream v3 | Implemented schema; no empirical artifact |
+| Corrected recovery | Implemented schema; no empirical artifact |
 
-Every corrective analysis of GB1 or TrpB is retrospective. It cannot be made prospective by
-renaming it, rerunning it, or moving it into the README.
+The v1 table may be reported as historical evidence with its limitations adjacent. The v2 reruns do
+not estimate performance across tie seeds and are not public result artifacts.
 
-## C-1 — shared-skeleton confounding
+## Why the original recovery metric is diagnostic
 
-The former map-recovery correlation compared a predicted contrast with the measured contrast after
-copying purchased lower-order labels into both quantities. If `M` is the measured part of a loop,
-`U` its unmeasured part, and `c_T` the inclusion-exclusion sign, then both sides contain
+The inferred and measured contrasts shared the purchased part of each interaction loop. If `M` is
+the set of measured loop members and `c_T` is the inclusion-exclusion sign, both quantities contain
 
 ```text
 k(S) = sum_{T in M} c_T * fitness(T).
 ```
 
-Consequently, correlation could increase because the same measured skeleton was present on both
-sides, even when prediction of the unmeasured terms did not improve. The former correlation is now
-named `raw_*_with_skeleton` and retained only as a diagnostic.
+Correlation could therefore increase because the same measured values appeared on both sides, even
+when prediction of the unmeasured terms did not improve. The corresponding fields are now named
+`raw_*_with_skeleton` and are treated as diagnostics.
 
-The corrected recovery schema reports the skeleton association, skeleton-controlled partial
-association, term census, and relative SSE gain separately. It also includes the model-free
-`singles_zero_prior` baseline. None of these fields is currently backed by a tracked corrected-run
-artifact, so this document records no corrected recovery number.
-
-## C-2 — correlation was not an error-reduction gate
-
-A correlation can rise while squared prediction error worsens. The corrected schema therefore
-reports
+Correlation alone also does not establish error reduction. The corrected schema reports
 
 ```text
 relative_sse_gain = 1 - SSE(posterior) / SSE(prior)
 ```
 
-for each realised method, budget, seed, calibration policy, subset, and interaction order. Recovery
-wording is not permitted when this quantity is undefined or non-positive. This is an implementation
-rule, not a claim that any method passes it on either landscape.
+and permits recovery wording only when the gain is defined and strictly positive. No tracked
+corrected-recovery artifact currently supplies this result.
 
-## H-1 — tied structural scores
+Method-specific affine calibration remains available for descriptive use, but it is excluded from
+method-comparison claims because each selected plate would otherwise be evaluated under a different
+transformation. Corrected contrasts use only method-independent calibration policies.
+
+## Selection variability
 
 On the four-site benchmark universes, the loop-coverage score is constant within mutation order.
-`structural` therefore means singles, then doubles, then triples, plus a within-order tie resolution;
-it is not a complete biological ordering.
+`structural` therefore orders singles, doubles and triples, then resolves ties within each order. A
+fixed tie seed makes a plate reproducible; it does not estimate the acquisition method over its seed
+distribution.
 
-Tie handling is now seeded and invariant to candidate enumeration order for a fixed seed. A fixed
-seed makes a run reproducible but does not estimate the method over its seed distribution. The
-historical v1 comparator used enumeration-order ties, while each v2 diagnostic used only tie seed
-zero. Agreement or disagreement between those two resolutions is not an estimate of tie variance.
+The v1 comparator used enumeration-order ties. Each v2 diagnostic used tie seed 0. Comparing those
+two resolutions does not measure tie variance. A future result about `structural` as a stochastic
+method must predeclare its seed sample and aggregation rule.
 
-A future promotional protocol that interprets `structural` as a stochastic acquisition method must
-predeclare how seeds are sampled and aggregated. That empirical study is deferred; it is not needed
-to retain the explicitly historical v1 table or to publish these implementation corrections.
+Recovery schema v3 stores every realised plate and every paired contrast rather than selecting one
+representative seed. Each record includes the seed, selected-plate hash, term count and term-set hash.
+Bootstrap intervals over terms are labelled `term_leverage_ci95`; selection variability is reported
+separately across realised plates.
 
-## H-2 — method-specific calibration
+## TrpB label semantics
 
-Fitting a separate affine calibration to each selected plate changes both the data and the
-transformation being compared. `per_method` calibration remains available as a descriptive
-operational policy, but it is excluded from method-comparison claims.
+The following concepts are distinct:
 
-Corrected recovery contrasts use only method-independent policies:
-
-- `zero_prior`, which assigns zero to unmeasured terms;
-- `fixed_unit`, which uses a fixed slope and intercept shared by all methods.
-
-The policy is part of every record identity and every contrast identity.
-
-## H-3 — trainability, score sign, and biological activity
-
-These concepts are now separate:
-
-- `trainable`: a finite fitness value in the domain required by the learner;
+- `trainable`: a finite value in the learner's `log1p` domain;
 - `positive_score`: an aggregated score strictly above zero;
 - `active`: an experimental classification supplied by the source assay.
 
-The local TrpB mirror contains an aggregated score, not the two replicate-level activity calls
-required by the published assay definition. The sign of that aggregate must therefore not be called
-biological activity. Non-positive, trainable TrpB rows remain valid labels. Downstream schema fields
-formerly named `active` or `live` are now named `positive_score`, and score-sign fractions remain
-descriptive only.
+The local TrpB mirror contains one aggregated score, not the replicate-level calls required to
+reconstruct the assay's activity classification. Score sign is therefore not called biological
+activity. Non-positive trainable values remain valid labels, and NDCG is described as score-derived
+rather than activity retrieval.
 
-NDCG uses a score-derived relevance transformation. It is not an activity-retrieval metric. No
-count of positive TrpB scores may be presented as a count of active variants.
+## Cache and provenance requirements
 
-## H-4 — selection uncertainty and term leverage
+Recovery validates the scored cache against independently supplied expectations for model, reference
+sequence, candidate universe, alphabet, maximum order, scorer seed and perturbation count. Outputs use
+create-only atomic publication.
 
-The earlier emitter selected `draws[0]` as a representative plate and bootstrapped terms from that
-single selection. That interval measured term leverage conditional on seed zero while being
-presented as a method contrast.
-
-Recovery schema v3 instead emits one method record per realised plate and one paired contrast per
-realised plate pair. Pairing is defined before evaluation:
-
-- deterministic versus seeded: broadcast the deterministic plate across realised seeds;
-- the same seed mechanism on both sides: pair matching seeds;
-- different stochastic mechanisms: use the Cartesian product of realised seeds.
-
-Each record carries the seed kind, seed value, selected-plate identity hash, term count, and term-set
-hash. The bootstrap interval is named `term_leverage_ci95` because it conditions on the selected
-plates. Selection variability is summarized separately across realised plate pairs. No
-`draws[0]` result is promoted to a method-level contrast.
-
-## Cache identity and output publication
-
-The recovery emitter validates cache identity against independently supplied expectations before
-using any score. Validation covers model identifier, wild type, candidate-universe identity,
-alphabet, maximum order, seed, and perturbation count. Same-size candidate permutations and extra
-or missing entries fail closed.
-
-Recovery output uses exclusive atomic publication. Reusing an existing destination fails without
-altering the previous file.
-
-## Provenance
-
-The earlier downstream reruns captured repository state at process completion. Edits made during a
-run could therefore change the recorded diff even though Python had loaded the original modules.
-Their provenance is unsuitable for promotion.
-
-Downstream v3 now captures at process start:
-
-- the actual argument vector and a re-executable Windows command line;
-- commit, repository state, scientific diff hash, and changed scientific files;
-- input dataset and cache hashes.
-
-The same repository and input states are captured again before publication. Any code drift or input
-drift makes both decision gates ineligible and clears their support values. Recovery uses the same
-start/end discipline and records the expected and observed cache identities.
+Downstream v3 records the command, commit, scientific working-tree state and input hashes at process
+start and again before publication. Code or input drift makes the decision gates ineligible. The v2
+reruns captured provenance only at completion, so their records do not establish the code state that
+was loaded at process start.
 
 ## Protocol versions
 
 | Version | Definition | Artifact status |
 |---|---|---|
-| `epibudget-downstream-v1` | registered profile with enumeration-order ties and legacy field names | tracked historical artifacts |
-| `epibudget-downstream-v2` | seeded tie resolution and corrected label accounting | local seed-zero diagnostics only |
-| `epibudget-downstream-v3` | truthful score-sign field names and start/end provenance gates | no artifact |
+| `epibudget-downstream-v1` | Enumeration-order ties and legacy field names | Tracked historical artifacts |
+| `epibudget-downstream-v2` | Seeded ties and corrected label accounting | Local seed-0 diagnostics |
+| `epibudget-downstream-v3` | Explicit score-sign fields and start/end provenance | No artifact |
 
-Version v3 is a schema and provenance correction. It does not itself add a tie-seed distribution,
-change the frozen partition profile, or create a new empirical result.
+The withdrawn contrast-recovery proposal in
+[`specs/prospective-amendment-2.md`](specs/prospective-amendment-2.md) governs no experiment. A future
+reconstruction protocol must define one estimand, one evaluation population and explicit
+design-matrix identifiability conditions before examining results.
 
-## Withdrawn prospective amendment
+## Public result boundary
 
-`docs/specs/prospective-amendment-2.md` is withdrawn. It registered `fitness - random` while its
-interpretation referred to `structural - fitness`, required a common evaluation set while defining
-plate-dependent evaluability, and treated a ridge-regularized coefficient as identified from
-insufficient observations. Ridge can return a unique fitted value without making a coefficient
-identifiable from the data.
+The README may retain the checksummed v1 downstream table only as historical evidence. It does not
+present v2 as promotable, infer biological activity from score sign, claim robustness over unsampled
+tie seeds or report corrected-recovery numbers without a tracked artifact.
 
-Contrast reconstruction remains diagnostic for the current method. A future method designed to
-identify higher-order contexts needs a separate protocol whose estimand and design-matrix
-identifiability conditions are registered before any result is observed.
-
-## Public-claim boundary
-
-The README may report the checksummed v1 table only as historical evidence, with its limitations
-adjacent. It must not report the v2 reruns as promotable, corrected recovery numbers without tracked
-artifacts, biological activity inferred from score sign, or robustness over tie seeds that were not
-sampled.
-
-A new promotional result would require a clean, fixed commit; stable input hashes; a preregistered
-tie-seed sampling and aggregation rule; complete expected coverage; independent recomputation of the
-decision gates; and artifact validation. Running such a study is deferred. It is not a prerequisite
-for publishing the present code corrections and the narrowed historical wording.
-
-## Verification required before release
-
-The corrective change is releasable only after all of the following pass on the exact tree being
-committed:
-
-- the complete offline test suite;
-- Ruff format and check on `src/`, `tests/`, and `scripts/`;
-- strict mypy on `src/` and the changed recovery emitter;
-- public-artifact and claim-map validation;
-- `git diff --check`;
-- a staged-diff review that excludes unrelated worktree changes.
-
-Passing these software gates validates the implementation and documentation consistency. It does
-not supply the deferred downstream v3 or corrected-recovery empirical evidence.
+A new promotional result requires a fixed clean commit, stable input hashes, complete expected
+coverage, a preregistered seed rule, independent recomputation of the decision gates and artifact
+validation.

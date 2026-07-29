@@ -29,7 +29,7 @@ protocol and result status live in [`VALIDATION.md`](VALIDATION.md); tracked evi
 - **Non-positive scores are training data downstream, and excluded from the log-ratio upstream.**
   TrpB has 35,643 negative labels and GB1 has 29,477 exact zeros. These are score-sign classes, not
   biological activity calls. All TrpB values are `> -1`, so `log1p` is defined and they are valid
-  downstream training rows (audit H-3; the previous code silently discarded them). The map-recovery
+  downstream training rows; the earlier filtering silently discarded them. The map-recovery
   log-ratio is undefined at `f <= 0`, so its eligible population is declared separately and before
   selection.
 
@@ -56,7 +56,7 @@ protocol and result status live in [`VALIDATION.md`](VALIDATION.md); tracked evi
 
 - **The coverage score is three-valued on a four-site landscape.** `n(v)` is exactly 1140 for every
   single, 39 for every double and 1 for every triple, so `structural` reduces to "singles, then
-  doubles, then triples" and every within-order comparison is a tie (audit H-1). A declared
+  doubles, then triples" and every within-order comparison is a tie. A declared
   `tie_seed` now makes a selection reproducible, but the tracked artifacts do not estimate a
   distribution over tie seeds.
 
@@ -73,19 +73,19 @@ protocol and result status live in [`VALIDATION.md`](VALIDATION.md); tracked evi
 
 ## Metrics and inference
 
-- **Map recovery is confounded by the purchased contrast component (audit C-1).** The inferred and the
+- **Map recovery is confounded by the purchased contrast component.** The inferred and the
   true contrast both contain `k(S)`, the signed sum of the measured loop members' true values. The
   breadth/precision split does *not* remove it: once all singles are bought, essentially every term is
   informed-not-pinned and still carries `k(S)`. The corrected schema uses `relative_sse_gain` as the
   wording gate and the skeleton-controlled association as a diagnostic, but no corrected-run artifact
-  is tracked yet; see [`AUDIT_REMEDIATION_20260728.md`](AUDIT_REMEDIATION_20260728.md).
+  is tracked yet; see the [evaluation notes](AUDIT_REMEDIATION_20260728.md).
 
 - **Pairwise and third-order results have different power.** They are reported separately. The pooled
   correlation is diagnostic only and cannot replace an order-specific decision.
 
 - **Precision sets differ by method.** The decision-bearing `validate.map_recovery` split computed each
   method's precision on *its own* informed-not-pinned terms and compared the two as if they estimated
-  the same quantity (audit M-3). Only the post-hoc robustness suite intersected them.
+  the same quantity. Only the post-hoc robustness suite intersected them.
   `recovery.common_term_subset` now evaluates a comparison on terms in the same state for both
   methods, with the size and SHA-256 recorded.
 
@@ -121,7 +121,8 @@ protocol and result status live in [`VALIDATION.md`](VALIDATION.md); tracked evi
   landscape passed the incremental masking-dispersion gate. These observations do not estimate the
   structural method over tie seeds. The compact result is tracked in
   [`structural_allocation_650m.json`](../artifacts/structural_allocation_650m.json), remains provisional,
-  and is superseded for promotional use by the audit record.
+  and is not used as a promotional result; see the
+  [evaluation notes](AUDIT_REMEDIATION_20260728.md).
 
 - **The earlier TrpB downstream run is exploratory.** It used `n_perturbations=0`, so it cannot evaluate
   masking dispersion and is not decision-eligible. Its historical interpretation is recorded in

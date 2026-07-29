@@ -13,8 +13,8 @@ The downstream v1 artifacts are historical observations on particular tied plate
 the acquisition method's tie distribution. The former map-recovery interpretation is withdrawn. Later
 entries retain the vocabulary and conclusions recorded at the time; any use of `active` or `inactive`
 derived only from score sign must now be read as `positive` or `non-positive score`, not as a biological
-activity classification. The current disposition is authoritative in
-`AUDIT_REMEDIATION_20260728.md`, `LIMITATIONS.md`, and `specs/downstream.md`.
+activity classification. The current disposition is authoritative in the
+[evaluation notes](AUDIT_REMEDIATION_20260728.md), `LIMITATIONS.md`, and `specs/downstream.md`.
 
 Verdicts used below: **kept** (live and load-bearing), **narrowed** (retained under a reduced claim),
 **superseded** (replaced by a better instrument), **abandoned** (killed), **inconclusive** (frozen or run

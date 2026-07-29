@@ -4,7 +4,7 @@
 decision-eligible under the registered v1 gate; TrpB was exploratory and non-decision-eligible because
 it used `n_perturbations = 0`. Neither run estimates the structural acquisition method over tie seeds,
 and neither is a current promotional result. See [`docs/specs/downstream.md`](../specs/downstream.md)
-and the [audit remediation](../AUDIT_REMEDIATION_20260728.md).
+and the [evaluation notes](../AUDIT_REMEDIATION_20260728.md).
 
 ## Question (the estimand)
 

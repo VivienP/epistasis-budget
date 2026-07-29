@@ -166,6 +166,12 @@ held-out double and triple mutants. The primary score is
 `S_macro = 0.5 * (Spearman_doubles + Spearman_triples)`. The learner reads revealed training labels but no
 held-out ESM score and no prior-inclusive `infer_epistasis` output.
 
+**Version superseded; profile parameters unchanged.** The executing protocol is now
+`epibudget-downstream-v3`. The parameter profile named below — partitions, folds, budgets, alphabet,
+orders, seeds — is identical in every version; what changed is the record schema, the tie
+resolution, and the label-fraction field names. The version string below is retained as the one that
+was actually registered and run. No v3 artifact exists yet.
+
 The confirmatory downstream profile is `epibudget-downstream-v1`: 20 partitions, 5 outer folds, budgets
 `(48, 96, 192)` in that order, full alphabet, `max_order=3`, `n_perturbations=16`, random seeds 0 through
 19, 3 inner folds, both registered estimands and missingness regimes, and all five methods.
@@ -179,10 +185,11 @@ Missing, duplicate, unexpected, wrongly versioned, or divergent raw-record cells
 status precedence defined in the authoritative spec. A nonconforming recipe cannot become
 decision-eligible from favorable descriptive values.
 
-The amended GB1 and TrpB reports conform to the frozen downstream profile. Both set
-`structural_downstream_supported=true` and do not support the ESM uncertainty contribution. On TrpB, the
-structural-minus-fitness gate is positive in 20/20 partitions with mean AUC difference +0.286; the
-info-minus-structural gate is positive in 0/20 partitions at B=192 with mean difference −0.025.
+The tracked v1 GB1 and TrpB reports conform to the frozen downstream profile. As executed, both set
+`structural_downstream_supported=true` and did not support the ESM uncertainty contribution. On TrpB,
+the structural-minus-fitness gate was positive in 20/20 partitions with mean AUC difference +0.286;
+the info-minus-structural gate was positive in 0/20 partitions at B=192 with mean difference −0.025.
+These are historical observations on particular tied plates, not estimates over tie seeds.
 
 Both results remain provisional. The compact evidence is tracked in
 [`structural_allocation_650m.json`](../artifacts/structural_allocation_650m.json), with the complete reading
@@ -196,11 +203,11 @@ the nonconforming `n_perturbations=0` historical run.
 |---|---|
 | Additive scoring makes predicted epsilon identically zero | Score every mutation conjointly and retain `test_epsilon_not_identically_zero` |
 | Selection leaks measured labels | Enforce the `reveal_measured_fitness` boundary and label-substitution tests |
-| Missing or dead loop members bias ground truth | Require complete positive-fitness loops and state the conditioning |
+| Missing or non-positive loop members restrict ground truth | Require complete positive-fitness loops and state the conditioning |
 | Pool exhaustion inflates recovery | Use the full 29,678-candidate universe for confirmatory runs |
 | One budget drives the conclusion | Report all three budgets and require a majority |
 | Coverage is mistaken for prediction | Report breadth and unpinned-term precision separately |
-| Calibration or tie-breaking drives the result | Use corrective seeded ties and method-independent calibration companions |
+| Calibration or tie-breaking drives the result | Declare the tie seed and report the unsampled seed-distribution limitation; use method-independent calibration companions |
 | A baseline is dropped after inspection | Report all five methods at every budget |
 | One landscape is generalized broadly | Decide GB1 and TrpB separately; never pool them |
 | Downstream diagnostics feed the primary learner | Keep ESM diagnostics outside primary features and decisions |

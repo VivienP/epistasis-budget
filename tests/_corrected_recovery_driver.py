@@ -15,6 +15,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import sys
 from pathlib import Path
 
@@ -122,6 +123,9 @@ def main() -> None:
         str(cache_path),
         "--alphabet",
         ALPHABET,
+        "--model-id",
+        # Overridable so a test can assert the cache-identity gate actually rejects a mismatch.
+        os.environ.get("EPIBUDGET_DRIVER_MODEL_ID", "synthetic/test-scorer"),
         "--budgets",
         "8,20",
         "--tie-seeds",

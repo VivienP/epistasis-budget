@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="2048" height="900" viewBox="0 0 2048 900" role="img" aria-labelledby="title desc">
   <title id="title">epibudget structural allocation workflow</title>
-  <desc id="desc">A four-stage workflow from a protein target, mutable sites, and budget B through candidate enumeration and structural interaction-loop coverage to a ranked shortlist. Conjoint ESM-2 fitness and masking-dispersion signals appear as optional benchmark controls, not the supported main path.</desc>
+  <desc id="desc">A four-stage workflow from a protein target, mutable sites, and budget B through candidate enumeration and structural interaction-loop coverage to a ranked shortlist. Conjoint ESM-2 fitness and masking-dispersion signals appear as separate benchmark controls.</desc>
   <defs>
     <style>
       .heading { font: 700 30px Arial, Helvetica, sans-serif; letter-spacing: .4px; fill: #0f1b2d; }
@@ -106,8 +106,8 @@
       <circle cx="1095" cy="448" r="15"/>
       <circle cx="1218" cy="351" r="17" fill="#d5e8e5"/>
     </g>
-    <rect x="1087" y="526" width="262" height="54" rx="27" fill="#cfe8d3" stroke="#4f8160" stroke-width="3"/>
-    <text class="heading" x="1218" y="562" text-anchor="middle">SUPPORTED v1</text>
+    <rect x="1068" y="526" width="300" height="54" rx="27" fill="#cfe8d3" stroke="#4f8160" stroke-width="3"/>
+    <text class="heading" x="1218" y="562" text-anchor="middle">ORDER-FIRST</text>
     <text class="label" x="1218" y="615" text-anchor="middle">Rank by loops braced</text>
   </g>
 
@@ -154,8 +154,8 @@
 
   <rect x="1196" y="668" width="310" height="42" rx="21" fill="#e7eaec" stroke="#aab4bc" stroke-width="2"/>
   <text class="tiny" x="1351" y="695" text-anchor="middle">FITNESS-GREEDY CONTROL</text>
-  <rect x="1196" y="720" width="310" height="42" rx="21" fill="#f2ddda" stroke="#bd7a72" stroke-width="2"/>
-  <text class="tiny" x="1351" y="747" text-anchor="middle">NO ADDED BENEFIT</text>
+  <rect x="1196" y="720" width="310" height="42" rx="21" fill="#e7eaec" stroke="#aab4bc" stroke-width="2"/>
+  <text class="tiny" x="1351" y="747" text-anchor="middle">DISPERSION COMPANION</text>
 
   <!-- Bottom statement -->
   <text x="1024" y="854" text-anchor="middle" style="font: 400 43px Arial, Helvetica, sans-serif; fill: #0f1b2d;">

@@ -2,6 +2,10 @@
 
 Status: **exploratory · non-confirmatory · not decision-eligible · recovery invalidated.**
 
+**Terminology correction (2026-07-29).** Historical references below to TrpB `inactive` rows mean
+non-positive aggregated scores. The local mirror does not carry the replicate-level experimental
+activity classification, so score sign cannot be interpreted as biological activity.
+
 **Correction after WT-centred reanalysis design.** This artifact predates the current
 ΔG(v) = log(f(v)/f(reference)) path. Its recovery coefficients, correlations and truth-map variance are
 not interpretable. Its selection identities, attempted/revealed counts, coverage, hit-rate and run
@@ -155,13 +159,13 @@ candidate pool and budget grid transfer by construction. They differ materially 
 | Reference | WT GB1 (VDGV), **f = 1.0** | Tm9D8\* parent (VFVS), **f = 0.408074** |
 | Rows | 149,361 of 160,000 (10,639 absent) | 160,000 (complete — but ~871 imputed, not measured) |
 | Order-1..3 present | 28,186 / 29,678 (94.97%) | 29,678 / 29,678 (100%) |
-| Inactivity encoded as | **exactly 0.0** (29,477 rows, 19.74%) | **negative** (35,643 rows, 22.28%); **no zeros** |
+| Non-positive score encoded as | **exactly 0.0** (29,477 rows, 19.74%) | **negative** (35,643 rows, 22.28%); **no zeros** |
 | Fitness range | 0.0 – 8.762 | −0.164 – 1.0 (max-normalised) |
-| Live above reference | 3.04% | 0.88% |
+| Score above reference | 3.04% | 0.88% |
 | `ln f` on positives | mean −4.89, sd 1.72, min −8.85 | mean −4.15, sd 1.14, **min −13.76** |
 | Truth terms | 17,782 (1,822 pairwise + 15,960 third) | 17,709 (1,784 pairwise + 15,925 third) |
-| Terms dropped | 11,820 (2,476 missing row + 9,344 dead member) | 11,893 (0 missing + 11,893 dead member) |
-| Dead singles | 0 | **4** — (226,V,D), (227,S,E), (227,S,H), (227,S,W) |
+| Terms dropped | 11,820 (2,476 missing row + 9,344 non-positive member) | 11,893 (0 missing + 11,893 non-positive member) |
+| Non-positive singles | 0 | **4** — (226,V,D), (227,S,E), (227,S,H), (227,S,W) |
 | `Var[ε_true]` | 2.616 | 4.844 as-run / **3.930 re-anchored** (§6.1) |
 | Raw zero-shot ESM ε̂ pairwise ρ | **+0.302** (`artifacts/signal_650m.json`) | ‖ρ‖ ≈ 0.13; **sign unknown** (§6.3) |
 | Seeds / budgets | 20 / 48, 96, 192 | 5 / 24, 48 |
@@ -170,10 +174,10 @@ candidate pool and budget grid transfer by construction. They differ materially 
 
 1. **GB1's WT fitness is exactly 1.0; TrpB's parent is 0.408074.** The ε machinery assumes ΔG(∅) = 0 —
    see §6.1. GB1 satisfies this by luck of normalisation; TrpB does not.
-2. **Inactivity encoding.** GB1's dead variants are exactly `0.0` and are cleanly dropped by the `f > 0`
-   rule. TrpB has no zeros: its dead mass is a noisy continuum straddling zero. The rule drops the negative
-   half but **retains the near-zero positive half**, whose `ln f` reaches −13.76 — assay noise amplified
-   into large ΔG outliers, which inclusion–exclusion propagates into every ε term touching them.
+2. **Score-sign encoding.** GB1's non-positive rows are exactly `0.0` and are dropped by the recovery
+   `f > 0` log-ratio eligibility rule. TrpB has no zeros and instead has a continuum straddling zero.
+   The rule excludes the negative values but retains near-zero positive values, whose `ln f` can be
+   large in magnitude. This is a mathematical conditioning boundary, not an activity classification.
 
 Only B=48 is shared. Even there, comparisons remain confounded by assay, activity distribution, seed count
 (5 vs 20) and the defects in §6.

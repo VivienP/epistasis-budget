@@ -19,7 +19,7 @@ from epibudget.labels import (
 )
 from epibudget.types import Variant
 
-_N_INACTIVE_ENCODINGS = 2  # exact zero (GB1) and small negative (TrpB)
+_N_NON_POSITIVE_ENCODINGS = 2  # exact zero and small negative
 _N_MIXED_ROWS = 3
 _N_ACTIVE_ROWS = 4
 _N_PLATE_ROWS = 10
@@ -46,11 +46,11 @@ def _expected_bucket(value: float | None) -> str:
     return "outside_transform_domain"
 
 
-# One representative of every bucket, including both landscapes' inactive encodings.
+# One representative of every bucket, including zero and negative score encodings.
 _CASES: tuple[tuple[float | None, str], ...] = (
     (2.5, "valid_positive"),
     (1e-12, "valid_positive"),
-    (0.0, "valid_zero"),  # GB1 encodes inactivity as an exact zero
+    (0.0, "valid_zero"),
     (-0.164070661, "valid_negative_in_domain"),  # observed TrpB minimum
     (-0.999999, "valid_negative_in_domain"),
     (-1.0, "outside_transform_domain"),  # log1p(-1) = -inf
@@ -98,28 +98,28 @@ def test_accounting_identity_holds_over_every_bucket_at_once() -> None:
     accounting.check()  # must not raise
 
 
-def test_inactive_class_spans_both_landscape_encodings() -> None:
-    """A GB1 exact zero and a TrpB small negative are counted as the same inactive class."""
+def test_non_positive_scores_span_zero_and_negative_encodings() -> None:
+    """An exact zero and a small negative are counted as the same score-sign class."""
     selected = [_v(0), _v(1), _v(2)]
     revealed = {_v(0): 0.0, _v(1): -0.01, _v(2): 3.0}
     accounting, trainable = account(selected, revealed)
-    assert accounting.inactive_count == _N_INACTIVE_ENCODINGS
-    # inactive rows are training data, not missing data
+    assert accounting.non_positive_count == _N_NON_POSITIVE_ENCODINGS
+    # Non-positive rows are training data, not missing data.
     assert accounting.effective_train_size == _N_MIXED_ROWS
     assert len(trainable) == _N_MIXED_ROWS
-    assert accounting.active_fraction == pytest.approx(1 / _N_MIXED_ROWS)
+    assert accounting.positive_score_fraction == pytest.approx(1 / _N_MIXED_ROWS)
 
 
-def test_active_fraction_is_not_one_when_the_plate_contains_inactive_rows() -> None:
+def test_positive_score_fraction_is_not_one_when_the_plate_contains_non_positive_rows() -> None:
     """Regression for the retired ``train_live_fraction``: it read 1.000 on every TrpB plate.
 
     Under the old positive-vs-exact-zero split a negative label entered neither bucket, so the
-    denominator lost it and the fraction was 1.0 however inactive the plate really was.
+    denominator lost it and the fraction was 1.0 however many non-positive rows the plate held.
     """
     selected = [_v(i) for i in range(_N_PLATE_ROWS)]
     revealed = {_v(i): (1.0 if i < _N_ACTIVE_ROWS else -0.02) for i in range(_N_PLATE_ROWS)}
     accounting, _ = account(selected, revealed)
-    assert accounting.active_fraction == pytest.approx(_N_ACTIVE_ROWS / _N_PLATE_ROWS)
+    assert accounting.positive_score_fraction == pytest.approx(_N_ACTIVE_ROWS / _N_PLATE_ROWS)
     assert accounting.effective_train_size == _N_PLATE_ROWS
 
 
@@ -147,13 +147,13 @@ def test_check_fails_closed_on_a_broken_partition() -> None:
         broken.check()
 
 
-def test_training_target_is_strictly_increasing_across_the_inactive_boundary() -> None:
-    """``log1p`` preserves inactive-vs-active ranking, so Spearman evaluation stays sound."""
+def test_training_target_is_strictly_increasing_across_zero() -> None:
+    """``log1p`` preserves score ordering across zero, so Spearman evaluation stays sound."""
     values = [-0.5, -0.164070661, -0.01, 0.0, 1e-9, 1.0, 8.76]
     targets = [training_target(v) for v in values]
     assert targets == sorted(targets)
     assert all(math.isfinite(t) for t in targets)
-    assert training_target(0.0) == 0.0  # the GB1 inactive anchor maps to the WT-free origin
+    assert training_target(0.0) == 0.0
 
 
 @pytest.mark.parametrize("value", [-1.0, -1.5, float("nan"), float("inf")])

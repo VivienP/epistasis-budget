@@ -40,7 +40,8 @@ The five methods are recomputed from the scored cache with the same allocation u
 `CONFIRMATORY_PROFILE` is checked at the CLI boundary and again inside the decision engine.
 
 ```text
-protocol_version   = "epibudget-downstream-v1"
+protocol_version   = "epibudget-downstream-v3"
+tie_seed          = 0                     # one reproducible diagnostic draw, not a distribution
 partitions         = 20
 outer_folds        = 5
 budgets            = (48, 96, 192)          # exact order; AUC uses this order
@@ -137,13 +138,14 @@ Either undefined order makes `S_macro` undefined. A correlation is `None` with f
 observations, a constant input, or a NaN result. Undefined values are never replaced by zero.
 
 Required companions include the two order-specific Spearman values, pooled-order Spearman (diagnostic),
-Pearson, `log1p` RMSE, `NDCG@B`, hit rate, best true fitness in the predicted top B, regret, live fraction,
-order and identity diversity, epistasis uplift, and no-triples-to-triples transfer. The triple-transfer
+Pearson, `log1p` RMSE, `NDCG@B`, hit rate, best true fitness in the predicted top B, regret,
+positive-score fraction, order and identity diversity, epistasis uplift, and no-triples-to-triples transfer. The triple-transfer
 statistic is decision-relevant only at B=96 and B=192 and warns when fewer than three training doubles
 remain.
 
 Random-seed variability remains separate from partition/fold variability. Raw per-seed records are never
-pre-averaged before serialization.
+pre-averaged before serialization. The current v3 implementation has one scalar structural tie seed;
+it is reproducible but does not estimate selection variability. No v3 artifact exists.
 
 ## Registered decision gate
 
@@ -213,14 +215,14 @@ values may remain available unless a divergent duplicate makes them ambiguous.
 - Cache loading rejects malformed lines, duplicate identities, missing sidecars, and mismatches in
   candidate hash/count/alphabet, max order, model, scorer seed, perturbation count, or WT hash.
 - The full-alphabet cache must contain 76 singles, 2,166 doubles, and 27,436 triples.
-- Provenance records protocol/amendment versions, execution and base commits, scientific diff hash,
-  cache and dataset identities, salts, alpha policy and choices, estimands, regimes, command, timestamps,
-  and `provisional | final | invalidated` status.
+- Provenance captures the replay command, execution commit, scientific diff and changed files, cache
+  and dataset hashes, and timestamps at process start. It captures repository and input state again
+  before publication. Code or input drift makes both gates ineligible and clears support values.
 
 ## Verification contract
 
 Offline tests cover outer and inner fold balance, label substitution, pool/holdout separation, all methods,
-estimands and regimes, ridge solvability, hyperparameter isolation, missing/dead/live accounting, metric
+estimands and regimes, ridge solvability, hyperparameter isolation, missing/non-positive accounting, metric
 degeneracy, NDCG ties, triple transfer, all gate boundary cases, corrected-CV formulas, raw-record
 reconstruction, profile mismatches, duplicate handling, cross-process determinism, cache completeness,
 diagnostic isolation, and exclusive atomic writes.

@@ -3,18 +3,26 @@
 Every selected variant lands in exactly one bucket, and the buckets sum to the plate size. The
 previous downstream accounting split revealed labels into positive / exact-zero / non-finite and
 silently discarded everything else, so a finite negative label vanished from the training set and
-from every count. On TrpB — 35,643 of 160,000 values are negative and none is exactly zero — that
-dropped up to 17% of a plate with no record and reported a training "live fraction" of 1.000.
+from every count. On TrpB, negative values could therefore disappear from a plate while the old
+training "live fraction" still reported 1.000.
 
-Label semantics come from the committed dataset provenance, not from the sign alone.
-``scripts/fetch_trpb.py`` records the TrpB label as "an aggregated catalytic-fitness score
-(Kowalsky et al.); <= 0 is inactive (like a dead row)". A non-positive TrpB value is therefore a
-valid measurement of an inactive variant — the same biological category as a GB1 fitness-zero row,
-recorded by an assay whose inactive readout scatters slightly below zero rather than resting exactly
-at it. Such rows are training data, not missing data.
+Three properties are kept distinct here, because conflating them is how a measurement convention
+became a biological claim:
+
+* **trainable** — the value is finite and inside the transform's domain, so the row can enter the
+  design matrix. This is the only property the buckets below decide.
+* **positive score** — the aggregated score is strictly greater than zero. A sign test, no more.
+* **active** — a functional call about the enzyme. **This module does not compute it, and no field
+  here may be read as it.**
+
+``scripts/fetch_trpb.py`` records one aggregated catalytic-fitness score per genotype. The published
+activity classification applies replicate-specific thresholds, and the committed mirror does not
+carry those replicate calls. ``positive_score_fraction`` is therefore named for the sign test it
+performs rather than for activity. A non-positive value is still a real measurement, so such rows
+are training data, not missing data.
 
 The training transform is ``log1p``, defined and strictly increasing on (-1, inf). Every observed
-TrpB label satisfies f > -1 (the minimum is -0.164), so the whole inactive class is inside the
+TrpB label satisfies f > -1 (the minimum is -0.164), so the whole negative-score class is inside the
 domain. A label at or below -1 has no ``log1p`` image and is bucketed as out-of-domain rather than
 silently coerced; none occurs in either registered landscape, and the bucket exists so a future
 dataset cannot reintroduce the silent drop.
@@ -56,8 +64,10 @@ class LabelAccounting(BaseModel):
 
     ``valid_positive``/``valid_zero``/``valid_negative_in_domain`` are the training rows: all three
     are real measurements with a finite ``log1p`` image. ``valid_zero`` and
-    ``valid_negative_in_domain`` are the inactive class (GB1 records it as exact zero, TrpB as a
-    small negative), kept together in ``inactive_count`` so the two landscapes are comparable.
+    ``valid_negative_in_domain`` are the non-positive rows (GB1 encodes them as exact zero, TrpB as
+    a small negative), kept together in ``non_positive_count`` so the two landscapes are comparable.
+    Non-positive is a statement about the score, not an activity call; see
+    ``positive_score_fraction``.
 
     ``outside_transform_domain`` (f <= -1) and ``non_finite`` are real rows that cannot be
     transformed; ``missing`` are selected identities absent from the landscape. None of the three is
@@ -80,16 +90,27 @@ class LabelAccounting(BaseModel):
         return self.valid_positive + self.valid_zero + self.valid_negative_in_domain
 
     @property
-    def inactive_count(self) -> int:
-        """Measured-inactive rows, however the assay encodes inactivity (exact zero or negative)."""
+    def non_positive_count(self) -> int:
+        """Training rows whose label is not strictly positive (exact zero or negative)."""
         return self.valid_zero + self.valid_negative_in_domain
 
     @property
-    def active_fraction(self) -> float | None:
-        """Fraction of training rows that are active (f > 0); ``None`` when nothing trains.
+    def positive_score_fraction(self) -> float | None:
+        """Fraction of training rows with a strictly positive label; ``None`` when nothing trains.
 
-        Replaces the previous ``train_live_fraction``, which counted only positive-vs-exact-zero and
-        therefore reported 1.000 on every TrpB plate while a fifth of the plate was inactive.
+        This is a property of the score, not a biological activity call. An earlier name for it,
+        ``active_fraction``, asserted more than the data supports. Both registered landscapes ship a
+        single aggregated fitness column and no activity classification, so "f > 0" is only a
+        score-sign convention, not the assay's own call.
+
+        Use it as a label-composition diagnostic. Do not report it as the fraction of active
+        variants, and do not derive a biological claim from it. Recovering a real activity call
+        needs the per-replicate thresholded classification from the source assay, which this mirror
+        does not carry.
+
+        It still replaces the older ``train_live_fraction``, which counted only positive-vs-exact-
+        zero and therefore reported 1.000 on every TrpB plate while a fifth of the plate was
+        non-positive.
         """
         total = self.effective_train_size
         return self.valid_positive / total if total else None

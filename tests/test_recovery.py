@@ -283,6 +283,19 @@ def test_correlation_can_rise_while_squared_error_worsens() -> None:
     assert gain == pytest.approx(expected)
 
 
+def test_zero_sse_gain_does_not_permit_recovery_wording() -> None:
+    """An unchanged estimator is an honest null, not evidence that anything was recovered."""
+    dg = _pairwise_dg()
+    terms = [tuple(sorted(v)) for v in _all_variants() if len(v) == _PAIRWISE]
+    truth = {term: contrast(dg, term) for term in terms}
+    zero_prior = dict.fromkeys(dg, 0.0)
+
+    result = evaluate_order(terms, truth, dg, zero_prior, {}, "pairwise")
+
+    assert result.relative_sse_gain == pytest.approx(0.0)
+    assert not result.recovery_wording_permitted
+
+
 def test_skeleton_controlled_association_is_zero_when_only_the_skeleton_carries_signal() -> None:
     """A high raw correlation with an approximately zero partial correlation, by construction."""
     rng = np.random.default_rng(0)
@@ -464,7 +477,7 @@ def test_fisher_z_mean_differs_from_the_arithmetic_mean_and_is_exact_on_a_hand_c
 
 
 def test_schema_version_is_bumped_so_old_readers_cannot_misread_new_fields() -> None:
-    assert SCHEMA_VERSION >= _PAIRWISE
+    assert SCHEMA_VERSION >= _THIRD
     # The raw correlation is only reachable under a name that says what it contains.
     dg = _pairwise_dg()
     terms = [tuple(sorted(v)) for v in _all_variants() if len(v) == _PAIRWISE]
@@ -641,7 +654,9 @@ def _corr_via_report(a: FloatArray, b: FloatArray) -> float | None:
 _SHA256_HEX_LEN = 64
 
 
-def test_emitter_writes_a_file_that_validates_against_its_own_schema(tmp_path: Path) -> None:
+def test_emitter_writes_a_file_that_validates_against_its_own_schema(  # noqa: PLR0915
+    tmp_path: Path,
+) -> None:
     """The integration debt this closes: the emitted JSON must satisfy CorrectedRecoveryReport.
 
     A schema no emitter constructs enforces nothing. This runs the real script end to end over a
@@ -669,6 +684,10 @@ def test_emitter_writes_a_file_that_validates_against_its_own_schema(tmp_path: P
     assert report.schema_version == SCHEMA_VERSION
     assert report.model_id == "synthetic/test-scorer"
     assert not report.decision_eligible and report.reason_not_decision_eligible
+    assert report.provenance["argv"][0].endswith("corrected_recovery.py")
+    assert report.provenance["exact_command"]
+    assert report.provenance["input_hashes_at_start"] == report.provenance["input_hashes_at_end"]
+    assert report.provenance["workspace_stable"] is True
 
     # Every declared method is present, and `random`/`practice` are among them -- their absence was
     # the other half of the integration debt.
@@ -678,14 +697,25 @@ def test_emitter_writes_a_file_that_validates_against_its_own_schema(tmp_path: P
     for method in report.methods:
         assert method.seed_kind in SEED_KINDS
         assert (method.seed is None) == (method.seed_kind == "none")
+        assert len(method.selected_identity_sha256) == _SHA256_HEX_LEN
         assert method.calibration.policy in CALIBRATION_POLICIES
         for order in method.orders:
             order.census.check()  # exhaustive: the three classes sum to n_terms
             assert order.census.n_terms == order.n_terms
-            if order.seed_distribution is not None:
-                # A distribution is reported only where one draw would have been a sample of one.
-                assert order.seed_distribution.n_seeds > 1
-                assert order.seed_distribution.seed_kind == method.seed_kind
+
+    # Seeded methods are serialized one realisation at a time. No seed-0 record may stand in for
+    # the distribution, and every declared seed must be present for every emitted cell.
+    structural = [m for m in report.methods if m.method == "structural"]
+    random = [m for m in report.methods if m.method == "random"]
+    for budget in report.budgets:
+        for policy in CALIBRATION_POLICIES:
+            structural_seeds = {
+                m.seed for m in structural if m.budget == budget and m.calibration.policy == policy
+            }
+            assert structural_seeds in ({None}, set(range(report.tie_seeds)))
+            assert {
+                m.seed for m in random if m.budget == budget and m.calibration.policy == policy
+            } == set(range(report.random_seeds))
 
     # Paired contrasts exist, run only under the label-free policies, and each records the hash of
     # the exact term set it was computed on (audit M-3).
@@ -694,10 +724,64 @@ def test_emitter_writes_a_file_that_validates_against_its_own_schema(tmp_path: P
         assert result.calibration_policy in DECISION_ELIGIBLE_POLICIES
         assert result.term_subset in TERM_SUBSETS
         assert len(result.term_sha256) == _SHA256_HEX_LEN
+        assert len(result.selected_identity_sha256_a) == _SHA256_HEX_LEN
+        assert len(result.selected_identity_sha256_b) == _SHA256_HEX_LEN
+        assert result.seed_kind_a in SEED_KINDS
+        assert result.seed_kind_b in SEED_KINDS
         # A missing difference always says why, and never counts as evidence of a difference.
         assert (result.delta is None) == bool(result.reason)
         if result.delta is None:
-            assert not result.excludes_zero
+            assert not result.term_leverage_excludes_zero
+
+    # Different stochastic mechanisms have no natural index-wise pairing. The registered recovery
+    # comparison therefore emits their Cartesian product instead of silently reusing random seed
+    # 0 against structural seeds 0, 3, 6, ... via modulo arithmetic.
+    structural_random = [
+        result
+        for result in report.paired_contrasts
+        if (result.method_a, result.method_b) == ("structural", "random")
+    ]
+    structural_draws_by_budget = {
+        budget: len(
+            {
+                (m.seed_kind, m.seed)
+                for m in structural
+                if m.budget == budget and m.calibration.policy == CALIBRATION_POLICIES[0]
+            }
+        )
+        for budget in report.budgets
+    }
+    expected = sum(structural_draws_by_budget.values()) * (
+        len(report.paired_contrast_policies)
+        * 2  # pairwise + third order
+        * len(TERM_SUBSETS)
+        * report.random_seeds
+    )
+    assert len(structural_random) == expected
+
+    # Two tie-dominated methods use the same declared tie seed, so their draw identity is paired
+    # rather than crossed. This is the only seeded pairing with a shared stochastic mechanism.
+    structural_singles = [
+        result
+        for result in report.paired_contrasts
+        if (result.method_a, result.method_b) == ("structural", "singles_zero_prior")
+    ]
+    assert structural_singles
+    assert all(result.seed_a == result.seed_b for result in structural_singles)
+
+    # Publication is create-only: rerunning into the same directory must fail without changing the
+    # first validated artifact.
+    original_bytes = written.read_bytes()
+    second = subprocess.run(
+        [sys.executable, str(driver), str(repo), str(tmp_path)],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=str(repo),
+    )
+    assert second.returncode != 0
+    assert written.read_bytes() == original_bytes
 
 
 def test_a_paired_contrast_on_a_common_subset_is_smaller_than_the_confounded_one() -> None:
@@ -739,3 +823,52 @@ def test_a_paired_contrast_on_a_common_subset_is_smaller_than_the_confounded_one
         deltas[label] = delta
 
     assert abs(deltas["common"]) < abs(deltas["all_eligible"])
+
+
+def test_emitter_rejects_a_cache_from_the_wrong_scorer(tmp_path: Path) -> None:
+    """The emitter must not read a cache it cannot prove is the one it claims to read.
+
+    Parsing the sidecar alone can never fail -- it compares the sidecar against itself. The expected
+    identity has to come from the caller, so a cache produced by a different model (or WT, alphabet,
+    perturbation count, or candidate set) is refused rather than silently reanalysed.
+    """
+    repo = Path(__file__).resolve().parent.parent
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(repo / "src")
+    env["EPIBUDGET_DRIVER_MODEL_ID"] = "facebook/esm2_t33_650M_UR50D"  # not what the cache carries
+    driver = repo / "tests" / "_corrected_recovery_driver.py"
+
+    proc = subprocess.run(
+        [sys.executable, str(driver), str(repo), str(tmp_path)],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=str(repo),
+    )
+    assert proc.returncode != 0, "a wrong-model cache must not be accepted"
+    assert "model_id" in (proc.stdout + proc.stderr)
+    assert not (tmp_path / "out").exists(), "nothing may be written when the cache is rejected"
+
+
+@pytest.mark.parametrize("flag", ["--tie-seeds", "--random-seeds", "--bootstrap"])
+def test_emitter_rejects_non_positive_sampling_counts(tmp_path: Path, flag: str) -> None:
+    script = Path(__file__).resolve().parent.parent / "scripts" / "corrected_recovery.py"
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "--dataset",
+            "gb1_wu2016",
+            "--scored-cache",
+            str(tmp_path / "missing.jsonl"),
+            flag,
+            "0",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert proc.returncode != 0
+    assert f"{flag} must be >= 1" in (proc.stdout + proc.stderr)

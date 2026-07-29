@@ -12,12 +12,10 @@ Split the loop L(S) into the measured part M and the unmeasured part U:
     eps_hat(S) = k(S) + sum_{T in U} c_T * b * esm(T)
     eps(S)     = k(S) + sum_{T in U} c_T * DG(T)          with   k(S) = sum_{T in M} c_T * DG(T)
 
-Both sides contain the SAME number k(S), built from the same measured labels. A plate that buys all
-76 singles puts a two-term k(S) into every pairwise contrast, and on TrpB sd(k) = 2.33 exceeds
-sd(eps) = 1.71. The correlation therefore rises with how much of the contrast was purchased
-outright, independently of whether anything was predicted: measuring the 76 singles and setting
-the prior to literally zero scores Pearson 0.798 on TrpB, above every method the original table
-reported. That is the shared-skeleton confound.
+Both sides contain the SAME number k(S), built from the same measured labels. A plate that buys
+lower-order loop members can therefore raise the correlation through shared measured content,
+independently of whether prediction of the unmeasured terms improved. That is the shared-skeleton
+confound.
 
 WHAT IS REPORTED INSTEAD
 ------------------------
@@ -41,25 +39,23 @@ whose loop is ENTIRELY unmeasured, so that M is empty and k(S) = 0. That estiman
 (``docs/specs/prospective-amendment-2.md`` S4.1), and nothing here computes it, because it is
 degenerate rather than merely hard:
 
-* it is empty exactly where it would matter - once a plate buys the 76 singles, ``n_uninformed`` is
-  0 for ``structural`` at B=96 and B=192, so there is no term to score; and
+* it can be empty once a plate buys loop members shared by every eligible term, so there is no term
+  to score; and
 * where it is non-empty it is uninformative - in the reference-coded basis a residue pair appearing
   in no training row has coefficient exactly 0, so the predicted contrast is the same constant for
-  every such term (measured predicted sd 3.5e-17 against a true sd of 1.67).
+  every such term.
 
 ``census.n_uninformed`` is retained precisely because it is the evidence for that withdrawal: it is
 the size of the population the withdrawn estimand would have scored. Reporting the count and no
-correlation is the honest form. The replacement prospective estimand (out-of-context contrast
-prediction, S4.1b) governs the NEXT landscape only and is deliberately not computed retrospectively
-here.
+correlation is the honest form. No replacement prospective recovery estimand is currently
+registered.
 
 CALIBRATION (H-2)
 -----------------
-The historical policy refit a through-origin slope on each method's own revealed plate. The slopes
-come out with opposite signs across methods (GB1 B=192: info +1.107, structural +0.727, fitness
--1.178), so the "identical estimator for every method" claim held in form only: fitness's prior was
-the negated ESM contrast. Three policies are reported here, and the two decision-eligible ones use
-no labels at all, so they cannot leak and cannot differ across methods:
+The historical policy refit a through-origin slope on each method's own revealed plate. Because
+those method-specific slopes can differ in magnitude or sign, the "identical estimator for every
+method" claim held in form only. Three policies are reported here, and the two decision-eligible
+ones use no labels at all, so they cannot leak and cannot differ across methods:
 
 * ``zero_prior``   - mu(T) = 0 for unmeasured T. Model-free reference.
 * ``fixed_unit``   - mu(T) = esm(T). One fixed scale for every method, no fitted parameter.
@@ -95,7 +91,7 @@ Term = tuple[Mutation, ...]
 
 # Bumped from the implicit v1 of ``validate.Report``: the field names and the estimand they denote
 # both changed, so a consumer written against the old report cannot silently read this one.
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 _PAIRWISE_ORDER = 2
 _MIN_POINTS_FOR_CORR = 3
@@ -328,38 +324,13 @@ class OrderRecovery(BaseModel):
     sse_post: float
     relative_sse_gain: float | None
     recovery_wording_permitted: bool
-    # Present when the plate is not a single draw; the scalar fields above are then the seed-0 cell.
-    seed_distribution: SeedDistribution | None = None
-
-
-class SeedDistribution(BaseModel):
-    """Spread of a cell over declared seeds, for a method whose plate is not a single draw.
-
-    Two kinds share this shape. ``tie`` covers a method whose acquisition score has an exact
-    stratum crossing the budget cut, so the plate is decided by the tie seed (``structural`` and
-    ``singles_zero_prior`` on a four-site landscape). ``random`` covers the uniform baseline.
-    In both cases one number would be a sample of size one, so the spread is reported instead.
-    """
-
-    model_config = {"frozen": True}
-
-    seed_kind: str  # "tie" | "random"
-    n_seeds: int
-    tie_break_version: str | None
-    raw_pearson_mean: float | None
-    raw_pearson_min: float | None
-    raw_pearson_max: float | None
-    partial_spearman_mean: float | None
-    relative_sse_gain_mean: float | None
-    relative_sse_gain_min: float | None
-    recovery_wording_permitted_fraction: float
 
 
 SEED_KINDS: tuple[str, ...] = ("none", "tie", "random")
 
 
 class MethodRecovery(BaseModel):
-    """One method at one budget under one calibration policy, across interaction orders.
+    """One realised plate under one method, budget, seed and calibration policy.
 
     ``seed_kind`` says what kind of draw produced this plate, because the three kinds are not
     interchangeable and collapsing them was how the original ``structural`` number came to be a
@@ -368,9 +339,8 @@ class MethodRecovery(BaseModel):
     * ``none``   - the plate is a deterministic function of the scores (``fitness``, ``info``,
                    ``practice``). ``seed`` is None and there is no distribution to report.
     * ``tie``    - the score has an exact stratum straddling the budget cut, so the tie seed
-                   decides the plate (``structural``, ``singles_zero_prior``). ``seed`` is the
-                   representative draw; the spread over all declared seeds lives in
-                   ``orders[*].seed_distribution``.
+                   decides the plate (``structural``, ``singles_zero_prior``). Every declared seed
+                   is a separate record; no seed is presented as representative.
     * ``random`` - the plate is a uniform sample and ``seed`` is its RNG seed.
 
     ``n_selected`` may fall short of ``budget``: ``practice`` under-fills when the pool holds
@@ -384,6 +354,7 @@ class MethodRecovery(BaseModel):
     budget: int
     seed: int | None
     seed_kind: str
+    selected_identity_sha256: str
     tie_stratum_crosses_budget: bool
     n_selected: int
     n_revealed: int
@@ -399,7 +370,7 @@ TERM_SUBSETS: tuple[str, ...] = (
 
 
 class PairedContrastResult(BaseModel):
-    """A paired A-vs-B difference on one explicitly recorded, identical term set (M-3, H-4).
+    """One realised A-vs-B difference on an explicitly recorded term set (M-3, H-4).
 
     ``delta`` is None whenever the difference is not defined on this subset, and ``reason`` says
     which case it is. That distinction is load-bearing: a null on ``common_uninformed`` under
@@ -411,8 +382,12 @@ class PairedContrastResult(BaseModel):
 
     method_a: str
     method_b: str
+    seed_kind_a: str
+    seed_kind_b: str
     seed_a: int | None
     seed_b: int | None
+    selected_identity_sha256_a: str
+    selected_identity_sha256_b: str
     budget: int
     order: str
     calibration_policy: str
@@ -421,14 +396,38 @@ class PairedContrastResult(BaseModel):
     term_sha256: str
     statistic: str
     delta: float | None
-    delta_ci95: tuple[float, float] | None
-    excludes_zero: bool
+    # Bootstrap over evaluation TERMS at a single realisation of each plate. It describes how much
+    # the difference depends on which terms happen to be in the evaluation set -- term leverage --
+    # and says nothing about how much it depends on which plate the seed drew. The old name
+    # `delta_ci95` invited reading it as the latter.
+    term_leverage_ci95: tuple[float, float] | None
+    term_leverage_excludes_zero: bool
     reason: str  # "" when delta is defined
     interpretation: str
 
 
+class SelectionVariabilitySummary(BaseModel):
+    """Spread across realised plate pairs, separate from the conditional term bootstrap."""
+
+    model_config = {"frozen": True}
+
+    method_a: str
+    method_b: str
+    budget: int
+    order: str
+    calibration_policy: str
+    term_subset: str
+    n_pairs: int
+    n_defined: int
+    delta_mean: float | None
+    delta_median: float | None
+    delta_min: float | None
+    delta_max: float | None
+    fraction_positive: float | None
+
+
 class CorrectedRecoveryReport(BaseModel):
-    """Schema v2. The raw correlation survives only as a labelled diagnostic field.
+    """Schema v3. The raw correlation survives only as a labelled diagnostic field.
 
     ENFORCED: ``scripts/corrected_recovery.py`` constructs this model and validates it before any
     bytes reach disk, so a file that fails these constraints is never written rather than written
@@ -466,8 +465,10 @@ class CorrectedRecoveryReport(BaseModel):
     decision_eligible: bool
     reason_not_decision_eligible: str
     generated_at_utc: str
+    provenance: dict[str, object]
     methods: list[MethodRecovery]
     paired_contrasts: list[PairedContrastResult]
+    selection_variability: list[SelectionVariabilitySummary]
     note: str
 
 
@@ -587,7 +588,7 @@ def evaluate_order(
         sse_prior=float(np.sum(np.square(prior_eps - truth))),
         sse_post=float(np.sum(np.square(post_eps - truth))),
         relative_sse_gain=gain,
-        recovery_wording_permitted=gain is not None and gain >= 0.0,
+        recovery_wording_permitted=gain is not None and gain > 0.0,
     )
 
 
@@ -599,9 +600,8 @@ def common_term_subset(
 ) -> list[Term]:
     """Terms in the SAME state for both methods, so a comparison is one estimand (audit M-3).
 
-    The previous "precision" split correlated each method on its own informed-not-pinned set — 1669
-    terms for structural against 107 for fitness at TrpB B=192 — and compared the two numbers as if
-    they estimated the same thing.
+    The previous "precision" split correlated each method on its own informed-not-pinned set and
+    compared the two numbers as though they estimated the same quantity.
     """
     a, b = frozenset(revealed_a), frozenset(revealed_b)
     out: list[Term] = []

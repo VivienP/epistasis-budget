@@ -89,7 +89,7 @@ class FitnessSummary(BaseModel):
 
     n: int
     n_positive: int  # label > 0 (log-transformable, enters ground-truth epsilon / calibration)
-    n_nonpositive: int  # label <= 0 (TrpB "inactive"; GB1's dead rows are exactly 0)
+    n_nonpositive: int  # label <= 0; score sign, not an activity classification
     min: float | None
     max: float | None
     mean: float | None
@@ -451,10 +451,10 @@ def _gb1_incompatibilities(coverage: CoverageSummary, fitness: FitnessSummary) -
             "as the GB1 harness already does; enumerate_candidates/_load_landscape need no change."
         ),
         (
-            f"Inactive semantics differ: TrpB marks inactivity as label <= 0 "
-            f"({fitness.n_nonpositive} of {fitness.n} measured rows), which may be negative; GB1 "
-            "dead rows are exactly 0. The 'positive, log-transformable' conditioning is generic "
-            "and handles both, but the non-positive fraction must be reported so it stays visible."
+            f"Score-sign distributions differ: TrpB has {fitness.n_nonpositive} of {fitness.n} "
+            "measured rows at label <= 0, including negative values; GB1's non-positive rows are "
+            "exactly 0. The positive-score conditioning handles both, but it is not a biological "
+            "activity classification."
         ),
         (
             "Imputation: ~871 of 160,000 TrpB labels (~0.5%) are imputed, not measured, and the "

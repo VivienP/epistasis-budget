@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import re
+import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, NamedTuple, cast
 
 import typer
 from rich.console import Console
@@ -14,6 +15,7 @@ from typer.core import TyperCommand
 from epibudget.types import Mutation, Variant
 
 if TYPE_CHECKING:
+    from epibudget.downstream import DownstreamReport
     from epibudget.graph import SelectionMethod
     from epibudget.scored_cache import CacheIdentity
     from epibudget.validate import Report
@@ -43,6 +45,7 @@ _CONFIRMATORY_MODEL_ID = "facebook/esm2_t33_650M_UR50D"
 _CONFIRMATORY_SCORER_SEED = 0
 _CONFIRMATORY_N_PERTURBATIONS = 16
 _GATE2_ARGV_META_KEY = "epibudget.gate2.raw_argv"
+_DOWNSTREAM_ARGV_META_KEY = "epibudget.downstream.raw_argv"
 
 
 class _Gate2Command(TyperCommand):
@@ -52,6 +55,14 @@ class _Gate2Command(TyperCommand):
     # by typer version; Any keeps this override valid across typer versions.
     def parse_args(self, ctx: Any, args: list[str]) -> list[str]:
         ctx.meta[_GATE2_ARGV_META_KEY] = tuple(args)
+        return super().parse_args(ctx, args)
+
+
+class _DownstreamCommand(TyperCommand):
+    """Retain this command's pre-parse argument tokens for exact run provenance."""
+
+    def parse_args(self, ctx: Any, args: list[str]) -> list[str]:
+        ctx.meta[_DOWNSTREAM_ARGV_META_KEY] = tuple(args)
         return super().parse_args(ctx, args)
 
 
@@ -656,6 +667,67 @@ def gate2(
     console.print(f"wrote {report_path}")
 
 
+class _CodeState(NamedTuple):
+    """Git working-tree state at one instant, for provenance that cannot drift under a long run."""
+
+    commit: str
+    dirty: bool
+    code_diff_sha256: str
+    changed_scientific_files: tuple[str, ...]
+
+
+class _InputState(NamedTuple):
+    """Hashes of every file-like scientific input at one instant."""
+
+    scored_cache_sha256: str | None
+    scored_cache_sidecar_sha256: str | None
+    dataset_sha256: str | None
+    headline_artifact_sha256: str | None
+    candidate_universe_sha256: str
+
+
+def _sha256_if_file(path: Path) -> str | None:
+    import hashlib  # noqa: PLC0415
+
+    return hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
+
+
+def _input_state(
+    cache_path: Path,
+    sidecar_path: Path,
+    data_path: Path,
+    headline_path: Path,
+    universe_sha256: str,
+) -> _InputState:
+    return _InputState(
+        _sha256_if_file(cache_path),
+        _sha256_if_file(sidecar_path),
+        _sha256_if_file(data_path),
+        _sha256_if_file(headline_path),
+        universe_sha256,
+    )
+
+
+def _git_code_state(repo: Path) -> _CodeState:
+    """Snapshot commit, dirtiness and the scientific-file diff at the moment of the call."""
+    from epibudget.provenance import (  # noqa: PLC0415
+        changed_scientific_files,
+        workspace_code_diff_sha256,
+    )
+
+    head = _git_lines(repo, "rev-parse", "HEAD")
+    commit = head[0] if head else ""
+    dirty = bool(_git_lines(repo, "status", "--porcelain"))
+    if not (dirty and commit):
+        return _CodeState(commit, dirty, "", ())
+    return _CodeState(
+        commit,
+        dirty,
+        workspace_code_diff_sha256(repo, commit),
+        tuple(changed_scientific_files(repo, commit)),
+    )
+
+
 def _downstream_provenance(
     repo: Path,
     cache_path: Path,
@@ -663,7 +735,8 @@ def _downstream_provenance(
     data_path: Path,
     universe_sha256: str,
     headline: Path,
-    command: str,
+    argv: list[str],
+    process_argv: list[str],
     *,
     partitions: int,
     budgets: list[int],
@@ -676,6 +749,8 @@ def _downstream_provenance(
     observed_identity: CacheIdentity,
     started_at_utc: str,
     completed_at_utc: str,
+    code_state_at_start: _CodeState,
+    input_state_at_start: _InputState,
 ) -> dict[str, object]:
     """Assemble the full provenance dict for one ``downstream`` execution.
 
@@ -688,7 +763,7 @@ def _downstream_provenance(
     already cache-validated sidecar metadata, so a reader never has to trust that the earlier gate
     ran — both sides of every check are on the record.
     """
-    import hashlib  # noqa: PLC0415
+    import subprocess  # noqa: PLC0415
 
     from epibudget.downstream import (  # noqa: PLC0415
         _ESTIMANDS,
@@ -702,22 +777,29 @@ def _downstream_provenance(
         partition_salt,
         protocol_profile_conformance,
     )
-    from epibudget.provenance import (  # noqa: PLC0415
-        changed_scientific_files,
-        workspace_code_diff_sha256,
-    )
 
-    def sha(path: Path) -> str | None:
-        return hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
-
-    head = _git_lines(repo, "rev-parse", "HEAD")
-    dirty = bool(_git_lines(repo, "status", "--porcelain"))
-    execution_commit = head[0] if head else ""
-    code_diff = ""
-    changed_files: list[str] = []
-    if dirty and execution_commit:
-        code_diff = workspace_code_diff_sha256(repo, execution_commit)
-        changed_files = changed_scientific_files(repo, execution_commit)
+    # The authoritative record is the state captured before the run started; the state now is
+    # recorded only so a mismatch is visible rather than silent.
+    execution_commit = code_state_at_start.commit
+    dirty = code_state_at_start.dirty
+    code_diff = code_state_at_start.code_diff_sha256
+    changed_files = list(code_state_at_start.changed_scientific_files)
+    code_state_at_end = _git_code_state(repo)
+    input_state_at_end = _input_state(cache_path, sidecar, data_path, headline, universe_sha256)
+    code_moved = code_state_at_end != code_state_at_start
+    input_moved = input_state_at_end != input_state_at_start
+    workspace_stable = not code_moved and not input_moved
+    provenance_eligible = workspace_stable and not dirty and bool(execution_commit)
+    if input_moved:
+        provenance_status = "input_drift"
+    elif code_moved:
+        provenance_status = "code_drift"
+    elif dirty:
+        provenance_status = "dirty_code"
+    elif not execution_commit:
+        provenance_status = "git_unavailable"
+    else:
+        provenance_status = "ok"
 
     # CLI-boundary confirmatory-profile check: computed defensively again,
     # independently, inside downstream_report()/_decision_summary() itself — this is only an early,
@@ -741,20 +823,36 @@ def _downstream_provenance(
         "amendment_version": AMENDMENT_VERSION,
         "started_at_utc": started_at_utc,
         "completed_at_utc": completed_at_utc,
-        "scored_cache_sha256": sha(cache_path),
-        "scored_cache_sidecar_sha256": sha(sidecar),
+        "scored_cache_sha256": input_state_at_start.scored_cache_sha256,
+        "scored_cache_sidecar_sha256": input_state_at_start.scored_cache_sidecar_sha256,
         "scored_cache_identity_expected": expected_identity.model_dump(mode="json"),
         "scored_cache_identity_observed": observed_identity.model_dump(mode="json"),
-        "dataset_sha256": sha(data_path),
+        "dataset_sha256": input_state_at_start.dataset_sha256,
         "candidate_universe_sha256": universe_sha256,
         "headline_artifact_path": str(headline) if headline.is_file() else None,
-        "headline_artifact_sha256": sha(headline),
+        "headline_artifact_sha256": input_state_at_start.headline_artifact_sha256,
         "execution_commit": execution_commit,
         "base_commit_sha": execution_commit,
         "code_state": "dirty" if dirty else "clean",
         "code_diff_sha256": code_diff,
         "changed_scientific_files": changed_files,
-        "exact_command": command,
+        # All three above describe the tree at run START -- the code that executed. These say
+        # whether it stayed that way, so an artifact can never quietly attribute itself to a tree
+        # that only came into existence while it was being computed.
+        "code_state_captured_at": "run_start",
+        "workspace_changed_during_run": code_moved,
+        "code_diff_sha256_at_end": code_state_at_end.code_diff_sha256,
+        "code_state_at_end": "dirty" if code_state_at_end.dirty else "clean",
+        "execution_commit_at_end": code_state_at_end.commit,
+        "changed_scientific_files_at_end": list(code_state_at_end.changed_scientific_files),
+        "input_hashes_at_start": input_state_at_start._asdict(),
+        "input_hashes_at_end": input_state_at_end._asdict(),
+        "workspace_stable": workspace_stable,
+        "provenance_eligible": provenance_eligible,
+        "argv": argv,
+        "exact_command": subprocess.list2cmdline(argv),
+        "process_argv": process_argv,
+        "exact_process_command": subprocess.list2cmdline(process_argv),
         "inner_fold_policy": (
             "identity-sorted balanced rank%n_inner over sha256(inner_salt:canonical_id); "
             "fallback to strongest-shrinkage grid corner below n_inner distinct identities"
@@ -771,12 +869,42 @@ def _downstream_provenance(
         "alpha_selection_source": "see deterministic_records[*]/random_records[*].alpha_*",
         "cli_protocol_profile_conforming": cli_conformance.conforming,
         "cli_protocol_profile_mismatches": cli_conformance.mismatches,
-        "status": "provisional",
+        "status": provenance_status,
     }
 
 
-@app.command()
+def _attach_downstream_provenance(
+    report: DownstreamReport, provenance: dict[str, object]
+) -> DownstreamReport:
+    """Attach provenance and fail both scientific gates closed when it is ineligible."""
+    if cast(bool, provenance["provenance_eligible"]):
+        return report.model_copy(update={"provenance": provenance})
+    blocked_decision = report.decision.model_copy(
+        update={
+            "structural_gate": report.decision.structural_gate.model_copy(
+                update={
+                    "decision_eligible": False,
+                    "supported": None,
+                    "status": "provenance_ineligible",
+                }
+            ),
+            "esm_gate": report.decision.esm_gate.model_copy(
+                update={
+                    "decision_eligible": False,
+                    "supported": None,
+                    "status": "provenance_ineligible",
+                }
+            ),
+            "structural_downstream_supported": None,
+            "esm_uncertainty_supported": None,
+        }
+    )
+    return report.model_copy(update={"provenance": provenance, "decision": blocked_decision})
+
+
+@app.command(cls=_DownstreamCommand)
 def downstream(
+    ctx: typer.Context,
     scored_cache: str = typer.Option(..., help="Completed JSONL scored-variant cache to analyse."),
     dataset: str = typer.Option(
         "gb1_wu2016", help="Landscape id (gb1_wu2016 or trpb_johnston2024)."
@@ -830,9 +958,24 @@ def downstream(
         raise typer.BadParameter(str(exc)) from exc
     cache_path = Path(scored_cache)
     data_path = Path(data) if data else Path(spec.default_data_path)
-    landscape = spec.loader(data_path)
     enumerated = enumerate_candidates(
         spec.sites, spec.wt_at_sites, allowed_aa=alphabet, max_order=max_order
+    )
+    sidecar = cache_metadata_path(cache_path)
+    universe_sha256 = candidate_sha256(enumerated)
+    headline_path = Path(headline)
+    raw_argv = ctx.meta.get(_DOWNSTREAM_ARGV_META_KEY)
+    if not isinstance(raw_argv, tuple) or not all(isinstance(arg, str) for arg in raw_argv):
+        raise typer.BadParameter("downstream could not capture its exact command arguments")
+    argv, process_argv = (
+        ["epibudget", "downstream", *raw_argv],
+        list(getattr(sys, "orig_argv", sys.argv)),
+    )
+    repo = Path(__file__).resolve().parents[2]
+    started_at_utc = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    code_state_at_start = _git_code_state(repo)
+    input_state_at_start = _input_state(
+        cache_path, sidecar, data_path, headline_path, universe_sha256
     )
     try:
         cache, metadata, expected_identity = validate_cache_against_universe(
@@ -850,18 +993,10 @@ def downstream(
     scored = [cache[v] for v in enumerated]  # enumeration order: reproduces the frozen selections
     model_id = metadata.model_id
     observed_identity = CacheIdentity.from_metadata(metadata)
+    landscape = spec.loader(data_path)
 
-    sidecar = cache_metadata_path(cache_path)
     budget_list = [int(b) for b in budgets.split(",")]
-    repo = Path(__file__).resolve().parents[2]
-    command = (
-        f"epibudget downstream --dataset {dataset} --scored-cache {scored_cache} --data {data} "
-        f"--alphabet {alphabet} --n-perturbations {n_perturbations} --budgets {budgets} "
-        f"--seeds {seeds} --max-order {max_order} --n-folds {n_folds} --partitions {partitions} "
-        f"--headline {headline} --out {out}"
-    )
     run_dir = Path(out) / datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    started_at_utc = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     console.print(
         f"[bold]downstream[/] {len(scored)} candidates, {partitions}x{n_folds} fold-instances, "
         f"seeds={seeds}; running (CPU) ..."
@@ -889,9 +1024,10 @@ def downstream(
         cache_path,
         sidecar,
         data_path,
-        candidate_sha256(enumerated),
-        Path(headline),
-        command,
+        universe_sha256,
+        headline_path,
+        argv,
+        process_argv,
         partitions=partitions,
         budgets=budget_list,
         seeds=seeds,
@@ -903,6 +1039,8 @@ def downstream(
         observed_identity=observed_identity,
         started_at_utc=started_at_utc,
         completed_at_utc=completed_at_utc,
+        code_state_at_start=code_state_at_start,
+        input_state_at_start=input_state_at_start,
     )
     if not provenance["cli_protocol_profile_conforming"]:
         console.print(
@@ -910,7 +1048,7 @@ def downstream(
             f"profile — mismatches={provenance['cli_protocol_profile_mismatches']}; this run can "
             "never be decision_eligible regardless of partition coverage"
         )
-    report = report.model_copy(update={"provenance": provenance})
+    report = _attach_downstream_provenance(report, provenance)
     write_json_atomic(run_dir / "downstream.json", report.model_dump(mode="json"))
     decision = report.decision
     console.print(

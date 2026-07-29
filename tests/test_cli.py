@@ -11,6 +11,7 @@ import hashlib
 import inspect
 import json
 import subprocess
+import sys
 import time
 from collections.abc import Callable, Sequence
 from datetime import datetime
@@ -871,7 +872,7 @@ def test_robustness_command_rejects_a_partial_cache(
     assert "missing" in result.output
 
 
-def test_downstream_command_writes_provisional_report(
+def test_downstream_command_writes_fail_closed_report_from_dirty_tree(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # A 3-letter alphabet gives enough doubles/triples per fold for the order-stratified metrics.
@@ -880,6 +881,8 @@ def test_downstream_command_writes_provisional_report(
     _write_gb1_csv(csv, candidates)
     cache = tmp_path / "scored.jsonl"
     _build_scored_cache(cache, candidates, candidates, alphabet="ACD")
+    dirty_code = cli_module._CodeState("a" * 40, True, "b" * 64, ("src/changed.py",))
+    monkeypatch.setattr(cli_module, "_git_code_state", lambda _repo: dirty_code)
 
     result = CliRunner().invoke(
         app,
@@ -918,14 +921,15 @@ def test_downstream_command_writes_provisional_report(
         "random",
         "practice",
     }
-    assert report["provenance"]["status"] == "provisional"
+    assert report["provenance"]["status"] == "dirty_code"
+    assert report["provenance"]["provenance_eligible"] is False
     assert "structural_downstream_supported" in report["decision"]
     # this fixture's toy alphabet/budgets never match the frozen
     # confirmatory profile, so both the CLI-boundary and decision-layer checks must flag it.
     assert report["provenance"]["cli_protocol_profile_conforming"] is False
     assert "alphabet" in report["provenance"]["cli_protocol_profile_mismatches"]
     assert report["decision"]["protocol_profile_conforming"] is False
-    assert report["decision"]["structural_gate"]["status"] == "nonconforming_protocol_profile"
+    assert report["decision"]["structural_gate"]["status"] == "provenance_ineligible"
 
 
 def test_downstream_command_captures_completed_at_utc_after_the_report_call_returns(
@@ -1079,8 +1083,11 @@ def test_downstream_command_serializes_complete_cache_identity_on_success(
     cache = tmp_path / "scored.jsonl"
     _build_scored_cache(cache, candidates, candidates, alphabet="ACD")
 
+    stable_code = cli_module._CodeState("a" * 40, False, "", ())
+    monkeypatch.setattr(cli_module, "_git_code_state", lambda _repo: stable_code)
     calls = _count_downstream_report_calls(monkeypatch)
-    result = CliRunner().invoke(app, _downstream_cli_args(cache, csv, tmp_path / "report"))
+    raw_args = _downstream_cli_args(cache, csv, tmp_path / "report")
+    result = CliRunner().invoke(app, raw_args)
 
     assert result.exit_code == 0, result.output
     assert calls["n"] == 1
@@ -1102,6 +1109,50 @@ def test_downstream_command_serializes_complete_cache_identity_on_success(
     # expected coincide here; a mismatch in either would fail this exact-equality check.
     assert report["provenance"]["scored_cache_identity_expected"] == expected_identity
     assert report["provenance"]["scored_cache_identity_observed"] == expected_identity
+    provenance = report["provenance"]
+    expected_argv = ["epibudget", *raw_args]
+    assert provenance["argv"] == expected_argv
+    assert provenance["exact_command"] == subprocess.list2cmdline(expected_argv)
+    expected_process_argv = list(getattr(sys, "orig_argv", sys.argv))
+    assert provenance["process_argv"] == expected_process_argv
+    assert provenance["exact_process_command"] == subprocess.list2cmdline(expected_process_argv)
+    assert provenance["input_hashes_at_start"] == provenance["input_hashes_at_end"]
+    assert provenance["workspace_stable"] is True
+    assert provenance["provenance_eligible"] is True
+
+
+def test_downstream_input_drift_is_recorded_and_blocks_decision_eligibility(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    candidates = enumerate_candidates(GB1_SITES, GB1_WT_AT_SITES, allowed_aa="ACD", max_order=3)
+    csv = tmp_path / "gb1.csv"
+    _write_gb1_csv(csv, candidates)
+    cache = tmp_path / "scored.jsonl"
+    _build_scored_cache(cache, candidates, candidates, alphabet="ACD")
+
+    stable_code = cli_module._CodeState("a" * 40, False, "", ())
+    monkeypatch.setattr(cli_module, "_git_code_state", lambda _repo: stable_code)
+    real_downstream_report = downstream_module.downstream_report
+
+    def _mutating_downstream_report(*args: object, **kwargs: object) -> object:
+        result = real_downstream_report(*args, **kwargs)  # type: ignore[arg-type]
+        csv.write_text(csv.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+        return result
+
+    monkeypatch.setattr(downstream_module, "downstream_report", _mutating_downstream_report)
+    result = CliRunner().invoke(app, _downstream_cli_args(cache, csv, tmp_path / "report"))
+
+    assert result.exit_code == 0, result.output
+    run_dir = next((tmp_path / "report").iterdir())
+    report = json.loads((run_dir / "downstream.json").read_text(encoding="utf-8"))
+    provenance = report["provenance"]
+    assert provenance["workspace_stable"] is False
+    assert provenance["provenance_eligible"] is False
+    assert provenance["status"] == "input_drift"
+    assert report["decision"]["structural_gate"]["decision_eligible"] is False
+    assert report["decision"]["structural_gate"]["supported"] is None
+    assert report["decision"]["esm_gate"]["decision_eligible"] is False
+    assert report["decision"]["esm_gate"]["supported"] is None
 
 
 def _wrong(field: str, value: object) -> Callable[[dict[str, object]], None]:

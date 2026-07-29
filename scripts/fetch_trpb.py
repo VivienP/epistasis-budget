@@ -13,7 +13,9 @@ Source. The combinatorially complete 20^4 = 160,000-variant landscape at active-
 183/184/227/228 of Tm9D8* (a thermostable TmTrpB variant; parent genotype "VFVS") is mirrored on the
 Hugging Face Hub as ``SeprotHub/Dataset-TrpB_fitness_landsacpe`` (the source's literal spelling).
 Variants are full 397-residue sequences, so the genotype is recovered by diffing against the parent.
-Label = an aggregated catalytic-fitness score (Kowalsky et al.); <= 0 is inactive (like a dead row).
+Label = one aggregated catalytic-fitness score (Kowalsky et al.). Its sign is not the assay's
+activity classification: the published call uses replicate-specific thresholds that this mirror
+does not provide.
 
 Honesty note. Per the paper, 159,129 of the 160,000 variants (99.45%) had sufficient sequencing
 coverage to be measured; the remaining 871 (0.54%) were IMPUTED for downstream analyses. The Hugging
@@ -97,8 +99,9 @@ def main() -> None:
         "wt_at_sites": list(TRPB_WT_AT_SITES),
         "order_composition": composition,
         "label_semantics": (
-            "aggregated catalytic fitness (Kowalsky et al.); <= 0 is inactive. ~871 of 160,000 "
-            "values are imputed (not measured) per the paper and are not flagged in this mirror."
+            "aggregated catalytic fitness (Kowalsky et al.); score sign is not biological "
+            "activity. ~871 of 160,000 values are imputed (not measured) per the paper and are "
+            "not flagged in this mirror."
         ),
     }
     prov_path = args.out / "provenance_trpb.json"

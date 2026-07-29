@@ -33,8 +33,10 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import subprocess
 import sys
-from collections.abc import Callable, Iterator, Mapping
+from collections import defaultdict
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -47,6 +49,11 @@ from _console import configure_utf8_stdout
 
 from epibudget.data import enumerate_candidates, resolve_dataset
 from epibudget.epistasis import interaction_loop, wt_centered_log_fitness
+from epibudget.provenance import (
+    changed_scientific_files,
+    workspace_code_diff_sha256,
+    write_json_atomic,
+)
 from epibudget.recovery import (
     CALIBRATION_POLICIES,
     DECISION_ELIGIBLE_POLICIES,
@@ -61,12 +68,11 @@ from epibudget.recovery import (
     MethodRecovery,
     OrderRecovery,
     PairedContrastResult,
-    SeedDistribution,
+    SelectionVariabilitySummary,
     Term,
     TermCensus,
     common_term_subset,
     contrast,
-    fisher_z_mean,
     paired_difference_ci,
     partial_correlation,
     prior_mu,
@@ -74,7 +80,11 @@ from epibudget.recovery import (
     safe_corr,
     term_sha256,
 )
-from epibudget.scored_cache import CacheMetadata, cache_metadata_path, load_cache
+from epibudget.scored_cache import (
+    CacheIdentity,
+    cache_metadata_path,
+    validate_cache_against_universe,
+)
 from epibudget.tie_break import (
     REQUIRED_TIE_SEEDS,
     TIE_BREAK_VERSION,
@@ -116,6 +126,74 @@ class _Plate:
     selected: list[Variant]
     mask: BoolArray  # over the universe + the WT anchor
     revealed: dict[Variant, float]
+
+    @property
+    def selected_identity_sha256(self) -> str:
+        digest = hashlib.sha256()
+        for identity in sorted(canonical_id(variant) for variant in self.selected):
+            digest.update(identity.encode("ascii"))
+            digest.update(b"\n")
+        return digest.hexdigest()
+
+
+@dataclass(frozen=True)
+class _WorkspaceState:
+    commit: str
+    dirty: bool
+    code_diff_sha256: str
+    changed_scientific_files: tuple[str, ...]
+
+
+def _workspace_state(repo: Path) -> _WorkspaceState:
+    def git(*args: str) -> list[str]:
+        try:
+            result = subprocess.run(
+                ["git", *args],
+                cwd=repo,
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
+        except (OSError, subprocess.CalledProcessError):
+            return []
+        return [line for line in result.stdout.splitlines() if line]
+
+    head = git("rev-parse", "HEAD")
+    commit = head[0] if len(head) == 1 else ""
+    dirty = bool(git("status", "--porcelain"))
+    if not (commit and dirty):
+        return _WorkspaceState(commit, dirty, "", ())
+    return _WorkspaceState(
+        commit,
+        dirty,
+        workspace_code_diff_sha256(repo, commit),
+        tuple(changed_scientific_files(repo, commit)),
+    )
+
+
+def _workspace_payload(state: _WorkspaceState) -> dict[str, object]:
+    return {
+        "execution_commit": state.commit,
+        "code_state": "dirty" if state.dirty else "clean",
+        "code_diff_sha256": state.code_diff_sha256,
+        "changed_scientific_files": list(state.changed_scientific_files),
+    }
+
+
+def _input_hashes(
+    data_path: Path, cache_path: Path, sidecar_path: Path, universe: Sequence[Variant]
+) -> dict[str, str | None]:
+    return {
+        "dataset_sha256": _sha256_file(data_path) if data_path.is_file() else None,
+        "scored_cache_sha256": _sha256_file(cache_path) if cache_path.is_file() else None,
+        "scored_cache_sidecar_sha256": (
+            _sha256_file(sidecar_path) if sidecar_path.is_file() else None
+        ),
+        "candidate_universe_sha256": hashlib.sha256(
+            "\n".join(sorted(canonical_id(variant) for variant in universe)).encode("ascii")
+        ).hexdigest(),
+    }
 
 
 class _ContrastIndex:
@@ -208,31 +286,9 @@ def _evaluate(
             sse_prior=float(np.sum(np.square(prior_eps - truth))),
             sse_post=float(np.sum(np.square(post_eps - truth))),
             relative_sse_gain=gain,
-            recovery_wording_permitted=bool(gain is not None and gain >= 0.0),
+            recovery_wording_permitted=bool(gain is not None and gain > 0.0),
         ),
         post_eps,
-    )
-
-
-def _seed_distribution(seed_kind: str, cells: list[OrderRecovery]) -> SeedDistribution:
-    """Spread of one order's cell over the declared seeds. Correlations average on the z scale."""
-    gains = [c.relative_sse_gain for c in cells if c.relative_sse_gain is not None]
-    raws = [c.raw_pearson_with_skeleton for c in cells if c.raw_pearson_with_skeleton is not None]
-    return SeedDistribution(
-        seed_kind=seed_kind,
-        n_seeds=len(cells),
-        tie_break_version=TIE_BREAK_VERSION if seed_kind == "tie" else None,
-        raw_pearson_mean=fisher_z_mean(raws),
-        raw_pearson_min=min(raws) if raws else None,
-        raw_pearson_max=max(raws) if raws else None,
-        partial_spearman_mean=fisher_z_mean(
-            [c.partial_spearman for c in cells if c.partial_spearman is not None]
-        ),
-        relative_sse_gain_mean=float(np.mean(gains)) if gains else None,
-        relative_sse_gain_min=float(np.min(gains)) if gains else None,
-        recovery_wording_permitted_fraction=float(
-            np.mean([c.recovery_wording_permitted for c in cells])
-        ),
     )
 
 
@@ -256,23 +312,50 @@ def main() -> None:  # noqa: PLR0915
     parser.add_argument("--budgets", default="48,96,192")
     parser.add_argument("--alphabet", default="ACDEFGHIKLMNPQRSTVWY")
     parser.add_argument("--max-order", type=int, default=3)
+    # Expected cache identity. Declared by the caller so the check has something independent to
+    # compare the sidecar against; defaults are the registered confirmatory scorer configuration.
+    parser.add_argument("--model-id", default="facebook/esm2_t33_650M_UR50D")
+    parser.add_argument("--scorer-seed", type=int, default=0)
+    parser.add_argument("--n-perturbations", type=int, default=16)
     parser.add_argument("--random-seeds", type=int, default=20)
     parser.add_argument("--tie-seeds", type=int, default=REQUIRED_TIE_SEEDS)
     parser.add_argument("--bootstrap", type=int, default=1000)
     parser.add_argument("--out", type=Path, default=Path("report/remediation"))
     args = parser.parse_args()
+    for flag, value in (
+        ("--tie-seeds", args.tie_seeds),
+        ("--random-seeds", args.random_seeds),
+        ("--bootstrap", args.bootstrap),
+    ):
+        if value < 1:
+            parser.error(f"{flag} must be >= 1")
 
     spec = resolve_dataset(args.dataset)
     data_path = args.data or Path(spec.default_data_path)
     budgets = [int(b) for b in args.budgets.split(",")]
-
-    landscape = spec.loader(data_path)
     enumerated = enumerate_candidates(
         spec.sites, spec.wt_at_sites, allowed_aa=args.alphabet, max_order=args.max_order
     )
-    cache = load_cache(args.scored_cache)
-    metadata = CacheMetadata.model_validate_json(
-        cache_metadata_path(args.scored_cache).read_text(encoding="utf-8")
+    repo = Path(__file__).resolve().parent.parent
+    sidecar_path = cache_metadata_path(args.scored_cache)
+    started_at_utc = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    argv = list(sys.argv)
+    workspace_at_start = _workspace_state(repo)
+    input_hashes_at_start = _input_hashes(data_path, args.scored_cache, sidecar_path, enumerated)
+    landscape = spec.loader(data_path)
+    # Reject a cache that is not the one this analysis claims to read. The expected identity is
+    # supplied by the caller, never read back out of the sidecar: comparing a sidecar against itself
+    # cannot fail, so parsing it alone would accept a cache from the wrong model, WT sequence,
+    # alphabet, perturbation count, or candidate universe -- including a same-size swap.
+    cache, metadata, expected_identity = validate_cache_against_universe(
+        args.scored_cache,
+        enumerated,
+        candidate_alphabet=args.alphabet,
+        max_order=args.max_order,
+        model_id=args.model_id,
+        scorer_seed=args.scorer_seed,
+        n_perturbations=args.n_perturbations,
+        wt_sequence=spec.wt_sequence,
     )
     scored: list[ScoredVariant] = [cache[v] for v in enumerated]
     esm = {sv.variant: sv.delta_g for sv in scored}
@@ -354,13 +437,11 @@ def main() -> None:  # noqa: PLR0915
         if method == "practice":
             return [make(method, budget, None, "none", False)]
         if method == "random":
-            return [
-                make(method, budget, s, "random", False) for s in range(max(1, args.random_seeds))
-            ]
+            return [make(method, budget, s, "random", False) for s in range(args.random_seeds)]
         tied = stratum_crosses_budget(universe, scores[method], canonical_id, budget)
         if not tied:
             return [make(method, budget, None, "none", False)]
-        return [make(method, budget, s, "tie", True) for s in range(max(1, args.tie_seeds))]
+        return [make(method, budget, s, "tie", True) for s in range(args.tie_seeds)]
 
     # ---------------------------------------------------------------- evaluation
     # zero_prior and fixed_unit read no label, so their prior vector is the same for every plate.
@@ -383,99 +464,161 @@ def main() -> None:  # noqa: PLR0915
 
     methods = ("info", "structural", "fitness", "random", "practice", "singles_zero_prior")
     method_records: list[MethodRecovery] = []
-    # (method, budget, policy, order) -> posterior contrasts of the representative plate
-    representative: dict[tuple[str, int, str, str], FloatArray] = {}
-    representative_plate: dict[tuple[str, int], _Plate] = {}
+    plate_cells = {
+        (method, budget): plates_for(method, budget) for method in methods for budget in budgets
+    }
+    posteriors: dict[tuple[str, int, str, int | None, str, str], FloatArray] = {}
 
     for method in methods:
         for budget in budgets:
-            draws = plates_for(method, budget)
-            representative_plate[(method, budget)] = draws[0]
-            # The model-free baseline is defined by its zero prior; other policies would not be it.
+            draws = plate_cells[(method, budget)]
             policies = ("zero_prior",) if method == "singles_zero_prior" else CALIBRATION_POLICIES
-            for policy in policies:
-                per_draw: dict[str, list[OrderRecovery]] = {name: [] for _o, name in _ORDERS}
-                # The calibration record must come from the SAME draw as the scalar cells below.
-                # Under `per_method` the slope is fitted on that draw's own revealed labels, so
-                # taking it from the last draw would pair seed 0's numbers with seed 99's slope.
-                first_record: CalibrationRecord | None = None
-                for draw in draws:
+            for draw in draws:
+                for policy in policies:
                     prior_vector, record = prior_for(policy, draw.revealed)
-                    if first_record is None:
-                        first_record = record
+                    orders: list[OrderRecovery] = []
                     for _order, name in _ORDERS:
                         index, truth = per_order[name]
                         cell, post_eps = _evaluate(
                             index, truth, true_vector, prior_vector, draw.mask, name
                         )
-                        per_draw[name].append(cell)
-                        if draw is draws[0]:
-                            representative[(method, budget, policy, name)] = post_eps
-                assert first_record is not None
-                orders = []
-                for _order, name in _ORDERS:
-                    cells = per_draw[name]
-                    head = cells[0]
-                    if len(cells) > 1:
-                        head = head.model_copy(
-                            update={
-                                "seed_distribution": _seed_distribution(draws[0].seed_kind, cells)
-                            }
+                        orders.append(cell)
+                        posteriors[(method, budget, draw.seed_kind, draw.seed, policy, name)] = (
+                            post_eps
                         )
-                    orders.append(head)
-                first = draws[0]
-                method_records.append(
-                    MethodRecovery(
-                        method=method,
-                        budget=budget,
-                        seed=first.seed,
-                        seed_kind=first.seed_kind,
-                        tie_stratum_crosses_budget=first.tie_stratum_crosses_budget,
-                        n_selected=len(first.selected),
-                        n_revealed=len(first.revealed),
-                        calibration=first_record,
-                        orders=orders,
+                    method_records.append(
+                        MethodRecovery(
+                            method=method,
+                            budget=budget,
+                            seed=draw.seed,
+                            seed_kind=draw.seed_kind,
+                            selected_identity_sha256=draw.selected_identity_sha256,
+                            tie_stratum_crosses_budget=draw.tie_stratum_crosses_budget,
+                            n_selected=len(draw.selected),
+                            n_revealed=len(draw.revealed),
+                            calibration=record,
+                            orders=orders,
+                        )
                     )
-                )
             print(f"  {method} B={budget}: {len(draws)} draw(s), kind={draws[0].seed_kind}")
 
     # ---------------------------------------------------------------- paired contrasts (M-3, H-4)
+    def realised_pairs(draws_a: list[_Plate], draws_b: list[_Plate]) -> list[tuple[_Plate, _Plate]]:
+        """Pair shared seeds, broadcast deterministic arms, and cross different RNG mechanisms."""
+        kind_a, kind_b = draws_a[0].seed_kind, draws_b[0].seed_kind
+        if kind_a == "none" or kind_b == "none":
+            return [(a, b) for a in draws_a for b in draws_b]
+        if kind_a == kind_b:
+            by_seed_b = {draw.seed: draw for draw in draws_b}
+            return [(draw, by_seed_b[draw.seed]) for draw in draws_a if draw.seed in by_seed_b]
+        return [(a, b) for a in draws_a for b in draws_b]
+
     def paired() -> Iterator[PairedContrastResult]:
         for method_a, method_b in _PAIRED_METHODS:
             for budget in budgets:
-                plate_a = representative_plate[(method_a, budget)]
-                plate_b = representative_plate[(method_b, budget)]
+                draw_pairs = realised_pairs(
+                    plate_cells[(method_a, budget)], plate_cells[(method_b, budget)]
+                )
                 for policy in _PAIRED_POLICIES:
                     if method_b == "singles_zero_prior" and policy != "zero_prior":
-                        continue  # that baseline exists only under its zero prior
+                        continue
                     for _order, name in _ORDERS:
                         index, truth = per_order[name]
-                        pred_a = representative[(method_a, budget, policy, name)]
-                        pred_b = representative[(method_b, budget, policy, name)]
-                        positions = {t: i for i, t in enumerate(index.terms)}
-                        for subset in TERM_SUBSETS:
-                            common = common_term_subset(
-                                index.terms, plate_a.revealed, plate_b.revealed, subset
-                            )
-                            keep = [positions[t] for t in common]
-                            yield _paired_result(
-                                method_a,
-                                method_b,
-                                plate_a,
-                                plate_b,
-                                budget,
-                                name,
-                                policy,
-                                subset,
-                                [index.terms[i] for i in keep],
-                                pred_a[keep],
-                                pred_b[keep],
-                                truth[keep],
-                                args.bootstrap,
-                            )
+                        positions = {term: i for i, term in enumerate(index.terms)}
+                        for plate_a, plate_b in draw_pairs:
+                            pred_a = posteriors[
+                                (method_a, budget, plate_a.seed_kind, plate_a.seed, policy, name)
+                            ]
+                            pred_b = posteriors[
+                                (method_b, budget, plate_b.seed_kind, plate_b.seed, policy, name)
+                            ]
+                            for subset in TERM_SUBSETS:
+                                common = common_term_subset(
+                                    index.terms, plate_a.revealed, plate_b.revealed, subset
+                                )
+                                keep = [positions[term] for term in common]
+                                yield _paired_result(
+                                    method_a,
+                                    method_b,
+                                    plate_a,
+                                    plate_b,
+                                    budget,
+                                    name,
+                                    policy,
+                                    subset,
+                                    [index.terms[i] for i in keep],
+                                    pred_a[keep],
+                                    pred_b[keep],
+                                    truth[keep],
+                                    args.bootstrap,
+                                )
 
     paired_contrasts = list(paired())
     print(f"  paired contrasts: {len(paired_contrasts)}")
+
+    grouped: dict[tuple[str, str, int, str, str, str], list[PairedContrastResult]] = defaultdict(
+        list
+    )
+    for result in paired_contrasts:
+        grouped[
+            (
+                result.method_a,
+                result.method_b,
+                result.budget,
+                result.order,
+                result.calibration_policy,
+                result.term_subset,
+            )
+        ].append(result)
+    selection_variability: list[SelectionVariabilitySummary] = []
+    for key, results in grouped.items():
+        values = [float(result.delta) for result in results if result.delta is not None]
+        selection_variability.append(
+            SelectionVariabilitySummary(
+                method_a=key[0],
+                method_b=key[1],
+                budget=key[2],
+                order=key[3],
+                calibration_policy=key[4],
+                term_subset=key[5],
+                n_pairs=len(results),
+                n_defined=len(values),
+                delta_mean=float(np.mean(values)) if values else None,
+                delta_median=float(np.median(values)) if values else None,
+                delta_min=min(values) if values else None,
+                delta_max=max(values) if values else None,
+                fraction_positive=(
+                    float(np.mean([value > 0.0 for value in values])) if values else None
+                ),
+            )
+        )
+
+    workspace_at_end = _workspace_state(repo)
+    input_hashes_at_end = _input_hashes(data_path, args.scored_cache, sidecar_path, enumerated)
+    workspace_stable = (
+        workspace_at_start == workspace_at_end and input_hashes_at_start == input_hashes_at_end
+    )
+    observed_identity = CacheIdentity.from_metadata(metadata)
+    provenance_eligible = (
+        workspace_stable
+        and not workspace_at_start.dirty
+        and bool(workspace_at_start.commit)
+        and expected_identity == observed_identity
+    )
+    provenance = {
+        "started_at_utc": started_at_utc,
+        "completed_at_utc": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "argv": argv,
+        "exact_command": subprocess.list2cmdline(argv),
+        "workspace_at_start": _workspace_payload(workspace_at_start),
+        "workspace_at_end": _workspace_payload(workspace_at_end),
+        "input_hashes_at_start": input_hashes_at_start,
+        "input_hashes_at_end": input_hashes_at_end,
+        "workspace_stable": workspace_stable,
+        "provenance_eligible": provenance_eligible,
+        "cache_identity_expected": expected_identity.model_dump(mode="json"),
+        "cache_identity_observed": observed_identity.model_dump(mode="json"),
+    }
 
     out_dir = args.out
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -496,22 +639,24 @@ def main() -> None:  # noqa: PLR0915
         random_seeds=args.random_seeds,
         tie_break_version=TIE_BREAK_VERSION,
         data_path=str(data_path),
-        data_sha256=_sha256_file(data_path),
+        data_sha256=str(input_hashes_at_start["dataset_sha256"]),
         scored_cache=str(args.scored_cache),
-        scored_cache_sha256=_sha256_file(args.scored_cache),
+        scored_cache_sha256=str(input_hashes_at_start["scored_cache_sha256"]),
         n_candidates=len(universe),
         status="retrospective_corrective_reanalysis",
         decision_eligible=False,
         reason_not_decision_eligible=(
             "estimands selected after the audit; single landscape per report"
         ),
-        generated_at_utc=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        generated_at_utc=str(provenance["completed_at_utc"]),
+        provenance=provenance,
         methods=method_records,
         paired_contrasts=paired_contrasts,
+        selection_variability=selection_variability,
         note=REPORT_NOTE,
     )
     target = out_dir / f"corrected_recovery_{args.dataset}.json"
-    target.write_text(report.model_dump_json(indent=1) + "\n", encoding="utf-8")
+    write_json_atomic(target, report.model_dump(mode="json"))
     print(f"wrote {target}")
 
 
@@ -552,8 +697,12 @@ def _paired_result(
     return PairedContrastResult(
         method_a=method_a,
         method_b=method_b,
+        seed_kind_a=plate_a.seed_kind,
+        seed_kind_b=plate_b.seed_kind,
         seed_a=plate_a.seed,
         seed_b=plate_b.seed,
+        selected_identity_sha256_a=plate_a.selected_identity_sha256,
+        selected_identity_sha256_b=plate_b.selected_identity_sha256,
         budget=budget,
         order=order,
         calibration_policy=policy,
@@ -562,8 +711,8 @@ def _paired_result(
         term_sha256=term_sha256(terms),
         statistic="spearman",
         delta=delta,
-        delta_ci95=ci,
-        excludes_zero=bool(ci is not None and (ci[0] > 0.0 or ci[1] < 0.0)),
+        term_leverage_ci95=ci,
+        term_leverage_excludes_zero=bool(ci is not None and (ci[0] > 0.0 or ci[1] < 0.0)),
         reason=reason,
         interpretation=_interpret(subset, delta, ci),
     )

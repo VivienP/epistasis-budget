@@ -55,11 +55,20 @@ _INNER_SALT = hashlib.sha256(b"epibudget-downstream-inner:v1").hexdigest()
 
 # --------------------------------------------------------------------- frozen protocol amendment 1
 
-# v2 (2026-07-28, audit remediation): the raw-record schema, the NDCG relevance convention and the
-# learning-curve aggregate all changed, and selection now resolves ties through a declared seed.
-# v1 and v2 records are NOT interchangeable and must never be pooled -- the version is the guard.
-PROTOCOL_VERSION = "epibudget-downstream-v2"
-SUPERSEDED_PROTOCOL_VERSIONS: tuple[str, ...] = ("epibudget-downstream-v1",)
+# v2: the raw-record schema, the NDCG relevance convention and the learning-curve aggregate all
+# changed, and selection began resolving ties through a declared seed.
+# v3: the label-fraction fields are renamed to say what they measure. A strictly positive aggregated
+# score is NOT a biological activity call, and the previous names (`train_active_fraction`,
+# `live_fraction_top_b`) asserted that it was. TrpB's published activity classification applies two
+# per-replicate thresholds; the committed mirror carries one aggregated score per genotype and
+# cannot reconstruct it, so no field here may claim activity.
+# Records of different versions are NOT interchangeable and must never be pooled -- the version is
+# the guard, and a rename that left the version alone would defeat it.
+PROTOCOL_VERSION = "epibudget-downstream-v3"
+SUPERSEDED_PROTOCOL_VERSIONS: tuple[str, ...] = (
+    "epibudget-downstream-v1",
+    "epibudget-downstream-v2",
+)
 AMENDMENT_VERSION = "protocol-amendment-1"
 N_INNER_FOLDS = 3
 GRID_MAIN: tuple[float, ...] = (0.1, 1.0, 10.0)
@@ -499,17 +508,23 @@ def macro_spearman(rho_doubles: float | None, rho_triples: float | None) -> floa
 
 
 def percentile_relevance(fitness: FloatArray) -> FloatArray:
-    """NDCG relevance: 0 for every inactive variant, percentile rank among the actives otherwise.
+    """NDCG relevance: 0 for every non-positive label, percentile rank among the positives.
 
-    The scientific target of the ranking metrics is functional variants, and both registered
-    landscapes encode non-functionality as a non-positive label (GB1 as an exact zero, TrpB as a
-    small negative — ``scripts/fetch_trpb.py``: "<= 0 is inactive"). The previous convention ranked
-    every row together, so on GB1 each of the 29,477 dead genotypes carried relevance ~0.10 and,
-    with linear NDCG gain, a ranker was rewarded for placing dead variants highly.
+    The threshold is the *label sign*, not an activity classification from the assay. Neither
+    registered landscape ships an activity call. Read this as "relevance is carried by
+    positive-scoring variants", not as retrieval of functional variants. Establishing the latter
+    would need the per-replicate thresholded classification from the source assay, which this mirror
+    does not carry.
 
-    Actives receive ``rank / n_active`` over the active subset (average ties), so relevance lies in
-    (0, 1] for actives and is exactly 0 for inactives. Ordering among actives is unchanged, so this
-    only removes credit for retrieving non-functional variants.
+    The change this convention makes is still worth having: the previous version ranked every row
+    together, so on GB1 each of the 29,477 zero-fitness genotypes carried relevance ~0.10 and, with
+    linear NDCG gain, a ranker was rewarded for placing them highly.
+
+    Positives receive ``rank / n_positive`` over the positive subset (average ties), so relevance
+    lies in (0, 1] for positives and is exactly 0 otherwise. Ordering among positives is unchanged.
+
+    The primary downstream statistic ``S_macro`` does not depend on this: it is built from Spearman
+    correlations of the raw fitness ranks, so the sign convention does not enter it.
     """
     n = len(fitness)
     out: FloatArray = np.zeros(n, dtype=np.float64)
@@ -726,7 +741,7 @@ class DeterministicFoldRecord(BaseModel):
     non_finite: int
     missing: int
     effective_train_size: int
-    train_active_fraction: float | None
+    train_positive_score_fraction: float | None
 
     selected_singles: int
     selected_doubles: int
@@ -752,7 +767,7 @@ class DeterministicFoldRecord(BaseModel):
     hit_rate: float | None
     best_true_top_b: float | None
     regret: float | None
-    live_fraction_top_b: float | None
+    positive_score_fraction_top_b: float | None
     top_b_order_diversity: int | None
     top_b_identity_diversity: int | None
 
@@ -797,7 +812,7 @@ class RandomFoldSeedRecord(BaseModel):
     non_finite: int
     missing: int
     effective_train_size: int
-    train_active_fraction: float | None
+    train_positive_score_fraction: float | None
 
     selected_singles: int
     selected_doubles: int
@@ -823,7 +838,7 @@ class RandomFoldSeedRecord(BaseModel):
     hit_rate: float | None
     best_true_top_b: float | None
     regret: float | None
-    live_fraction_top_b: float | None
+    positive_score_fraction_top_b: float | None
     top_b_order_diversity: int | None
     top_b_identity_diversity: int | None
 
@@ -1010,7 +1025,7 @@ class _RawBundle:
     non_finite: int
     missing: int
     effective_train_size: int
-    train_active_fraction: float | None
+    train_positive_score_fraction: float | None
     selected_singles: int
     selected_doubles: int
     selected_triples: int
@@ -1032,7 +1047,7 @@ class _RawBundle:
     hit_rate: float | None
     best_true_top_b: float | None
     regret: float | None
-    live_fraction_top_b: float | None
+    positive_score_fraction_top_b: float | None
     top_b_order_diversity: int | None
     top_b_identity_diversity: int | None
     uplift: float | None
@@ -1097,7 +1112,9 @@ def _regret(pred: FloatArray, raw: FloatArray, ids: Sequence[str], budget: int) 
     return float(raw.max()) - _best_true_top_b(pred, raw, ids, budget)
 
 
-def _top_live_fraction(pred: FloatArray, raw: FloatArray, ids: Sequence[str], budget: int) -> float:
+def _top_positive_score_fraction(
+    pred: FloatArray, raw: FloatArray, ids: Sequence[str], budget: int
+) -> float:
     top = _ranked_top(pred, ids, budget)
     return float(np.mean([raw[i] > 0.0 for i in top]))
 
@@ -1154,7 +1171,8 @@ def _evaluate_selection(
         non_finite=accounting.non_finite,
         missing=accounting.missing,
         effective_train_size=accounting.effective_train_size,
-        train_active_fraction=accounting.active_fraction,
+        # This is the strictly-positive-label fraction, not a biological activity call.
+        train_positive_score_fraction=accounting.positive_score_fraction,
         selected_singles=s_singles,
         selected_doubles=s_doubles,
         selected_triples=s_triples,
@@ -1176,7 +1194,7 @@ def _evaluate_selection(
         hit_rate=None,
         best_true_top_b=None,
         regret=None,
-        live_fraction_top_b=None,
+        positive_score_fraction_top_b=None,
         top_b_order_diversity=None,
         top_b_identity_diversity=None,
         uplift=None,
@@ -1242,7 +1260,8 @@ def _evaluate_selection(
         non_finite=accounting.non_finite,
         missing=accounting.missing,
         effective_train_size=accounting.effective_train_size,
-        train_active_fraction=accounting.active_fraction,
+        # This is the strictly-positive-label fraction, not a biological activity call.
+        train_positive_score_fraction=accounting.positive_score_fraction,
         selected_singles=s_singles,
         selected_doubles=s_doubles,
         selected_triples=s_triples,
@@ -1264,7 +1283,9 @@ def _evaluate_selection(
         hit_rate=_hit_rate(pred, ctx.raw_fitness, ctx.eval_ids, budget),
         best_true_top_b=_best_true_top_b(pred, ctx.raw_fitness, ctx.eval_ids, budget),
         regret=_regret(pred, ctx.raw_fitness, ctx.eval_ids, budget),
-        live_fraction_top_b=_top_live_fraction(pred, ctx.raw_fitness, ctx.eval_ids, budget),
+        positive_score_fraction_top_b=_top_positive_score_fraction(
+            pred, ctx.raw_fitness, ctx.eval_ids, budget
+        ),
         top_b_order_diversity=order_div,
         top_b_identity_diversity=identity_div,
         uplift=uplift,
@@ -1452,11 +1473,11 @@ class MethodBudgetSummary(BaseModel):
     ndcg: float | None
     hit_rate: float | None
     regret: float | None
-    live_fraction_top_b: float | None
+    positive_score_fraction_top_b: float | None
     uplift: float | None
     transfer_rho_triples: float | None
     effective_train_size: float | None
-    train_active_fraction: float | None
+    train_positive_score_fraction: float | None
     esm_circular_s_macro: float | None
     esm_zero_shot_s_macro: float | None
     esm_offset_s_macro: float | None
@@ -1642,11 +1663,15 @@ def method_budget_summaries(records: Sequence[FoldRecord]) -> list[MethodBudgetS
                 ndcg=_mean_opt([r.ndcg for r in rs]),
                 hit_rate=_mean_opt([r.hit_rate for r in rs]),
                 regret=_mean_opt([r.regret for r in rs]),
-                live_fraction_top_b=_mean_opt([r.live_fraction_top_b for r in rs]),
+                positive_score_fraction_top_b=_mean_opt(
+                    [r.positive_score_fraction_top_b for r in rs]
+                ),
                 uplift=_mean_opt([r.uplift for r in rs]),
                 transfer_rho_triples=_mean_opt([r.transfer_rho_triples for r in rs]),
                 effective_train_size=_mean_opt([float(r.effective_train_size) for r in rs]),
-                train_active_fraction=_mean_opt([r.train_active_fraction for r in rs]),
+                train_positive_score_fraction=_mean_opt(
+                    [r.train_positive_score_fraction for r in rs]
+                ),
                 esm_circular_s_macro=_mean_opt([r.esm_circular_s_macro for r in rs]),
                 esm_zero_shot_s_macro=_mean_opt([r.esm_zero_shot_s_macro for r in rs]),
                 esm_offset_s_macro=_mean_opt([r.esm_offset_s_macro for r in rs]),
@@ -2541,7 +2566,7 @@ def _record_from_bundle(
         "non_finite": bundle.non_finite,
         "missing": bundle.missing,
         "effective_train_size": bundle.effective_train_size,
-        "train_active_fraction": bundle.train_active_fraction,
+        "train_positive_score_fraction": bundle.train_positive_score_fraction,
         "selected_singles": bundle.selected_singles,
         "selected_doubles": bundle.selected_doubles,
         "selected_triples": bundle.selected_triples,
@@ -2563,7 +2588,7 @@ def _record_from_bundle(
         "hit_rate": bundle.hit_rate,
         "best_true_top_b": bundle.best_true_top_b,
         "regret": bundle.regret,
-        "live_fraction_top_b": bundle.live_fraction_top_b,
+        "positive_score_fraction_top_b": bundle.positive_score_fraction_top_b,
         "top_b_order_diversity": bundle.top_b_order_diversity,
         "top_b_identity_diversity": bundle.top_b_identity_diversity,
         "uplift": bundle.uplift,

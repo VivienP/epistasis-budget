@@ -59,7 +59,7 @@ def _valid_rows() -> list[tuple[str, str]]:
         (_WT, "0.41"),
         (_seq(single), "0.9"),
         (_seq(double), "0.2"),
-        (_seq(triple), "-0.3"),  # inactive: TrpB marks it with a non-positive label
+        (_seq(triple), "-0.3"),  # one non-positive aggregated score
         (_seq(quad), "1.1"),  # order 4: outside the order-1..3 selection universe
     ]
 
@@ -128,7 +128,7 @@ def test_order4_counted_beyond_selection_universe(tmp_path: Path) -> None:
     # The order-4 quadruple is measured but sits outside the order-1..3 selection universe.
     assert profile.coverage.max_selection_order == MAX_SELECTION_ORDER
     assert profile.coverage.n_beyond_selection_order_measured == 1
-    # single/double/triple are inside the universe and measured; the inactive (<=0) triple counts
+    # single/double/triple are inside the universe and measured; the non-positive triple counts
     # as measured but not as positive coverage, so 3 measured of which 2 are positive.
     assert (
         profile.coverage.n_universe_measured,

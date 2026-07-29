@@ -1,9 +1,10 @@
 # Downstream-impact benchmark — GB1 confirmatory result and TrpB generalization
 
-**Status.** GB1: decision-eligible, `structural_downstream_supported = true`. TrpB: **exploratory,
-non-decision-eligible** (scored at `n_perturbations = 0`), a direction-replication only. Both artifacts
-are `status = provisional` and live under the git-ignored `report/`; neither is a registered public
-artifact. See [`docs/specs/downstream.md`](../specs/downstream.md) for the frozen protocol.
+**Current status (2026-07-29).** This document records historical v1 executions. GB1 was
+decision-eligible under the registered v1 gate; TrpB was exploratory and non-decision-eligible because
+it used `n_perturbations = 0`. Neither run estimates the structural acquisition method over tie seeds,
+and neither is a current promotional result. See [`docs/specs/downstream.md`](../specs/downstream.md)
+and the [audit remediation](../AUDIT_REMEDIATION_20260728.md).
 
 ## Question (the estimand)
 
@@ -21,8 +22,8 @@ budgets {48, 96, 192}, target-blind / attempted-budget.
 - **structural − fitness: 20/20 partitions positive, S_macro-AUC mean +0.342** → the 7-point robustness
   gate passes; `structural_downstream_supported = true`.
 - **structural − random: 20/20 positive, mean +0.175.**
-- **info − structural: 15/20 (below the 16/20 sign gate), mean +0.007 → not supported.** The ESM
-  masking-variance prior adds nothing over the structural selection.
+- **info − structural: 15/20 (below the 16/20 sign gate), mean +0.007 → did not pass v1.** The run
+  supplied no incremental masking-dispersion claim.
 
 Per-method S_macro (B = 48 / 96 / 192): info 0.476 / 0.551 / 0.594; structural 0.423 / 0.572 / 0.587;
 random 0.260 / 0.359 / 0.474; fitness 0.123 / 0.194 / 0.272; practice 0.058 / 0.141 / 0.244.

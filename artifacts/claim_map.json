@@ -230,6 +230,78 @@
       "transform": {"name": "round", "digits": 3, "unicode_minus": true},
       "rendered": "−0.025",
       "anchor": "mean difference −0.025"
+    },
+    {
+      "id": "gb1.downstream.structural_delta.readme",
+      "document": "README.md",
+      "artifact": "artifacts/structural_allocation_650m.json",
+      "json_pointer": "/results/gb1/downstream/structural_vs_fitness_mean_auc_delta",
+      "transform": {"name": "round", "digits": 3, "show_plus": true},
+      "rendered": "+0.342",
+      "anchor": "| `structural` − `fitness` | +0.342 (20/20 partitions) | +0.286 (20/20) |"
+    },
+    {
+      "id": "gb1.downstream.structural_partitions.readme",
+      "document": "README.md",
+      "artifact": "artifacts/structural_allocation_650m.json",
+      "json_pointer": "/results/gb1/downstream/structural_vs_fitness_positive_partitions",
+      "transform": {"name": "identity"},
+      "rendered": "20",
+      "anchor": "| `structural` − `fitness` | +0.342 (20/20 partitions) | +0.286 (20/20) |"
+    },
+    {
+      "id": "trpb.downstream.structural_delta.readme",
+      "document": "README.md",
+      "artifact": "artifacts/structural_allocation_650m.json",
+      "json_pointer": "/results/trpb/downstream/structural_vs_fitness_mean_auc_delta",
+      "transform": {"name": "round", "digits": 3, "show_plus": true},
+      "rendered": "+0.286",
+      "anchor": "| `structural` − `fitness` | +0.342 (20/20 partitions) | +0.286 (20/20) |"
+    },
+    {
+      "id": "trpb.downstream.structural_partitions.readme",
+      "document": "README.md",
+      "artifact": "artifacts/structural_allocation_650m.json",
+      "json_pointer": "/results/trpb/downstream/structural_vs_fitness_positive_partitions",
+      "transform": {"name": "identity"},
+      "rendered": "20",
+      "anchor": "| `structural` − `fitness` | +0.342 (20/20 partitions) | +0.286 (20/20) |"
+    },
+    {
+      "id": "gb1.downstream.esm_delta.readme",
+      "document": "README.md",
+      "artifact": "artifacts/structural_allocation_650m.json",
+      "json_pointer": "/results/gb1/downstream/info_vs_structural_mean_delta_at_192",
+      "transform": {"name": "round", "digits": 3, "show_plus": true},
+      "rendered": "+0.007",
+      "anchor": "| `info` − `structural` at B=192 | +0.007 (15/20) | −0.025 (0/20) |"
+    },
+    {
+      "id": "gb1.downstream.esm_partitions.readme",
+      "document": "README.md",
+      "artifact": "artifacts/structural_allocation_650m.json",
+      "json_pointer": "/results/gb1/downstream/info_vs_structural_positive_partitions_at_192",
+      "transform": {"name": "identity"},
+      "rendered": "15",
+      "anchor": "| `info` − `structural` at B=192 | +0.007 (15/20) | −0.025 (0/20) |"
+    },
+    {
+      "id": "trpb.downstream.esm_delta.readme",
+      "document": "README.md",
+      "artifact": "artifacts/structural_allocation_650m.json",
+      "json_pointer": "/results/trpb/downstream/info_vs_structural_mean_delta_at_192",
+      "transform": {"name": "round", "digits": 3, "unicode_minus": true},
+      "rendered": "−0.025",
+      "anchor": "| `info` − `structural` at B=192 | +0.007 (15/20) | −0.025 (0/20) |"
+    },
+    {
+      "id": "trpb.downstream.esm_partitions.readme",
+      "document": "README.md",
+      "artifact": "artifacts/structural_allocation_650m.json",
+      "json_pointer": "/results/trpb/downstream/info_vs_structural_positive_partitions_at_192",
+      "transform": {"name": "identity"},
+      "rendered": "0",
+      "anchor": "| `info` − `structural` at B=192 | +0.007 (15/20) | −0.025 (0/20) |"
     }
   ]
 }

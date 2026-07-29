@@ -26,16 +26,17 @@ protocol and result status live in [`VALIDATION.md`](VALIDATION.md); tracked evi
   theoretical grid of 160,000. Replication comes from amino-acid combinations, not from many independent
   protein positions, so conclusions do not establish whole-protein positional generality.
 
-- **Inactive genotypes are training data downstream, and excluded from the log-ratio upstream.** The
-  committed TrpB provenance records `<= 0` as inactive, so TrpB's 35,643 negative labels are the same
-  biological class as GB1's 29,477 exact zeros; all are `> -1`, so `log1p` is defined and they are
-  valid downstream training rows (audit H-3; the previous code silently discarded them and reported a
-  training "live fraction" of 1.000). The map-recovery log-ratio is undefined at `f <= 0`, so its
-  eligible population is declared separately and before selection.
+- **Non-positive scores are training data downstream, and excluded from the log-ratio upstream.**
+  TrpB has 35,643 negative labels and GB1 has 29,477 exact zeros. These are score-sign classes, not
+  biological activity calls. All TrpB values are `> -1`, so `log1p` is defined and they are valid
+  downstream training rows (audit H-3; the previous code silently discarded them). The map-recovery
+  log-ratio is undefined at `f <= 0`, so its eligible population is declared separately and before
+  selection.
 
-- **Dead and missing genotypes are not imputed.** Fitness-zero rows cannot be log-transformed, and some
-  genotypes are absent. Any interaction whose inclusion-exclusion loop touches an unavailable value has
-  no recoverable ground truth and is excluded. This restricts evaluation to viable, complete loops.
+- **Non-positive and missing genotypes have different roles.** Non-positive rows remain downstream
+  training data. The recovery log-ratio requires strictly positive scores, and some genotypes are
+  absent; an interaction whose inclusion-exclusion loop touches either case has no eligible recovery
+  ground truth. This restriction is mathematical and does not classify biological activity.
 
 - **The Walsh-Hadamard spectrum requires a complete tensor.** The real GB1 grid is incomplete, so the
   implementation rejects it for this calculation. Spectrum tests use complete synthetic grids.
@@ -55,9 +56,9 @@ protocol and result status live in [`VALIDATION.md`](VALIDATION.md); tracked evi
 
 - **The coverage score is three-valued on a four-site landscape.** `n(v)` is exactly 1140 for every
   single, 39 for every double and 1 for every triple, so `structural` reduces to "singles, then
-  doubles, then triples" and every within-order comparison is a tie (audit H-1). The as-run tie draw
-  fell outside the range of 100 seeded resolutions at TrpB B=48 and B=192. A declared `tie_seed` is
-  now part of the method, and tie-dominated methods are reported as a seed distribution.
+  doubles, then triples" and every within-order comparison is a tie (audit H-1). A declared
+  `tie_seed` now makes a selection reproducible, but the tracked artifacts do not estimate a
+  distribution over tie seeds.
 
 - **Epistasis is WT-referenced.** Background-averaged epistasis and a MoCHI handoff are not implemented.
   Results should not be interpreted as estimates of ensemble epistasis across genetic backgrounds.
@@ -75,25 +76,23 @@ protocol and result status live in [`VALIDATION.md`](VALIDATION.md); tracked evi
 - **Map recovery is confounded by the purchased contrast component (audit C-1).** The inferred and the
   true contrast both contain `k(S)`, the signed sum of the measured loop members' true values. The
   breadth/precision split does *not* remove it: once all singles are bought, essentially every term is
-  informed-not-pinned and still carries `k(S)`. On TrpB a model-free plate that buys the singles and
-  assigns prior 0 scores Pearson 0.798, above every method originally reported. Use
-  `relative_sse_gain` as the wording gate and the skeleton-controlled association as the corrective
-  diagnostic; see [`AUDIT_REMEDIATION_20260728.md`](AUDIT_REMEDIATION_20260728.md).
+  informed-not-pinned and still carries `k(S)`. The corrected schema uses `relative_sse_gain` as the
+  wording gate and the skeleton-controlled association as a diagnostic, but no corrected-run artifact
+  is tracked yet; see [`AUDIT_REMEDIATION_20260728.md`](AUDIT_REMEDIATION_20260728.md).
 
 - **Pairwise and third-order results have different power.** They are reported separately. The pooled
   correlation is diagnostic only and cannot replace an order-specific decision.
 
 - **Precision sets differ by method.** The decision-bearing `validate.map_recovery` split computed each
-  method's precision on *its own* informed-not-pinned terms — 1,669 for structural against 107 for
-  fitness at TrpB B=192 — and compared the two as if they estimated the same quantity (audit M-3).
-  Only the post-hoc robustness suite intersected them. `recovery.common_term_subset` now evaluates a
-  comparison on terms in the same state for both methods, with the size and SHA-256 recorded.
+  method's precision on *its own* informed-not-pinned terms and compared the two as if they estimated
+  the same quantity (audit M-3). Only the post-hoc robustness suite intersected them.
+  `recovery.common_term_subset` now evaluates a comparison on terms in the same state for both
+  methods, with the size and SHA-256 recorded.
 
-- **Confidence intervals have different sampling meanings, and the term bootstrap is too narrow.**
-  Random-baseline intervals include selection variability across seeds; deterministic-method bootstrap
-  intervals resample interaction terms and measure leverage only. For TrpB `structural` at B=192 the
-  reported interval [0.749, 0.795] is **disjoint from** the 100-seed tie-break range [0.676, 0.736]
-  (audit H-4). Comparative uncertainty now uses paired differences on identical units.
+- **Confidence intervals have different sampling meanings.** A bootstrap over interaction terms
+  measures term leverage conditional on the selected plates; it does not measure selection
+  variability. Recovery schema v3 emits per-realisation paired differences and reports term-leverage
+  intervals separately from summaries across realised selections.
 
 - **Calibration slopes can dominate sparse selections.** When no loop member is measured, the inferred
   interaction is a scaled ESM prior. A method-specific slope can therefore determine the sign of a
@@ -117,18 +116,20 @@ protocol and result status live in [`VALIDATION.md`](VALIDATION.md); tracked evi
   `inconclusive_zero_gpu` with `public_claim_eligible=false`. Neither an advantage nor a disadvantage of
   masking dispersion is a public claim.
 
-- **The downstream evidence supports structural allocation, not masking dispersion.** The registered
-  gates support structural selection over fitness-greedy on GB1 and TrpB. Neither landscape supports the
-  added ESM masking-dispersion weight. The compact result is tracked in
-  [`structural_allocation_650m.json`](../artifacts/structural_allocation_650m.json) and remains provisional.
+- **The historical downstream evidence favored structural allocation, not masking dispersion.** The
+  v1 gates favored the particular structural plates over fitness-greedy on GB1 and TrpB, while neither
+  landscape passed the incremental masking-dispersion gate. These observations do not estimate the
+  structural method over tie seeds. The compact result is tracked in
+  [`structural_allocation_650m.json`](../artifacts/structural_allocation_650m.json), remains provisional,
+  and is superseded for promotional use by the audit record.
 
 - **The earlier TrpB downstream run is exploratory.** It used `n_perturbations=0`, so it cannot evaluate
   masking dispersion and is not decision-eligible. Its historical interpretation is recorded in
   [`trpb-downstream-generalization-20260716.md`](experiments/trpb-downstream-generalization-20260716.md).
 
-- **The TrpB 650M `n_perturbations=16` profile is complete but provisional.** Its map-recovery result
-  supports `info` over fitness-greedy and random, while the structural ablation shows that masking
-  dispersion does not carry the gain. See
+- **The TrpB 650M `n_perturbations=16` profile is complete but its map-recovery interpretation is
+  withdrawn.** The frozen gate returned a positive comparison against fitness-greedy and random, but
+  the shared-skeleton confound prevents that result from supporting recovery. See
   [`trpb-650m-n16-20260723.md`](experiments/trpb-650m-n16-20260723.md).
 
 - **The earlier TrpB recovery smoke run is not confirmatory.** Its old WT anchoring invalidates its

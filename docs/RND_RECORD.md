@@ -8,11 +8,13 @@ Abandoned approaches and negative results are recorded here deliberately. A dead
 reason is a result, and several entries below record the retraction of a claim this project once published.
 Omitting them would make the surviving claims look better than the evidence supports.
 
-The live, decision-eligible result is the downstream-impact benchmark: at equal budget, a structure-aware
-plate is a better *training set* for ranking held-out double and triple mutants than a fitness-greedy,
-practice-heuristic or random plate. Pure loop-bracing (`structural`) carries it; the ESM masking-dispersion
-prior (`info`) adds nothing over it. Its numbers and protocol live in
-`experiments/trpb-downstream-generalization-20260716.md` and `specs/downstream.md` and are not restated here.
+**Current correction boundary (2026-07-29).** No downstream v3 or corrected-recovery artifact exists.
+The downstream v1 artifacts are historical observations on particular tied plates, not estimates over
+the acquisition method's tie distribution. The former map-recovery interpretation is withdrawn. Later
+entries retain the vocabulary and conclusions recorded at the time; any use of `active` or `inactive`
+derived only from score sign must now be read as `positive` or `non-positive score`, not as a biological
+activity classification. The current disposition is authoritative in
+`AUDIT_REMEDIATION_20260728.md`, `LIMITATIONS.md`, and `specs/downstream.md`.
 
 Verdicts used below: **kept** (live and load-bearing), **narrowed** (retained under a reduced claim),
 **superseded** (replaced by a better instrument), **abandoned** (killed), **inconclusive** (frozen or run

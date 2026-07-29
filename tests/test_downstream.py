@@ -102,7 +102,7 @@ _MUT_WEIGHT = {"C": 0.35, "G": -0.15}  # residue-dependent effect (so within-ord
 
 
 def _landscape_trpb_like(pool: list[ScoredVariant]) -> dict[Variant, float]:
-    """A TrpB-shaped landscape: parent (WT) fitness != 1 and ~inactive variants carrying negative
+    """A TrpB-shaped landscape: parent (WT) fitness != 1 and non-positive scores can be negative
     (but > -1, hence log1p-safe) labels. This is exactly the shape that invalidated the historical
     ε/map-recovery path (WT anchor != 0); the downstream benchmark instead rank-correlates against
     the raw fitness, so it must run cleanly and produce finite S_macro on this landscape. Fitness is
@@ -113,7 +113,7 @@ def _landscape_trpb_like(pool: list[ScoredVariant]) -> dict[Variant, float]:
         dg = sum(_MUT_WEIGHT[mut] for _, _, mut in sv.variant)
         if {0, 1} <= {pos for pos, _, _ in sv.variant}:
             dg += 0.5  # a genuine order-2 interaction the ridge can learn
-        landscape[sv.variant] = max(exp(dg) - 1.3, -0.9)  # inactivity as negatives, always > -1
+        landscape[sv.variant] = max(exp(dg) - 1.3, -0.9)  # negative scores, always > -1
     return landscape
 
 
@@ -438,12 +438,13 @@ def test_macro_spearman_averages_the_two_orders() -> None:
     assert macro_spearman(0.4, None) is None
 
 
-def test_percentile_relevance_zeroes_inactive_and_ranks_actives_by_hand_oracle() -> None:
-    """Audit L-1: inactive (f <= 0) variants carry relevance 0; actives rank within the actives.
+def test_percentile_relevance_zeroes_non_positive_and_ranks_positives_by_hand_oracle() -> None:
+    """Audit L-1: non-positive scores carry relevance 0; positives rank within positives.
 
-    Hand oracle for [0.0, 1.0, 2.0, 3.0]: one inactive -> 0.0; three actives with ranks 1, 2, 3 over
-    n_active = 3 -> 1/3, 2/3, 3/3. Under the previous all-rows convention the inactive row scored
-    0.0 here only by luck of being the minimum; on GB1 its 29,477 dead rows each scored ~0.10.
+    Hand oracle for [0.0, 1.0, 2.0, 3.0]: one non-positive -> 0.0; three positives with
+    ranks 1, 2, 3 over n_positive = 3 -> 1/3, 2/3, 3/3. Under the previous all-rows convention
+    the zero row scored 0.0 here only by luck of being the minimum; on GB1 its 29,477 zero rows
+    each scored ~0.10.
     """
     rel = percentile_relevance(np.array([0.0, 1.0, 2.0, 3.0]))
     assert rel[0] == pytest.approx(0.0)
@@ -451,18 +452,18 @@ def test_percentile_relevance_zeroes_inactive_and_ranks_actives_by_hand_oracle()
     assert rel[2] == pytest.approx(2 / 3)
     assert rel[3] == pytest.approx(1.0)
 
-    # A TrpB-style negative label is inactive too, not merely low-ranked.
+    # A negative label also carries zero relevance under this score-sign convention.
     trpb_like = percentile_relevance(np.array([-0.16, -0.01, 4.0]))
     assert trpb_like[0] == pytest.approx(0.0)
     assert trpb_like[1] == pytest.approx(0.0)
     assert trpb_like[2] == pytest.approx(1.0)
 
-    # Ties among actives are averaged; inactives stay pinned at zero.
+    # Ties among positives are averaged; non-positive rows stay pinned at zero.
     tied = percentile_relevance(np.array([0.0, 2.0, 2.0]))
     assert tied[0] == pytest.approx(0.0)
     assert tied[1] == pytest.approx(0.75) and tied[2] == pytest.approx(0.75)
 
-    # An all-inactive fold has no relevance signal at all.
+    # An all-non-positive fold has no relevance signal at all.
     assert percentile_relevance(np.array([0.0, -0.2, -0.1])).tolist() == [0.0, 0.0, 0.0]
 
 
@@ -564,7 +565,7 @@ def _fold_record(
         non_finite=0,
         missing=0,
         effective_train_size=effective_train_size,
-        train_active_fraction=1.0,
+        train_positive_score_fraction=1.0,
         selected_singles=0,
         selected_doubles=budget,
         selected_triples=0,
@@ -586,7 +587,7 @@ def _fold_record(
         hit_rate=0.5,
         best_true_top_b=1.0,
         regret=0.0,
-        live_fraction_top_b=1.0,
+        positive_score_fraction_top_b=1.0,
         top_b_order_diversity=1,
         top_b_identity_diversity=budget,
         uplift=0.0,
@@ -801,8 +802,9 @@ def _run(**kwargs: object) -> DownstreamReport:
 
 def test_downstream_runs_on_nongb1_landscape_with_nonunit_wt_and_negative_labels() -> None:
     # Generalization (TrpB): the benchmark must run on a landscape whose parent fitness != 1 and
-    # whose inactive variants carry negative (> -1) labels. Because the metric rank-correlates the
-    # prediction against RAW fitness (no WT-centering, no ε), the TrpB WT-anchor bug does not apply;
+    # whose non-positive variants carry negative (> -1) labels. Because the metric rank-correlates
+    # the prediction against RAW fitness (no WT-centering, no ε), the TrpB WT-anchor bug does not
+    # apply;
     # log1p(raw) stays finite (min label > -1), so every produced S_macro is finite, never NaN.
     pool = _pool()
     landscape = _landscape_trpb_like(pool)
@@ -836,7 +838,7 @@ def test_every_selected_row_lands_in_exactly_one_accounting_bucket() -> None:
 
     The previous accounting split revealed labels into positive / exact-zero / non-finite only,
     so a finite negative label belonged to no bucket: it vanished from the training set, from every
-    count, and from ``train_live_fraction``, which read 1.000 however inactive the plate was.
+    count, and from ``train_live_fraction``, which read 1.000 despite non-positive rows.
     """
     pool = _pool()
     landscape = _landscape_trpb_like(pool)
@@ -870,13 +872,15 @@ def test_every_selected_row_lands_in_exactly_one_accounting_bucket() -> None:
         assert record.effective_train_size == (
             record.valid_positive + record.valid_zero + record.valid_negative_in_domain
         )
-    # The negative (inactive) rows are training data here, not discarded rows.
+    # Negative rows are training data here, not discarded rows.
     assert any(r.valid_negative_in_domain > 0 for r in records)
     trained_on_negatives = [r for r in records if r.valid_negative_in_domain > 0]
     assert all(r.effective_train_size >= r.valid_negative_in_domain for r in trained_on_negatives)
-    # ...and the retired 1.000-always fraction is now a real active fraction below 1.
+    # ...and the retired 1.000-always fraction is now a score-sign fraction below 1.
     fractions = [
-        r.train_active_fraction for r in trained_on_negatives if r.train_active_fraction is not None
+        r.train_positive_score_fraction
+        for r in trained_on_negatives
+        if r.train_positive_score_fraction is not None
     ]
     assert fractions and min(fractions) < 1.0
 
@@ -1100,7 +1104,7 @@ def test_clean_predictor_is_invariant_to_esm_at_fixed_selection_and_labels() -> 
         "hit_rate",
         "best_true_top_b",
         "regret",
-        "live_fraction_top_b",
+        "positive_score_fraction_top_b",
         "uplift",
         "transfer_rho_triples",
         "effective_train_size",
@@ -1555,7 +1559,7 @@ def _synthetic_common_fields(
         non_finite=0,
         missing=0,
         effective_train_size=budget,
-        train_active_fraction=1.0,
+        train_positive_score_fraction=1.0,
         selected_singles=0,
         selected_doubles=budget,
         selected_triples=0,
@@ -1577,7 +1581,7 @@ def _synthetic_common_fields(
         hit_rate=0.5,
         best_true_top_b=1.0,
         regret=0.0,
-        live_fraction_top_b=1.0,
+        positive_score_fraction_top_b=1.0,
         top_b_order_diversity=1,
         top_b_identity_diversity=budget,
         uplift=0.0,
@@ -2739,17 +2743,31 @@ def test_missing_cell_and_divergent_duplicate_together_are_nonconforming() -> No
     assert companions == []
 
 
-def test_v1_records_are_not_pooled_with_v2_records() -> None:
+def test_superseded_records_are_never_pooled_with_current_ones() -> None:
     """Audit remediation: the protocol version is the guard against mixing incompatible records.
 
-    v2 changed the raw-record label buckets, the NDCG relevance convention, the learning-curve
-    aggregate's name and the selection tie-break. A v1 record carries different semantics under the
-    same field names, so it must never contribute to a v2 summary. ``protocol_version`` is part of
-    the identity key, so a stale record is simultaneously an unexpected cell and a missing one.
+    Each bump carried a semantic change under unchanged field names — v2 the raw-record label
+    buckets, the NDCG relevance convention, the learning-curve aggregate and the selection
+    tie-break; v3 the label-fraction field names, which stopped a sign test being reported as a
+    biological activity call. A superseded record must therefore never contribute to a current
+    summary. ``protocol_version`` is part of the identity key, so a stale record is at once an
+    unexpected cell and a missing one.
+
+    The assertions below deliberately do NOT pin a version literal: pinning one makes every future
+    bump fail this test for the wrong reason, which teaches the next reader to edit the constant
+    rather than to check the guard. What must hold is the *relationship* — every superseded version
+    is known, and the current one is not among them.
     """
-    assert ds.PROTOCOL_VERSION == "epibudget-downstream-v2"
     assert "epibudget-downstream-v1" in ds.SUPERSEDED_PROTOCOL_VERSIONS
+    assert "epibudget-downstream-v2" in ds.SUPERSEDED_PROTOCOL_VERSIONS
     assert ds.PROTOCOL_VERSION not in ds.SUPERSEDED_PROTOCOL_VERSIONS
+    assert len(set(ds.SUPERSEDED_PROTOCOL_VERSIONS)) == len(ds.SUPERSEDED_PROTOCOL_VERSIONS)
+
+    for model in (DeterministicFoldRecord, RandomFoldSeedRecord, MethodBudgetSummary):
+        ambiguous = {field for field in model.model_fields if "active" in field or "live" in field}
+        assert ambiguous == set(), (
+            f"biological activity is unavailable; ambiguous fields={ambiguous}"
+        )
 
     fresh = _fold_record(
         method="structural",

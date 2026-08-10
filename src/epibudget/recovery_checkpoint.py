@@ -26,6 +26,11 @@ from epibudget.fourier_recovery import (
     _fold_sha256,
     _sequence_sha256,
 )
+from epibudget.recovery_protocol import (
+    REGISTERED_EXECUTION_POLICY,
+    REGISTERED_RECOVERY_PROTOCOL,
+)
+from epibudget.run_store import canonical_json_bytes
 from epibudget.scored_cache import candidate_sha256
 from epibudget.tie_break import canonical_id
 from epibudget.types import Variant
@@ -35,12 +40,11 @@ _MUTATION_WIDTH = 3
 _THREAD_ENVIRONMENT = ("MKL_NUM_THREADS", "OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS")
 _SELECTION_SCHEMA = "epibudget-fourier-selection-checkpoint-v1"
 _BLOCK_SCHEMA = "epibudget-fourier-recovery-block-v1"
-_REGISTERED_SEQUENCE_COUNT = 43
-_REGISTERED_CELL_COUNT = 344
 _MINIMUM_FOLD_COUNT = 2
-REGISTERED_BUDGET_BLOCKS = (
-    (48, 96, 192, 384),
-    (768, 1536, 2242, 3072),
+_REGISTERED_SEQUENCE_COUNT = REGISTERED_RECOVERY_PROTOCOL.sequence_count
+_REGISTERED_CELL_COUNT = REGISTERED_RECOVERY_PROTOCOL.cell_count
+REGISTERED_BUDGET_BLOCKS = REGISTERED_EXECUTION_POLICY.budget_blocks(
+    REGISTERED_RECOVERY_PROTOCOL.budgets
 )
 _RECOVERY_CELL_FIELDS = frozenset(field.name for field in fields(RecoveryCell))
 
@@ -65,21 +69,6 @@ class RecoveryBlockWork:
     seed: int | None
     block_index: int
     budgets: tuple[int, ...]
-
-
-def canonical_json_bytes(payload: object) -> bytes:
-    """Serialize one JSON value with the canonical checkpoint encoding."""
-    try:
-        rendered = json.dumps(
-            payload,
-            sort_keys=True,
-            separators=(",", ":"),
-            ensure_ascii=False,
-            allow_nan=False,
-        )
-    except (TypeError, ValueError) as error:
-        raise ValueError(f"checkpoint payload is not canonical JSON: {error}") from error
-    return rendered.encode("utf-8")
 
 
 def _captured_output(function: Callable[[], object]) -> str:

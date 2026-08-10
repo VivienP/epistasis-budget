@@ -26,6 +26,7 @@ from epibudget.data import reveal_measured_fitness
 from epibudget.epistasis import _landscape_tensor, _wht_forward
 from epibudget.graph import selection_graph
 from epibudget.labels import training_target
+from epibudget.recovery_protocol import REGISTERED_RECOVERY_PROTOCOL
 from epibudget.robustness import variant_fold
 from epibudget.tie_break import (
     TIE_BREAK_VERSION,
@@ -45,13 +46,10 @@ _DEFAULT_LAMBDA_RATIOS: tuple[float, ...] = tuple(
     float(value) for value in np.geomspace(1.0, 1e-3, 20)
 )
 _FLOAT64_BYTES = np.dtype(np.float64).itemsize
-_DETERMINISTIC_METHOD_COUNT = 3
-_STOCHASTIC_METHOD_COUNT = 2
 _MIN_FOLDS = 2
 _MIN_GATE_SPEARMAN = 0.30
 _MIN_GATE_SSE_GAIN = 0.10
 _MIN_POSITIVE_STOCHASTIC_SEEDS = 16
-_PAIRWISE_FEATURE_COUNT = 2_242
 
 
 def doptimal_workspace_bytes(n_candidates: int, budget: int) -> int:
@@ -63,12 +61,7 @@ def doptimal_workspace_bytes(n_candidates: int, budget: int) -> int:
 
 def registered_fit_count(budgets: Sequence[int], seeds: Sequence[int]) -> int:
     """Number of method-budget LASSO fits in the frozen A1 protocol."""
-    if not budgets:
-        return 0
-    if len(set(seeds)) != len(seeds):
-        raise ValueError("seeds must be unique")
-    sequence_count = _DETERMINISTIC_METHOD_COUNT + _STOCHASTIC_METHOD_COUNT * len(seeds)
-    return len(budgets) * sequence_count
+    return REGISTERED_RECOVERY_PROTOCOL.fit_count(budgets, seeds)
 
 
 @dataclass(frozen=True)
@@ -267,7 +260,7 @@ def decide_recovery(  # noqa: PLR0912, PLR0915
 
 def validate_recovery_dataset(dataset: str) -> None:
     """Reject any dataset outside the frozen TrpB-only A1 diagnostic."""
-    if dataset != "trpb_johnston2024":
+    if dataset != REGISTERED_RECOVERY_PROTOCOL.dataset:
         raise ValueError("the Fourier recovery diagnostic is TrpB-only")
 
 

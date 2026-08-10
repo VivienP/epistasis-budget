@@ -48,6 +48,10 @@ def main() -> None:  # noqa: PLR0915
         recovery_block_payload,
         selection_plan_payload,
     )
+    from epibudget.recovery_protocol import (  # noqa: PLC0415
+        REGISTERED_EXECUTION_POLICY,
+        REGISTERED_RECOVERY_PROTOCOL,
+    )
     from epibudget.scored_cache import (  # noqa: PLC0415
         CacheIdentity,
         cache_metadata_path,
@@ -79,18 +83,15 @@ def main() -> None:  # noqa: PLR0915
     )
     args = parser.parse_args()
 
-    budgets = (48, 96, 192, 384, 768, 1536, 2242, 3072)
-    seeds = tuple(range(20))
-    methods = ("info", "fitness", "doptimal_reduced_pairwise", "random", "structural")
-    pairwise_order = 2
+    protocol = REGISTERED_RECOVERY_PROTOCOL
+    budgets = protocol.budgets
+    seeds = protocol.seeds
+    methods = protocol.methods
+    pairwise_order = protocol.estimation_max_order
     sequence_keys: list[dict[str, str | int | None]] = [
-        {"method": method, "seed": None}
-        for method in ("info", "fitness", "doptimal_reduced_pairwise")
+        {"method": method, "seed": seed} for method, seed in protocol.sequence_keys
     ]
-    sequence_keys.extend(
-        {"method": method, "seed": seed} for seed in seeds for method in ("random", "structural")
-    )
-    dataset = "trpb_johnston2024"
+    dataset = protocol.dataset
     validate_recovery_dataset(dataset)
     model_id = "facebook/esm2_t33_650M_UR50D"
     repo = Path(__file__).resolve().parent.parent
@@ -108,7 +109,7 @@ def main() -> None:  # noqa: PLR0915
 
     specification = resolve_dataset(dataset)
     candidates = enumerate_candidates(
-        specification.sites, specification.wt_at_sites, AA20, max_order=3
+        specification.sites, specification.wt_at_sites, AA20, max_order=protocol.selection_max_order
     )
     config = _build_fourier_config(
         specification.sites, specification.wt_at_sites, AA20, max_order=pairwise_order
@@ -116,6 +117,10 @@ def main() -> None:  # noqa: PLR0915
     pairwise_coefficient_count = sum(
         sum(value != 0 for value in mode) == pairwise_order for mode in config.modes
     )
+    if pairwise_coefficient_count != protocol.coefficient_count:
+        raise ValueError("candidate universe does not yield the registered coefficient count")
+    if len(config.modes) != protocol.feature_count:
+        raise ValueError("design basis does not yield the registered feature count")
     runtime = json.loads(args.runtime_preflight.read_text(encoding="utf-8"))
     validate_runtime_preflight(
         runtime,
@@ -150,10 +155,10 @@ def main() -> None:  # noqa: PLR0915
             "budgets": list(budgets),
             "seeds": list(seeds),
             "sequence_keys": sequence_keys,
-            "budget_block_size": 4,
-            "folds": 5,
+            "budget_block_size": REGISTERED_EXECUTION_POLICY.legacy_budget_block_size,
+            "folds": protocol.n_folds,
             "coefficient_count": pairwise_coefficient_count,
-            "maximum_order": 3,
+            "maximum_order": protocol.selection_max_order,
         },
     )
     selection_checkpoints = discover_checkpoints(args.checkpoint_dir, "selection")
@@ -175,7 +180,9 @@ def main() -> None:  # noqa: PLR0915
             "runtime_preflight_sha256": _sha256_file(args.runtime_preflight),
         }
         # This is the label barrier: the complete plan is durable before the landscape is loaded.
-        generated_plan = build_selection_plan(scored, budgets=budgets, seeds=seeds, max_order=3)
+        generated_plan = build_selection_plan(
+            scored, budgets=budgets, seeds=seeds, max_order=protocol.selection_max_order
+        )
         selection_workspace_end = _capture_workspace_snapshot(repo)
         selection_inputs_end = {
             "dataset_sha256": _sha256_file(args.data),
@@ -219,7 +226,7 @@ def main() -> None:  # noqa: PLR0915
         expected_plan=plan,
     )
     completed_cell_count = sum(len(block) for block in completed_blocks.values())
-    print(f"recovery progress: {completed_cell_count} / 344 cells")
+    print(f"recovery progress: {completed_cell_count} / {protocol.cell_count} cells")
     sequence_by_key = {(sequence.method, sequence.seed): sequence for sequence in plan.sequences}
 
     def execute_block(work: RecoveryBlockWork) -> int:
@@ -244,7 +251,7 @@ def main() -> None:  # noqa: PLR0915
                     method=sequence.method,
                     seed=sequence.seed,
                     budget=budget,
-                    n_folds=5,
+                    n_folds=protocol.n_folds,
                 )
             except (FloatingPointError, RuntimeError, ValueError) as error:
                 cell = RecoveryCell(
@@ -256,7 +263,7 @@ def main() -> None:  # noqa: PLR0915
                     support_size=0,
                     coefficient_count=pairwise_coefficient_count,
                     selected_sha256=_sequence_sha256(selected),
-                    fold_sha256=_fold_sha256(selected, 5),
+                    fold_sha256=_fold_sha256(selected, protocol.n_folds),
                     converged=False,
                     error=f"{type(error).__name__}: {error}",
                 )
@@ -297,7 +304,7 @@ def main() -> None:  # noqa: PLR0915
     def report_progress(work: RecoveryBlockWork, cell_count: int) -> None:
         print(
             f"recovery checkpoint: {work.method} seed={work.seed} budgets={work.budgets}; "
-            f"{cell_count} / 344 cells; {args.checkpoint_dir}"
+            f"{cell_count} / {protocol.cell_count} cells; {args.checkpoint_dir}"
         )
 
     pending = pending_recovery_blocks(plan, completed_keys=set(completed_blocks))
@@ -347,7 +354,7 @@ def main() -> None:  # noqa: PLR0915
         "public_claim_eligible": False,
         "architecture_decision_eligible": architecture_decision_eligible,
         "dataset": dataset,
-        "label_transform": "log1p(fitness)",
+        "label_transform": protocol.label_transform,
         "candidate_count": len(candidates),
         "candidate_composition": {"1": 76, "2": 2166, "3": 27436},
         "budgets": list(budgets),

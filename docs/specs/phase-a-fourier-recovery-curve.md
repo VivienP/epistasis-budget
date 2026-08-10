@@ -120,6 +120,19 @@ projects its `O(N * B^2)` cost to budget 3,072. The preflight reports time and m
 embedding operator-specific resource limits. A stale, dirty, incomplete, non-converged, or
 commit-mismatched preflight cannot authorize the curve.
 
+## Resumable execution
+
+The runner requires a durable checkpoint directory. Each of the 43 acquisition sequences is evaluated
+in two fixed blocks of four budgets: `(48, 96, 192, 384)` and `(768, 1536, 2242, 3072)`. A completed block
+is stored as an immutable content-addressed payload plus a completion marker. Restarting the same command
+validates and skips completed blocks, then resumes from the first missing block.
+
+Checkpoint reuse requires the same commit, dataset, score cache, sidecar, runtime preflight, candidate
+universe, selection plan, protocol, and numerical environment. Input or workspace drift during a block
+prevents its publication. Incomplete uploads without a valid completion marker are ignored; marked
+corruption fails closed. The final report is assembled only from exactly 86 valid blocks covering all
+344 registered cells.
+
 ## Provenance and failure policy
 
 The report uses create-only atomic publication and captures dataset, cache, sidecar, candidate-universe,

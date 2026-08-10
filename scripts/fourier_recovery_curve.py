@@ -7,6 +7,7 @@ import hashlib
 import json
 import subprocess
 import sys
+import uuid
 from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
@@ -31,6 +32,22 @@ def main() -> None:  # noqa: PLR0915
     )
     from epibudget.labels import training_target  # noqa: PLC0415
     from epibudget.provenance import write_json_atomic  # noqa: PLC0415
+    from epibudget.recovery_checkpoint import (  # noqa: PLC0415
+        RecoveryBlockWork,
+        RecoveryIdentity,
+        assemble_recovery_cells,
+        canonical_json_bytes,
+        discover_checkpoints,
+        execute_pending_blocks,
+        load_recovery_blocks,
+        load_selection_plan,
+        numerical_fingerprint,
+        pending_recovery_blocks,
+        publish_checkpoint,
+        recovery_block_key,
+        recovery_block_payload,
+        selection_plan_payload,
+    )
     from epibudget.scored_cache import (  # noqa: PLC0415
         CacheIdentity,
         cache_metadata_path,
@@ -54,17 +71,32 @@ def main() -> None:  # noqa: PLR0915
     parser.add_argument(
         "--out", type=Path, default=Path("report/diagnostics/fourier_recovery_trpb.json")
     )
+    parser.add_argument(
+        "--checkpoint-dir",
+        type=Path,
+        required=True,
+        help="Durable directory containing resumable selection and recovery checkpoints.",
+    )
     args = parser.parse_args()
 
     budgets = (48, 96, 192, 384, 768, 1536, 2242, 3072)
     seeds = tuple(range(20))
     methods = ("info", "fitness", "doptimal_reduced_pairwise", "random", "structural")
+    pairwise_order = 2
+    sequence_keys: list[dict[str, str | int | None]] = [
+        {"method": method, "seed": None}
+        for method in ("info", "fitness", "doptimal_reduced_pairwise")
+    ]
+    sequence_keys.extend(
+        {"method": method, "seed": seed} for seed in seeds for method in ("random", "structural")
+    )
     dataset = "trpb_johnston2024"
     validate_recovery_dataset(dataset)
     model_id = "facebook/esm2_t33_650M_UR50D"
     repo = Path(__file__).resolve().parent.parent
     sidecar = cache_metadata_path(args.cache)
     started_utc = datetime.now(UTC)
+    session_id = uuid.uuid4().hex
     argv = [sys.executable, *sys.argv]
     workspace_start = _capture_workspace_snapshot(repo)
     input_hashes_start = {
@@ -79,7 +111,10 @@ def main() -> None:  # noqa: PLR0915
         specification.sites, specification.wt_at_sites, AA20, max_order=3
     )
     config = _build_fourier_config(
-        specification.sites, specification.wt_at_sites, AA20, max_order=2
+        specification.sites, specification.wt_at_sites, AA20, max_order=pairwise_order
+    )
+    pairwise_coefficient_count = sum(
+        sum(value != 0 for value in mode) == pairwise_order for mode in config.modes
     )
     runtime = json.loads(args.runtime_preflight.read_text(encoding="utf-8"))
     validate_runtime_preflight(
@@ -103,15 +138,102 @@ def main() -> None:  # noqa: PLR0915
     )
     scored = [cache[variant] for variant in candidates]
 
-    # This is the label barrier: every sequence and hash is fixed before the landscape is loaded.
-    plan = build_selection_plan(scored, budgets=budgets, seeds=seeds, max_order=3)
+    checkpoint_identity = RecoveryIdentity(
+        execution_commit=workspace_start.execution_commit,
+        candidate_sha256=candidate_sha256(candidates),
+        input_hashes=input_hashes_start,
+        cache_identity=expected_identity.model_dump(mode="json"),
+        numerical_fingerprint=numerical_fingerprint(),
+        protocol={
+            "schema_version": "epibudget-fourier-recovery-checkpoint-v1",
+            "methods": list(methods),
+            "budgets": list(budgets),
+            "seeds": list(seeds),
+            "sequence_keys": sequence_keys,
+            "budget_block_size": 4,
+            "folds": 5,
+            "coefficient_count": pairwise_coefficient_count,
+            "maximum_order": 3,
+        },
+    )
+    selection_checkpoints = discover_checkpoints(args.checkpoint_dir, "selection")
+    if selection_checkpoints and set(selection_checkpoints) != {"registered"}:
+        raise ValueError("checkpoint directory contains unexpected selection-plan identities")
+    if selection_checkpoints:
+        selection_payload = selection_checkpoints["registered"]
+        plan = load_selection_plan(
+            selection_payload,
+            expected=checkpoint_identity,
+            expected_candidates=candidates,
+        )
+    else:
+        selection_workspace_start = _capture_workspace_snapshot(repo)
+        selection_inputs_start = {
+            "dataset_sha256": _sha256_file(args.data),
+            "cache_sha256": _sha256_file(args.cache),
+            "cache_sidecar_sha256": _sha256_file(sidecar),
+            "runtime_preflight_sha256": _sha256_file(args.runtime_preflight),
+        }
+        # This is the label barrier: the complete plan is durable before the landscape is loaded.
+        generated_plan = build_selection_plan(scored, budgets=budgets, seeds=seeds, max_order=3)
+        selection_workspace_end = _capture_workspace_snapshot(repo)
+        selection_inputs_end = {
+            "dataset_sha256": _sha256_file(args.data),
+            "cache_sha256": _sha256_file(args.cache),
+            "cache_sidecar_sha256": _sha256_file(sidecar),
+            "runtime_preflight_sha256": _sha256_file(args.runtime_preflight),
+        }
+        if (
+            selection_workspace_start != selection_workspace_end
+            or selection_workspace_start.code_state != "clean"
+            or selection_inputs_start != selection_inputs_end
+            or selection_inputs_start != input_hashes_start
+        ):
+            raise ValueError("selection-plan input or workspace drift detected")
+        selection_payload = selection_plan_payload(generated_plan, checkpoint_identity)
+        publish_checkpoint(args.checkpoint_dir, "selection", "registered", selection_payload)
+        published_selection = discover_checkpoints(args.checkpoint_dir, "selection")
+        if set(published_selection) != {"registered"}:
+            raise ValueError("selection-plan checkpoint publication did not complete")
+        selection_payload = published_selection["registered"]
+        plan = load_selection_plan(
+            selection_payload,
+            expected=checkpoint_identity,
+            expected_candidates=candidates,
+        )
+    selection_plan_sha256 = selection_payload.get("selection_plan_sha256")
+    if not isinstance(selection_plan_sha256, str):
+        raise ValueError("selection-plan checkpoint has no canonical hash")
+
     landscape = specification.loader(args.data)
     transformed = {variant: training_target(value) for variant, value in landscape.items()}
     truth = pairwise_truth(transformed, specification.sites)
+    if len(truth.coefficients) != pairwise_coefficient_count:
+        raise ValueError("pairwise coefficient count does not match the registered protocol")
 
-    cells = []
-    for sequence in plan.sequences:
-        for budget in budgets:
+    block_payloads = discover_checkpoints(args.checkpoint_dir, "block")
+    completed_blocks = load_recovery_blocks(
+        block_payloads,
+        expected_identity=checkpoint_identity,
+        expected_selection_plan_sha256=selection_plan_sha256,
+        expected_plan=plan,
+    )
+    completed_cell_count = sum(len(block) for block in completed_blocks.values())
+    print(f"recovery progress: {completed_cell_count} / 344 cells")
+    sequence_by_key = {(sequence.method, sequence.seed): sequence for sequence in plan.sequences}
+
+    def execute_block(work: RecoveryBlockWork) -> int:
+        sequence = sequence_by_key[(work.method, work.seed)]
+        block_started = datetime.now(UTC)
+        block_workspace_start = _capture_workspace_snapshot(repo)
+        block_input_hashes_start = {
+            "dataset_sha256": _sha256_file(args.data),
+            "cache_sha256": _sha256_file(args.cache),
+            "cache_sidecar_sha256": _sha256_file(sidecar),
+            "runtime_preflight_sha256": _sha256_file(args.runtime_preflight),
+        }
+        block_cells = []
+        for budget in work.budgets:
             selected = sequence.selected[:budget]
             try:
                 cell = evaluate_plate(
@@ -132,13 +254,70 @@ def main() -> None:  # noqa: PLR0915
                     spearman=None,
                     relative_sse_gain=None,
                     support_size=0,
-                    coefficient_count=len(truth.coefficients),
+                    coefficient_count=pairwise_coefficient_count,
                     selected_sha256=_sequence_sha256(selected),
                     fold_sha256=_fold_sha256(selected, 5),
                     converged=False,
                     error=f"{type(error).__name__}: {error}",
                 )
-            cells.append(cell)
+            block_cells.append(cell)
+        block_input_hashes_end = {
+            "dataset_sha256": _sha256_file(args.data),
+            "cache_sha256": _sha256_file(args.cache),
+            "cache_sidecar_sha256": _sha256_file(sidecar),
+            "runtime_preflight_sha256": _sha256_file(args.runtime_preflight),
+        }
+        block_workspace_end = _capture_workspace_snapshot(repo)
+        block_key = recovery_block_key(work.method, work.seed, work.block_index)
+        block_payload = recovery_block_payload(
+            identity=checkpoint_identity,
+            selection_plan_sha256=selection_plan_sha256,
+            method=work.method,
+            seed=work.seed,
+            block_index=work.block_index,
+            cells=block_cells,
+            workspace_start=block_workspace_start.model_dump(mode="json"),
+            workspace_end=block_workspace_end.model_dump(mode="json"),
+            input_hashes_start=block_input_hashes_start,
+            input_hashes_end=block_input_hashes_end,
+            session_id=session_id,
+            started_utc=block_started.isoformat(),
+            completed_utc=datetime.now(UTC).isoformat(),
+        )
+        publish_checkpoint(args.checkpoint_dir, "block", block_key, block_payload)
+        published_blocks = discover_checkpoints(args.checkpoint_dir, "block")
+        validated_blocks = load_recovery_blocks(
+            published_blocks,
+            expected_identity=checkpoint_identity,
+            expected_selection_plan_sha256=selection_plan_sha256,
+            expected_plan=plan,
+        )
+        return sum(len(block) for block in validated_blocks.values())
+
+    def report_progress(work: RecoveryBlockWork, cell_count: int) -> None:
+        print(
+            f"recovery checkpoint: {work.method} seed={work.seed} budgets={work.budgets}; "
+            f"{cell_count} / 344 cells; {args.checkpoint_dir}"
+        )
+
+    pending = pending_recovery_blocks(plan, completed_keys=set(completed_blocks))
+    execute_pending_blocks(
+        pending,
+        completed_cell_count=completed_cell_count,
+        execute_block=execute_block,
+        report_progress=report_progress,
+    )
+    block_payloads = discover_checkpoints(args.checkpoint_dir, "block")
+    completed_blocks = load_recovery_blocks(
+        block_payloads,
+        expected_identity=checkpoint_identity,
+        expected_selection_plan_sha256=selection_plan_sha256,
+        expected_plan=plan,
+    )
+    cells = assemble_recovery_cells(
+        completed_blocks,
+        expected_sequences=[(sequence.method, sequence.seed) for sequence in plan.sequences],
+    )
     decision = decide_recovery(
         cells,
         stochastic_seeds=seeds,
@@ -164,7 +343,7 @@ def main() -> None:  # noqa: PLR0915
     truth_sha256 = hashlib.sha256(truth.coefficients.tobytes()).hexdigest()
     modes_payload = json.dumps(truth.modes, separators=(",", ":")).encode("ascii")
     payload = {
-        "schema_version": "epibudget-fourier-recovery-v1",
+        "schema_version": "epibudget-fourier-recovery-v2",
         "public_claim_eligible": False,
         "architecture_decision_eligible": architecture_decision_eligible,
         "dataset": dataset,
@@ -173,7 +352,7 @@ def main() -> None:  # noqa: PLR0915
         "candidate_composition": {"1": 76, "2": 2166, "3": 27436},
         "budgets": list(budgets),
         "stochastic_seeds": list(seeds),
-        "pairwise_coefficient_count": len(truth.coefficients),
+        "pairwise_coefficient_count": pairwise_coefficient_count,
         "pairwise_truth_sha256": truth_sha256,
         "pairwise_modes_sha256": hashlib.sha256(modes_payload).hexdigest(),
         "imputation_note": (
@@ -209,6 +388,14 @@ def main() -> None:  # noqa: PLR0915
             "input_hashes_start": input_hashes_start,
             "input_hashes_end": input_hashes_end,
             "provenance_stable": provenance_stable,
+            "session_id": session_id,
+            "selection_checkpoint_sha256": hashlib.sha256(
+                canonical_json_bytes(selection_payload)
+            ).hexdigest(),
+            "block_checkpoint_sha256": {
+                key: hashlib.sha256(canonical_json_bytes(block_payload)).hexdigest()
+                for key, block_payload in sorted(block_payloads.items())
+            },
         },
     }
     write_json_atomic(args.out, payload)

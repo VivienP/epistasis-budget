@@ -38,6 +38,7 @@ import uuid
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Final, cast
 
 import numpy as np
@@ -172,6 +173,18 @@ class Manifest:
 
 
 @dataclass(frozen=True)
+class ManifestDraft:
+    """Canonical bytes and decoded fields for one proposed manifest append."""
+
+    sequence: int
+    parent_sha256: str | None
+    entries: Mapping[str, BlobRef]
+    meta: Mapping[str, object]
+    sha256: str
+    content: bytes
+
+
+@dataclass(frozen=True)
 class StoreIssue:
     """One problem found by a non-mutating store audit."""
 
@@ -290,6 +303,7 @@ class ContentAddressedRunStore:
         if not root.is_dir():
             raise RunStoreError(f"run-store root must be an existing directory: {root}")
         self._root = root
+        self._manifest_generation = 0
 
     @property
     def root(self) -> Path:
@@ -471,6 +485,7 @@ class ContentAddressedRunStore:
                 f"{published} and {digest}"
             )
         self._publish(self._manifest_path(sequence, digest), content, "manifest", digest)
+        self._manifest_generation += 1
         return self._load_manifest(sequence, digest)
 
     def _require_current_parent(self, parent: Manifest | None) -> None:
@@ -785,6 +800,204 @@ class ContentAddressedRunStore:
         if expected_sha256 is not None and observed != expected_sha256:
             raise StoreCorruptionError(f"payload digest does not match its address: {payload_path}")
         return content
+
+
+class RunStoreSession:
+    """Append manifests from one verified tip without rescanning the historical chain.
+
+    A session is a single-writer, non-thread-safe cache. Open a new session after any ambiguous I/O
+    failure or when transferring ownership to another writer.
+    """
+
+    def __init__(self, store: ContentAddressedRunStore, manifests: tuple[Manifest, ...]) -> None:
+        self._store = store
+        self._manifests_cache = list(manifests)
+        self._observed_generation = store._manifest_generation
+        self._poisoned_reason: str | None = None
+
+    @classmethod
+    def open(cls, store: ContentAddressedRunStore) -> RunStoreSession:
+        """Verify the complete chain once and cache its current tip."""
+        store._require_header()
+        return cls(store, store.manifest_chain())
+
+    @property
+    def store(self) -> ContentAddressedRunStore:
+        """The durable store backing this session."""
+        return self._store
+
+    def latest_manifest(self) -> Manifest | None:
+        """Return the cached verified tip without filesystem access."""
+        return self._manifests_cache[-1] if self._manifests_cache else None
+
+    def manifests(self) -> tuple[Manifest, ...]:
+        """Return the cached verified chain without filesystem access."""
+        return tuple(self._manifests_cache)
+
+    def poison(self, reason: str) -> None:
+        """Prevent further drafts or writes after an uncertain session outcome."""
+        if not reason:
+            raise ValueError("poison reason must not be empty")
+        if self._poisoned_reason is None:
+            self._poisoned_reason = reason
+
+    def draft_manifest(
+        self, *, entries: Mapping[str, BlobRef], meta: Mapping[str, object]
+    ) -> ManifestDraft:
+        """Build the canonical next manifest against the cached tip."""
+        self._require_healthy()
+        parent = self.latest_manifest()
+        sequence = 0 if parent is None else parent.sequence + 1
+        parent_sha256 = None if parent is None else parent.sha256
+        entry_copy = dict(entries)
+        meta_copy = dict(meta)
+        content = canonical_json_bytes(
+            self._manifest_body(sequence, parent_sha256, entry_copy, meta_copy)
+        )
+        return ManifestDraft(
+            sequence=sequence,
+            parent_sha256=parent_sha256,
+            entries=MappingProxyType(entry_copy),
+            meta=MappingProxyType(meta_copy),
+            sha256=hashlib.sha256(content).hexdigest(),
+            content=content,
+        )
+
+    def publish_manifest(self, draft: ManifestDraft) -> Manifest:  # noqa: PLR0912
+        """Publish or recover one exact append while touching only adjacent states."""
+        self._require_healthy()
+        self._validate_draft(draft)
+        self._verify_entries(draft.entries)
+        tip = self.latest_manifest()
+        if tip is not None and draft.sequence <= tip.sequence:
+            cached = self._manifests_cache[draft.sequence]
+            if draft.sha256 != cached.sha256:
+                raise StoreDivergenceError(
+                    f"manifest sequence {draft.sequence} already holds a different state"
+                )
+            exact = self._load_session_manifest(draft.sequence, draft.sha256)
+            if (
+                exact != cached
+                or exact.parent_sha256 != draft.parent_sha256
+                or exact.entries != draft.entries
+                or exact.meta != draft.meta
+            ):
+                raise StoreCorruptionError("published manifest differs from its canonical draft")
+            return exact
+        expected_sequence = 0 if tip is None else tip.sequence + 1
+        if draft.sequence < expected_sequence:
+            raise RunStoreError("manifest draft is stale relative to the cached tip")
+        if draft.sequence > expected_sequence:
+            raise RunStoreError("manifest draft skips the cached manifest tip")
+        expected_parent = None if tip is None else tip.sha256
+        if draft.parent_sha256 != expected_parent:
+            raise RunStoreError("manifest draft has a stale or forged parent")
+        if tip is not None:
+            verified_parent = self._load_session_manifest(tip.sequence, tip.sha256)
+            if verified_parent != tip:
+                raise StoreCorruptionError("cached manifest tip no longer matches durable state")
+        if self._store._manifest_generation != self._observed_generation:
+            return self._adopt_after_generation_change(draft)
+        path = self._store._manifest_path(draft.sequence, draft.sha256)
+        marker = self._store._load_marker(path, "manifest", draft.sha256)
+        if marker is None and _marker_of(path).exists():
+            self.poison("candidate manifest has an inconsistent completion marker")
+            raise StoreCorruptionError(
+                f"completion marker is unreadable or inconsistent: {_marker_of(path)}"
+            )
+        if marker is None:
+            try:
+                self._store._publish(path, draft.content, "manifest", draft.sha256)
+            except (OSError, StoreDurabilityError) as error:
+                self.poison(f"ambiguous manifest publication failure: {error}")
+                raise
+            self._store._manifest_generation += 1
+            self._observed_generation += 1
+        try:
+            manifest = self._load_session_manifest(draft.sequence, draft.sha256)
+        except StoreCorruptionError as error:
+            self.poison(f"published manifest could not be verified: {error}")
+            raise
+        if (
+            manifest.sequence != draft.sequence
+            or manifest.parent_sha256 != draft.parent_sha256
+            or manifest.entries != draft.entries
+            or manifest.meta != draft.meta
+            or manifest.sha256 != draft.sha256
+        ):
+            self.poison("published manifest differs from its canonical draft")
+            raise StoreCorruptionError("published manifest differs from its canonical draft")
+        self._manifests_cache.append(manifest)
+        return manifest
+
+    def _require_healthy(self) -> None:
+        if self._poisoned_reason is not None:
+            raise RunStoreError(f"run-store session is poisoned: {self._poisoned_reason}")
+
+    def _adopt_after_generation_change(self, draft: ManifestDraft) -> Manifest:
+        path = self._store._manifest_path(draft.sequence, draft.sha256)
+        marker = self._store._load_marker(path, "manifest", draft.sha256)
+        if marker is None:
+            self.poison("store generation advanced without the expected manifest")
+            raise RunStoreError("run-store generation advanced; the expected manifest is absent")
+        manifest = self._load_session_manifest(draft.sequence, draft.sha256)
+        if (
+            manifest.parent_sha256 != draft.parent_sha256
+            or manifest.entries != draft.entries
+            or manifest.meta != draft.meta
+            or manifest.sha256 != draft.sha256
+        ):
+            self.poison("store generation advanced to a different manifest")
+            raise StoreCorruptionError("durable manifest differs from its canonical draft")
+        self._manifests_cache.append(manifest)
+        self._observed_generation += 1
+        return manifest
+
+    @staticmethod
+    def _manifest_body(
+        sequence: int,
+        parent_sha256: str | None,
+        entries: Mapping[str, BlobRef],
+        meta: Mapping[str, object],
+    ) -> dict[str, object]:
+        return {
+            "schema_version": _MANIFEST_SCHEMA,
+            "sequence": sequence,
+            "parent_sha256": parent_sha256,
+            "entries": {key: reference.payload() for key, reference in sorted(entries.items())},
+            "meta": dict(meta),
+        }
+
+    def _validate_draft(self, draft: ManifestDraft) -> None:
+        if type(draft.sequence) is not int or draft.sequence < 0:
+            raise RunStoreError("manifest draft has an invalid sequence")
+        if draft.parent_sha256 is not None and not _is_sha256(draft.parent_sha256):
+            raise RunStoreError("manifest draft has an invalid parent digest")
+        expected = canonical_json_bytes(
+            self._manifest_body(draft.sequence, draft.parent_sha256, draft.entries, draft.meta)
+        )
+        digest = hashlib.sha256(expected).hexdigest()
+        if draft.content != expected or draft.sha256 != digest:
+            raise RunStoreError("manifest draft is not its canonical encoding")
+
+    def _verify_entries(self, entries: Mapping[str, BlobRef]) -> None:
+        for key in sorted(entries):
+            try:
+                self._store.get_bytes(entries[key])
+            except OSError as error:
+                self.poison(f"manifest entry could not be verified: {error}")
+                raise
+            except (StoreCorruptionError, ValueError) as error:
+                raise RunStoreError(
+                    f"manifest entry {key!r} does not resolve to a verified blob: {error}"
+                ) from error
+
+    def _load_session_manifest(self, sequence: int, digest: str) -> Manifest:
+        try:
+            return self._store._load_manifest(sequence, digest)
+        except (OSError, StoreCorruptionError) as error:
+            self.poison(f"manifest could not be read reliably: {error}")
+            raise
 
 
 def _marker_of(payload_path: Path) -> Path:

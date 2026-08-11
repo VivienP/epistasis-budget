@@ -215,6 +215,53 @@ def test_validate_cache_against_universe_accepts_matching_identity(tmp_path: Pat
     )
 
 
+def test_validate_cache_against_universe_uses_only_explicit_sidecar(tmp_path: Path) -> None:
+    path = tmp_path / "cache.jsonl"
+    explicit_sidecar = tmp_path / "archived-sidecar.json"
+    candidates = [_variant(p) for p in range(3)]
+    _write_cache_and_sidecar(
+        path,
+        candidates,
+        _metadata(candidates).model_copy(update={"model_id": "wrong-adjacent-model"}),
+    )
+    write_json_exclusive(
+        explicit_sidecar,
+        _metadata(candidates).model_dump(mode="json"),
+    )
+
+    _cache, metadata, identity = validate_cache_against_universe(
+        path,
+        candidates,
+        candidate_alphabet="AC",
+        max_order=1,
+        model_id="toy-model",
+        scorer_seed=0,
+        n_perturbations=4,
+        sidecar_path=explicit_sidecar,
+    )
+
+    assert metadata.model_id == "toy-model"
+    assert identity.model_id == "toy-model"
+
+
+def test_validate_cache_against_universe_rejects_missing_explicit_sidecar(tmp_path: Path) -> None:
+    path = tmp_path / "cache.jsonl"
+    candidates = [_variant(p) for p in range(3)]
+    _write_cache_and_sidecar(path, candidates, _metadata(candidates))
+
+    with pytest.raises(ValueError, match=r"explicit-sidecar\.json"):
+        validate_cache_against_universe(
+            path,
+            candidates,
+            candidate_alphabet="AC",
+            max_order=1,
+            model_id="toy-model",
+            scorer_seed=0,
+            n_perturbations=4,
+            sidecar_path=tmp_path / "explicit-sidecar.json",
+        )
+
+
 def test_validate_cache_against_universe_rejects_wrong_model_id(tmp_path: Path) -> None:
     path = tmp_path / "cache.jsonl"
     candidates = [_variant(p) for p in range(3)]

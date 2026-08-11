@@ -8,7 +8,7 @@ positions.
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from itertools import combinations, product
 from pathlib import Path
@@ -202,7 +202,7 @@ def variant_order_composition(landscape: dict[Variant, float]) -> dict[int, int]
 
 
 def reveal_measured_fitness(
-    landscape: dict[Variant, float], selected: Sequence[Variant]
+    landscape: Mapping[Variant, float], selected: Sequence[Variant]
 ) -> dict[Variant, float]:
     """Simulated wet-lab readout: look up true fitness for exactly the selected variants.
 

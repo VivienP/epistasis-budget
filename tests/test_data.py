@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from math import comb
 from pathlib import Path
+from types import MappingProxyType
 
 import pytest
 
@@ -24,6 +25,7 @@ from epibudget.data import (
     enumerate_candidates,
     load_gb1,
     load_trpb,
+    reveal_measured_fitness,
     variant_from_sequence,
     variant_order_composition,
 )
@@ -106,6 +108,13 @@ def test_variant_order_composition_counts_by_order() -> None:
         frozenset({(38, "V", "A"), (39, "D", "C")}): 0.2,
     }
     assert variant_order_composition(landscape) == {0: 1, 1: 2, 2: 1}
+
+
+def test_reveal_measured_fitness_accepts_a_read_only_mapping() -> None:
+    variant = frozenset({(38, "V", "A")})
+    landscape = MappingProxyType({variant: 0.5})
+
+    assert reveal_measured_fitness(landscape, [variant]) == {variant: 0.5}
 
 
 def _write_csv(path: Path, rows: list[tuple[str, float]]) -> None:

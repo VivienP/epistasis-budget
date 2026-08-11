@@ -13,7 +13,6 @@ import dataclasses
 import pytest
 
 from epibudget.fourier_recovery import registered_fit_count
-from epibudget.recovery_checkpoint import REGISTERED_BUDGET_BLOCKS
 from epibudget.recovery_protocol import (
     REGISTERED_EXECUTION_POLICY,
     REGISTERED_RECOVERY_PROTOCOL,
@@ -121,12 +120,6 @@ def test_registered_fit_count_reads_the_protocol() -> None:
     assert registered_fit_count((1,), protocol.seeds) == protocol.sequence_count
     with pytest.raises(ValueError, match="unique"):
         registered_fit_count(protocol.budgets, (0, 0))
-
-
-def test_prototype_budget_blocks_come_from_the_execution_policy() -> None:
-    blocks = REGISTERED_EXECUTION_POLICY.budget_blocks(REGISTERED_RECOVERY_PROTOCOL.budgets)
-
-    assert blocks == REGISTERED_BUDGET_BLOCKS
 
 
 def test_identity_payloads_expose_both_fingerprints_separately() -> None:

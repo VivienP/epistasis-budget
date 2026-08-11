@@ -22,9 +22,12 @@ from epibudget.run_store import (
     ArrayRef,
     BlobRef,
     ContentAddressedRunStore,
+    ManifestDraft,
     RunStoreError,
+    RunStoreSession,
     StoreCorruptionError,
     StoreDivergenceError,
+    StoreDurabilityError,
     StoreReport,
     canonical_json_bytes,
 )
@@ -603,3 +606,349 @@ def test_an_empty_store_reports_no_state(tmp_path: Path) -> None:
     assert report.manifest_count == 0
     assert report.latest_sequence is None
     assert report.is_clean is True
+
+
+# -- append sessions ---------------------------------------------------------------
+
+
+def test_session_opens_with_one_chain_scan_then_appends_without_old_scans(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = _store(tmp_path)
+    blob = store.put_json({"step": 1})
+    first = store.publish_manifest(entries={"a": blob}, meta={"n": 1}, parent=None)
+    second = store.publish_manifest(entries={"a": blob}, meta={"n": 2}, parent=first)
+    load_count = 0
+    original_load = store._load_manifest
+
+    def counted_load(sequence: int, digest: str):  # type: ignore[no-untyped-def]
+        nonlocal load_count
+        load_count += 1
+        return original_load(sequence, digest)
+
+    monkeypatch.setattr(store, "_load_manifest", counted_load)
+    session = RunStoreSession.open(store)
+
+    assert load_count == 2
+    monkeypatch.setattr(
+        store,
+        "manifest_chain",
+        lambda: (_ for _ in ()).throw(AssertionError("full chain rescan")),
+    )
+    monkeypatch.setattr(
+        store,
+        "_manifest_index",
+        lambda: (_ for _ in ()).throw(AssertionError("manifest index rescan")),
+    )
+    monkeypatch.setattr(
+        store,
+        "_manifest_payloads",
+        lambda: (_ for _ in ()).throw(AssertionError("manifest directory enumeration")),
+    )
+    monkeypatch.setattr(
+        store,
+        "_marked_manifests",
+        lambda: (_ for _ in ()).throw(AssertionError("marked manifest enumeration")),
+    )
+    original_glob = Path.glob
+
+    def reject_manifest_glob(self: Path, pattern: str):  # type: ignore[no-untyped-def]
+        if self == tmp_path / "manifests":
+            raise AssertionError("manifest directory glob")
+        return original_glob(self, pattern)
+
+    monkeypatch.setattr(Path, "glob", reject_manifest_glob)
+    third = session.publish_manifest(session.draft_manifest(entries={"a": blob}, meta={"n": 3}))
+    fourth = session.publish_manifest(session.draft_manifest(entries={"a": blob}, meta={"n": 4}))
+
+    assert load_count == 6
+    assert session.latest_manifest() == fourth
+    assert session.manifests() == (first, second, third, fourth)
+
+
+def test_session_draft_is_canonical_and_exact_retry_is_idempotent(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    blob = store.put_json({"step": 1})
+    session = RunStoreSession.open(store)
+    draft = session.draft_manifest(entries={"a": blob}, meta={"n": 1})
+
+    assert isinstance(draft, ManifestDraft)
+    assert session.store is store
+    first = session.publish_manifest(draft)
+    retried = session.publish_manifest(draft)
+
+    assert retried == first
+    assert session.manifests() == (first,)
+
+
+def test_session_accepts_old_exact_drafts_and_rejects_divergent_and_stale_drafts(
+    tmp_path: Path,
+) -> None:
+    store = _store(tmp_path)
+    blob = store.put_json({"step": 1})
+    session = RunStoreSession.open(store)
+    first = session.draft_manifest(entries={"a": blob}, meta={"n": 1})
+    rival = session.draft_manifest(entries={"a": blob}, meta={"n": 2})
+    session.publish_manifest(first)
+
+    with pytest.raises(StoreDivergenceError, match="different state"):
+        session.publish_manifest(rival)
+
+    second = session.draft_manifest(entries={"a": blob}, meta={"n": 2})
+    session.publish_manifest(second)
+    assert session.publish_manifest(first) == session.manifests()[0]
+
+    other_root = tmp_path / "other"
+    other_root.mkdir()
+    other = _store(other_root)
+    other_blob = other.put_json({"step": 1})
+    other_session = RunStoreSession.open(other)
+    for value in range(3):
+        other_session.publish_manifest(
+            other_session.draft_manifest(entries={"a": other_blob}, meta={"other": value})
+        )
+    stale = other_session.draft_manifest(entries={"a": other_blob}, meta={"other": 3})
+    with pytest.raises(RunStoreError, match="skips"):
+        session.publish_manifest(stale)
+
+
+def test_session_rejects_a_forged_manifest_draft_before_publication(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    blob = store.put_json({"step": 1})
+    session = RunStoreSession.open(store)
+    honest = session.draft_manifest(entries={"a": blob}, meta={"n": 1})
+    forged = ManifestDraft(
+        sequence=honest.sequence,
+        parent_sha256=honest.parent_sha256,
+        entries=honest.entries,
+        meta={"n": 9},
+        sha256=honest.sha256,
+        content=honest.content,
+    )
+
+    with pytest.raises(RunStoreError, match="canonical"):
+        session.publish_manifest(forged)
+    assert not list((tmp_path / "manifests").glob("*.manifest.json"))
+
+
+def test_session_can_be_explicitly_poisoned(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    blob = store.put_json({"step": 1})
+    session = RunStoreSession.open(store)
+
+    session.poison("writer ownership is uncertain")
+
+    with pytest.raises(RunStoreError, match="ownership is uncertain"):
+        session.draft_manifest(entries={"a": blob}, meta={"n": 1})
+
+
+def test_external_divergent_writers_are_detected_on_full_reopen(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    blob = store.put_json({"step": 1})
+    writer_a = RunStoreSession.open(store)
+    writer_b = RunStoreSession.open(ContentAddressedRunStore(tmp_path))
+    exact_a = writer_a.draft_manifest(entries={"a": blob}, meta={"n": 1})
+    rival_b = writer_b.draft_manifest(entries={"a": blob}, meta={"n": 2})
+
+    writer_a.publish_manifest(exact_a)
+    writer_b.publish_manifest(rival_b)
+
+    with pytest.raises(StoreDivergenceError, match="different state"):
+        RunStoreSession.open(store)
+
+
+def test_stale_external_writer_is_detected_when_it_creates_a_later_divergence(
+    tmp_path: Path,
+) -> None:
+    store = _store(tmp_path)
+    blob = store.put_json({"step": 1})
+    current = RunStoreSession.open(store)
+    stale = RunStoreSession.open(ContentAddressedRunStore(tmp_path))
+    first_draft = stale.draft_manifest(entries={"a": blob}, meta={"n": 1})
+    current.publish_manifest(current.draft_manifest(entries={"a": blob}, meta={"n": 1}))
+    current.publish_manifest(current.draft_manifest(entries={"a": blob}, meta={"n": 2}))
+
+    stale.publish_manifest(first_draft)
+    stale.publish_manifest(stale.draft_manifest(entries={"a": blob}, meta={"n": 99}))
+
+    with pytest.raises(StoreDivergenceError, match="different state"):
+        RunStoreSession.open(store)
+
+
+def test_shared_generation_allows_exact_adoption_and_blocks_a_stale_rival(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = _store(tmp_path)
+    blob = store.put_json({"step": 1})
+    writer_a = RunStoreSession.open(store)
+    writer_b = RunStoreSession.open(store)
+    exact_a = writer_a.draft_manifest(entries={"a": blob}, meta={"n": 1})
+    exact_b = writer_b.draft_manifest(entries={"a": blob}, meta={"n": 1})
+    monkeypatch.setattr(
+        store,
+        "manifest_chain",
+        lambda: (_ for _ in ()).throw(AssertionError("full chain rescan")),
+    )
+    monkeypatch.setattr(
+        store,
+        "_manifest_index",
+        lambda: (_ for _ in ()).throw(AssertionError("manifest index rescan")),
+    )
+    monkeypatch.setattr(
+        store,
+        "_manifest_payloads",
+        lambda: (_ for _ in ()).throw(AssertionError("manifest directory enumeration")),
+    )
+    monkeypatch.setattr(
+        store,
+        "_marked_manifests",
+        lambda: (_ for _ in ()).throw(AssertionError("marked manifest enumeration")),
+    )
+
+    first = writer_a.publish_manifest(exact_a)
+    writer_a.publish_manifest(writer_a.draft_manifest(entries={"a": blob}, meta={"n": 2}))
+    assert writer_b.publish_manifest(exact_b) == first
+    rival = writer_b.draft_manifest(entries={"a": blob}, meta={"n": 99})
+
+    with pytest.raises(RunStoreError, match="generation"):
+        writer_b.publish_manifest(rival)
+
+    assert not store._manifest_path(rival.sequence, rival.sha256).exists()
+    with pytest.raises(RunStoreError, match="poisoned"):
+        writer_b.publish_manifest(rival)
+
+
+def test_session_appends_into_one_internal_list_without_rebuilding_history(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    blob = store.put_json({"step": 1})
+    session = RunStoreSession.open(store)
+    history = session._manifests_cache
+
+    for value in range(20):
+        session.publish_manifest(session.draft_manifest(entries={"a": blob}, meta={"n": value}))
+
+    assert session._manifests_cache is history
+    assert isinstance(history, list)
+    assert len(history) == 20
+
+
+def test_session_verifies_entries_and_immediate_parent_before_append(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    blob = store.put_json({"step": 1})
+    session = RunStoreSession.open(store)
+    first = session.publish_manifest(session.draft_manifest(entries={"a": blob}, meta={"n": 1}))
+    draft = session.draft_manifest(entries={"a": blob}, meta={"n": 2})
+    _only_blob(tmp_path).write_bytes(b"tampered")
+
+    with pytest.raises(RunStoreError, match="does not resolve"):
+        session.publish_manifest(draft)
+
+    _retamper(_only_blob(tmp_path), canonical_json_bytes({"step": 1}), "blob")
+    parent_path = store._manifest_path(first.sequence, first.sha256)
+    parent_path.write_bytes(b"tampered")
+    with pytest.raises(StoreCorruptionError):
+        session.publish_manifest(draft)
+
+
+def test_session_is_poisoned_after_ambiguous_publication_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = _store(tmp_path)
+    blob = store.put_json({"step": 1})
+    session = RunStoreSession.open(store)
+    draft = session.draft_manifest(entries={"a": blob}, meta={"n": 1})
+
+    def ambiguous(*args: object, **kwargs: object) -> None:
+        raise StoreDurabilityError("publication outcome unknown")
+
+    monkeypatch.setattr(store, "_publish", ambiguous)
+    with pytest.raises(StoreDurabilityError, match="unknown"):
+        session.publish_manifest(draft)
+    with pytest.raises(RunStoreError, match="poisoned"):
+        session.draft_manifest(entries={"a": blob}, meta={"n": 2})
+
+
+def test_session_does_not_adopt_a_manifest_it_cannot_reread(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = _store(tmp_path)
+    blob = store.put_json({"step": 1})
+    session = RunStoreSession.open(store)
+    draft = session.draft_manifest(entries={"a": blob}, meta={"n": 1})
+    original_load = store._load_manifest
+    loads = 0
+
+    def fail_published_read(sequence: int, digest: str):  # type: ignore[no-untyped-def]
+        nonlocal loads
+        loads += 1
+        if loads == 1:
+            raise OSError("remote read failed")
+        return original_load(sequence, digest)
+
+    monkeypatch.setattr(store, "_load_manifest", fail_published_read)
+    with pytest.raises(OSError, match="remote read"):
+        session.publish_manifest(draft)
+
+    assert session.latest_manifest() is None
+    with pytest.raises(RunStoreError, match="poisoned"):
+        session.publish_manifest(draft)
+
+
+def test_new_session_recovers_crashes_before_and_after_manifest_marker(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = _store(tmp_path)
+    blob = store.put_json({"step": 1})
+    before = RunStoreSession.open(store)
+    draft = before.draft_manifest(entries={"a": blob}, meta={"n": 1})
+    content = draft.content
+    payload_path = store._manifest_path(draft.sequence, draft.sha256)
+
+    def crash_before_marker(*args: object, **kwargs: object) -> None:
+        payload_path.parent.mkdir(parents=True, exist_ok=True)
+        payload_path.write_bytes(content)
+        raise OSError("crash before marker")
+
+    monkeypatch.setattr(store, "_publish", crash_before_marker)
+    with pytest.raises(OSError, match="before marker"):
+        before.publish_manifest(draft)
+
+    monkeypatch.undo()
+    recovered = RunStoreSession.open(store)
+    first = recovered.publish_manifest(draft)
+
+    after = RunStoreSession.open(store)
+    second_draft = after.draft_manifest(entries={"a": blob}, meta={"n": 2})
+    original_publish = store._publish
+
+    def crash_after_marker(*args: object, **kwargs: object) -> None:
+        original_publish(*args, **kwargs)
+        raise OSError("crash after marker")
+
+    monkeypatch.setattr(store, "_publish", crash_after_marker)
+    with pytest.raises(OSError, match="after marker"):
+        after.publish_manifest(second_draft)
+
+    monkeypatch.undo()
+    final = RunStoreSession.open(store)
+    assert final.manifests()[0] == first
+    assert final.latest_manifest() == final.publish_manifest(second_draft)
+
+
+def test_session_cached_reads_do_not_mutate_or_rescan_store(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = _store(tmp_path)
+    blob = store.put_json({"step": 1})
+    first = store.publish_manifest(entries={"a": blob}, meta={"n": 1}, parent=None)
+    session = RunStoreSession.open(store)
+    before = _snapshot(tmp_path)
+    monkeypatch.setattr(
+        store,
+        "manifest_chain",
+        lambda: (_ for _ in ()).throw(AssertionError("unexpected rescan")),
+    )
+
+    assert session.latest_manifest() == first
+    assert session.manifests() == (first,)
+    assert _snapshot(tmp_path) == before

@@ -12,6 +12,7 @@ stability is asserted separately by re-running each computation in the same proc
 
 from __future__ import annotations
 
+import inspect
 from itertools import product
 
 import numpy as np
@@ -19,11 +20,16 @@ import pytest
 
 from epibudget.coeff_recovery import _build_fourier_config, _design_matrix, _site_indices
 from epibudget.fourier_recovery import (
+    ReducedDOptimalState,
     _sequence_sha256,
+    advance_reduced_doptimal,
     build_selection_plan,
     coefficient_metrics,
     fit_pairwise_lasso,
+    initialise_reduced_doptimal,
     reduced_doptimal_order,
+    selected_reduced_doptimal,
+    validate_completed_reduced_doptimal_state,
 )
 from epibudget.recovery_protocol import (
     REGISTERED_EXECUTION_POLICY,
@@ -146,6 +152,121 @@ def test_reduced_doptimal_order_is_bitwise_repeatable() -> None:
     second = reduced_doptimal_order(config, pool, budget=_DOPTIMAL_BUDGET)
 
     assert first == second
+
+
+def test_reduced_doptimal_state_resumes_bitwise_at_the_frozen_boundary() -> None:
+    pool = [variant for variant in _all_genotypes() if variant]
+    config = _build_fourier_config(_SITES, _WT, _Q3, max_order=2)
+    direct = initialise_reduced_doptimal(config, pool, target_budget=_DOPTIMAL_BUDGET)
+    advance_reduced_doptimal(direct, _DOPTIMAL_BUDGET)
+
+    checkpointed = initialise_reduced_doptimal(config, pool, target_budget=_DOPTIMAL_BUDGET)
+    advance_reduced_doptimal(checkpointed, REGISTERED_EXECUTION_POLICY.doptimal_block_size)
+    restored = ReducedDOptimalState(
+        candidates=checkpointed.candidates,
+        site_indices=checkpointed.site_indices.copy(order="C"),
+        q=checkpointed.q,
+        population_size=checkpointed.population_size,
+        target_budget=checkpointed.target_budget,
+        selected_indices=list(checkpointed.selected_indices),
+        posterior_variance=checkpointed.posterior_variance.copy(order="C"),
+        updates=checkpointed.updates.copy(order="C"),
+    )
+    advance_reduced_doptimal(restored, _DOPTIMAL_BUDGET)
+
+    assert _sequence_sha256(selected_reduced_doptimal(restored)) == _DOPTIMAL_SHA256
+    assert selected_reduced_doptimal(restored) == selected_reduced_doptimal(direct)
+    assert restored.posterior_variance.tobytes() == direct.posterior_variance.tobytes()
+    assert restored.updates.tobytes() == direct.updates.tobytes()
+
+
+def test_selection_plan_accepts_the_resumed_doptimal_order_without_numeric_drift() -> None:
+    scored = _scored_candidates()
+    variants = [item.variant for item in scored]
+    site_positions = sorted({mutation[0] for variant in variants for mutation in variant})
+    config = _build_fourier_config(site_positions, _WT, _Q3, max_order=2)
+    state = initialise_reduced_doptimal(config, variants, target_budget=_PLAN_BUDGETS[-1])
+    advance_reduced_doptimal(state, _PLAN_BUDGETS[-1])
+
+    plan = build_selection_plan(
+        scored,
+        budgets=_PLAN_BUDGETS,
+        seeds=_PLAN_SEEDS,
+        max_order=REGISTERED_RECOVERY_PROTOCOL.selection_max_order,
+        doptimal_state=state,
+    )
+
+    observed = {
+        (sequence.method, sequence.seed): sequence.selected_sha256 for sequence in plan.sequences
+    }
+    assert observed == _PLAN_SEQUENCE_SHA256
+
+
+def test_completed_doptimal_state_rejects_a_mutated_pivot_order() -> None:
+    scored = _scored_candidates()
+    variants = [item.variant for item in scored]
+    state = initialise_reduced_doptimal(
+        _build_fourier_config(_SITES, _WT, _Q3, max_order=2),
+        variants,
+        target_budget=_PLAN_BUDGETS[-1],
+    )
+    advance_reduced_doptimal(state, _PLAN_BUDGETS[-1])
+    validate_completed_reduced_doptimal_state(state)
+    state.selected_indices[0], state.selected_indices[1] = (
+        state.selected_indices[1],
+        state.selected_indices[0],
+    )
+
+    with pytest.raises(ValueError, match="variance argmax"):
+        validate_completed_reduced_doptimal_state(state)
+    with pytest.raises(ValueError, match="variance argmax"):
+        build_selection_plan(
+            scored,
+            budgets=_PLAN_BUDGETS,
+            seeds=_PLAN_SEEDS,
+            max_order=REGISTERED_RECOVERY_PROTOCOL.selection_max_order,
+            doptimal_state=state,
+        )
+
+
+def test_selection_plan_rejects_a_raw_doptimal_permutation() -> None:
+    scored = _scored_candidates()
+    raw_order = tuple(item.variant for item in scored[: _PLAN_BUDGETS[-1]])
+
+    assert "doptimal_order" not in inspect.signature(build_selection_plan).parameters
+    with pytest.raises(TypeError, match="D-optimal state"):
+        build_selection_plan(
+            scored,
+            budgets=_PLAN_BUDGETS,
+            seeds=_PLAN_SEEDS,
+            max_order=REGISTERED_RECOVERY_PROTOCOL.selection_max_order,
+            doptimal_state=raw_order,  # type: ignore[arg-type]
+        )
+
+
+@pytest.mark.parametrize("damage", ["incomplete", "candidate_pool"])
+def test_selection_plan_rejects_an_incompatible_doptimal_state(damage: str) -> None:
+    scored = _scored_candidates()
+    variants = [item.variant for item in scored]
+    candidates = variants if damage == "incomplete" else variants[:-1]
+    state = initialise_reduced_doptimal(
+        _build_fourier_config(_SITES, _WT, _Q3, max_order=2),
+        candidates,
+        target_budget=_PLAN_BUDGETS[-1],
+    )
+    advance_reduced_doptimal(
+        state,
+        _PLAN_BUDGETS[-1] - 1 if damage == "incomplete" else _PLAN_BUDGETS[-1],
+    )
+
+    with pytest.raises(ValueError, match=r"complete|candidate pool"):
+        build_selection_plan(
+            scored,
+            budgets=_PLAN_BUDGETS,
+            seeds=_PLAN_SEEDS,
+            max_order=REGISTERED_RECOVERY_PROTOCOL.selection_max_order,
+            doptimal_state=state,
+        )
 
 
 def test_selection_plan_matches_the_frozen_oracle() -> None:

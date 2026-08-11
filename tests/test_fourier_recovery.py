@@ -5,22 +5,29 @@
 from __future__ import annotations
 
 import inspect
+from collections.abc import Iterator, Mapping
+from dataclasses import replace
 from itertools import product
 
 import numpy as np
 import pytest
 
+import epibudget.fourier_recovery as fourier_recovery_module
 from epibudget.coeff_recovery import _build_fourier_config, _design_matrix, _site_indices
 from epibudget.fourier_recovery import (
+    PairwiseLassoCVState,
+    PairwiseLassoFit,
     RecoveryCell,
     benchmark_doptimal_prefix,
     benchmark_synthetic_fit,
     build_selection_plan,
     coefficient_metrics,
     decide_recovery,
+    doptimal_resumable_peak_bytes,
     doptimal_workspace_bytes,
     evaluate_plate,
     fit_pairwise_lasso,
+    pairwise_lasso_problem_sha256,
     pairwise_truth,
     reduced_doptimal_order,
     registered_fit_count,
@@ -141,6 +148,427 @@ def test_pairwise_lasso_rejects_constant_response() -> None:
         fit_pairwise_lasso(config, genotypes, np.ones(len(genotypes)), n_folds=5)
 
 
+def test_pairwise_lasso_resumes_every_completed_fold_bitwise() -> None:
+    genotypes, response, _truth, _modes = _sparse_pairwise_fixture()
+    measured = genotypes[:70]
+    measured_response = response[:70]
+    config = _build_fourier_config(_SITES, _WT, _Q3, max_order=2)
+    snapshots: list[PairwiseLassoCVState] = []
+
+    oracle = fit_pairwise_lasso(
+        config,
+        measured,
+        measured_response,
+        n_folds=5,
+        on_fold_completed=snapshots.append,
+    )
+
+    assert [state.completed_folds for state in snapshots] == [1, 2, 3, 4, 5]
+    for state in snapshots:
+        resumed = fit_pairwise_lasso(
+            config,
+            measured,
+            measured_response,
+            n_folds=5,
+            resume_cv=state,
+        )
+        assert resumed.pairwise_coefficients.tobytes() == oracle.pairwise_coefficients.tobytes()
+        assert resumed.lambda_ratio == oracle.lambda_ratio
+        assert resumed.lambda_value == oracle.lambda_value
+        assert resumed.support_size == oracle.support_size
+        assert resumed.converged is oracle.converged
+
+
+def test_lasso_problem_digest_binds_every_numeric_problem_input() -> None:
+    genotypes, response, _truth, _modes = _sparse_pairwise_fixture()
+    measured = genotypes[:70]
+    measured_response = response[:70]
+    config = _build_fourier_config(_SITES, _WT, _Q3, max_order=2)
+    ratios = (1.0, 0.1)
+    expected = pairwise_lasso_problem_sha256(
+        config, measured, measured_response, n_folds=5, lambda_ratios=ratios
+    )
+
+    changed_response = measured_response.copy()
+    changed_response[0] = np.nextafter(changed_response[0], np.inf)
+    swapped = list(measured)
+    swapped[0], swapped[1] = swapped[1], swapped[0]
+    changed_basis = config.basis.copy()
+    changed_basis[0, 0] = np.nextafter(changed_basis[0, 0], np.inf)
+    changed_config = replace(config, basis=changed_basis)
+
+    assert (
+        pairwise_lasso_problem_sha256(
+            config, measured, measured_response, n_folds=5, lambda_ratios=ratios
+        )
+        == expected
+    )
+    assert (
+        pairwise_lasso_problem_sha256(
+            config, measured, changed_response, n_folds=5, lambda_ratios=ratios
+        )
+        != expected
+    )
+    assert (
+        pairwise_lasso_problem_sha256(
+            config, swapped, measured_response, n_folds=5, lambda_ratios=ratios
+        )
+        != expected
+    )
+    assert (
+        pairwise_lasso_problem_sha256(
+            changed_config, measured, measured_response, n_folds=5, lambda_ratios=ratios
+        )
+        != expected
+    )
+    assert (
+        pairwise_lasso_problem_sha256(
+            config, measured, measured_response, n_folds=4, lambda_ratios=ratios
+        )
+        != expected
+    )
+    assert (
+        pairwise_lasso_problem_sha256(
+            config, measured, measured_response, n_folds=5, lambda_ratios=(1.0, 0.01)
+        )
+        != expected
+    )
+
+
+def test_pairwise_lasso_rejects_resume_from_another_response_or_fold_assignment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    genotypes, response, _truth, _modes = _sparse_pairwise_fixture()
+    measured = genotypes[:70]
+    measured_response = response[:70]
+    config = _build_fourier_config(_SITES, _WT, _Q3, max_order=2)
+    snapshots: list[PairwiseLassoCVState] = []
+    fit_pairwise_lasso(config, measured, measured_response, on_fold_completed=snapshots.append)
+
+    changed_response = measured_response.copy()
+    changed_response[0] = np.nextafter(changed_response[0], np.inf)
+    with pytest.raises(ValueError, match="problem"):
+        fit_pairwise_lasso(config, measured, changed_response, resume_cv=snapshots[0])
+
+    changed_basis = config.basis.copy()
+    changed_basis[0, 0] = np.nextafter(changed_basis[0, 0], np.inf)
+    with pytest.raises(ValueError, match="problem"):
+        fit_pairwise_lasso(
+            replace(config, basis=changed_basis),
+            measured,
+            measured_response,
+            resume_cv=snapshots[0],
+        )
+
+    swapped = list(measured)
+    swapped[0], swapped[1] = swapped[1], swapped[0]
+    swapped_response = measured_response.copy()
+    swapped_response[0], swapped_response[1] = (
+        swapped_response[1],
+        swapped_response[0],
+    )
+    with pytest.raises(ValueError, match="problem"):
+        fit_pairwise_lasso(config, swapped, swapped_response, resume_cv=snapshots[0])
+
+    original_fold = fourier_recovery_module.variant_fold
+    monkeypatch.setattr(
+        fourier_recovery_module,
+        "variant_fold",
+        lambda variant, n_folds: (original_fold(variant, n_folds) + 1) % n_folds,
+    )
+    with pytest.raises(ValueError, match="problem"):
+        fit_pairwise_lasso(config, measured, measured_response, resume_cv=snapshots[0])
+
+
+def test_resume_solves_with_the_same_fold_assignments_bound_by_the_digest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    genotypes, response, _truth, _modes = _sparse_pairwise_fixture()
+    measured = genotypes[:70]
+    measured_response = response[:70]
+    config = _build_fourier_config(_SITES, _WT, _Q3, max_order=2)
+    snapshots: list[PairwiseLassoCVState] = []
+    oracle = fit_pairwise_lasso(
+        config, measured, measured_response, on_fold_completed=snapshots.append
+    )
+    original_fold = fourier_recovery_module.variant_fold
+    calls = 0
+
+    def unstable_fold(variant: Variant, n_folds: int) -> int:
+        nonlocal calls
+        calls += 1
+        fold = original_fold(variant, n_folds)
+        return fold if calls <= len(measured) else (fold + 1) % n_folds
+
+    monkeypatch.setattr(fourier_recovery_module, "variant_fold", unstable_fold)
+
+    resumed = fit_pairwise_lasso(config, measured, measured_response, resume_cv=snapshots[0])
+
+    assert calls == len(measured)
+    assert resumed.pairwise_coefficients.tobytes() == oracle.pairwise_coefficients.tobytes()
+
+
+def test_lasso_callback_snapshots_are_independent_and_read_only() -> None:
+    genotypes, response, _truth, _modes = _sparse_pairwise_fixture()
+    config = _build_fourier_config(_SITES, _WT, _Q3, max_order=2)
+    snapshots: list[PairwiseLassoCVState] = []
+
+    fit_pairwise_lasso(config, genotypes[:70], response[:70], on_fold_completed=snapshots.append)
+
+    assert all(not state.cv_sse.flags.writeable for state in snapshots)
+    assert all(
+        snapshots[index].cv_sse is not snapshots[index + 1].cv_sse
+        for index in range(len(snapshots) - 1)
+    )
+    with pytest.raises(ValueError, match="read-only"):
+        snapshots[0].cv_sse[0] = 0.0
+    with pytest.raises(ValueError, match="WRITEABLE"):
+        snapshots[0].cv_sse.setflags(write=True)
+
+
+@pytest.mark.parametrize(
+    "changes, message",
+    [
+        ({"completed_folds": -1}, "completed folds"),
+        ({"completed_folds": 6}, "completed folds"),
+        ({"n_folds": 1}, "fold count"),
+        ({"lambda_ratios": ()}, "lambda ratios"),
+        ({"lambda_ratios": (1.0, np.nan)}, "lambda ratios"),
+        ({"cv_sse": np.zeros(1, dtype=np.float64)}, "shape"),
+        ({"cv_sse": np.zeros(2, dtype=np.float32)}, "float64"),
+        ({"cv_sse": np.array([0.0, -1.0], dtype=np.float64)}, "nonnegative"),
+        ({"cv_sse": np.array([0.0, np.inf], dtype=np.float64)}, "finite"),
+        ({"converged": 1}, "converged"),
+        ({"problem_sha256": "not-a-digest"}, "problem SHA"),
+    ],
+)
+def test_lasso_cv_state_rejects_malformed_snapshots(
+    changes: dict[str, object], message: str
+) -> None:
+    values: dict[str, object] = {
+        "problem_sha256": "a" * 64,
+        "completed_folds": 1,
+        "n_folds": 5,
+        "lambda_ratios": (1.0, 0.1),
+        "cv_sse": np.zeros(2, dtype=np.float64),
+        "converged": True,
+    }
+    values.update(changes)
+
+    with pytest.raises((TypeError, ValueError), match=message):
+        PairwiseLassoCVState(**values)  # type: ignore[arg-type]
+
+
+def test_pairwise_lasso_rejects_an_incompatible_resume_state() -> None:
+    genotypes, response, _truth, _modes = _sparse_pairwise_fixture()
+    config = _build_fourier_config(_SITES, _WT, _Q3, max_order=2)
+    state = PairwiseLassoCVState(
+        problem_sha256="a" * 64,
+        completed_folds=1,
+        n_folds=5,
+        lambda_ratios=(1.0, 0.1),
+        cv_sse=np.zeros(2, dtype=np.float64),
+        converged=True,
+    )
+
+    with pytest.raises(ValueError, match="lambda ratios"):
+        fit_pairwise_lasso(
+            config,
+            genotypes[:70],
+            response[:70],
+            n_folds=5,
+            lambda_ratios=(1.0, 0.01),
+            resume_cv=state,
+        )
+
+
+def test_completed_cv_performs_zero_fold_solves_and_exactly_one_refit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    genotypes, response, _truth, _modes = _sparse_pairwise_fixture()
+    config = _build_fourier_config(_SITES, _WT, _Q3, max_order=2)
+    snapshots: list[PairwiseLassoCVState] = []
+    fit_pairwise_lasso(config, genotypes[:70], response[:70], on_fold_completed=snapshots.append)
+
+    original_solver = fourier_recovery_module._fista_lasso_path_with_status
+    calls: list[tuple[int, int]] = []
+
+    def counted_solver(
+        design: np.ndarray, target: np.ndarray, path: list[float]
+    ) -> tuple[list[np.ndarray], bool]:
+        calls.append((design.shape[0], len(path)))
+        return original_solver(design, target, path)
+
+    monkeypatch.setattr(fourier_recovery_module, "_fista_lasso_path_with_status", counted_solver)
+
+    fit_pairwise_lasso(config, genotypes[:70], response[:70], resume_cv=snapshots[-1])
+
+    assert len(calls) == 1
+    assert calls[0][0] == len(genotypes[:70])
+
+
+def test_last_fold_callback_precedes_refit_and_callback_exception_stops(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    genotypes, response, _truth, _modes = _sparse_pairwise_fixture()
+    config = _build_fourier_config(_SITES, _WT, _Q3, max_order=2)
+    original = fourier_recovery_module._fista_lasso_path_with_status
+    events: list[tuple[str, int]] = []
+
+    def observed_solver(
+        design: np.ndarray, target: np.ndarray, path: list[float]
+    ) -> tuple[list[np.ndarray], bool]:
+        events.append(("solve", len(path)))
+        return original(design, target, path)
+
+    monkeypatch.setattr(fourier_recovery_module, "_fista_lasso_path_with_status", observed_solver)
+
+    fit_pairwise_lasso(
+        config,
+        genotypes[:70],
+        response[:70],
+        on_fold_completed=lambda state: events.append(("fold", state.completed_folds)),
+    )
+
+    assert events[-2] == ("fold", 5)
+    assert events[-1][0] == "solve"
+    events.clear()
+
+    def crash(state: PairwiseLassoCVState) -> None:
+        events.append(("fold", state.completed_folds))
+        raise RuntimeError("simulated checkpoint crash")
+
+    with pytest.raises(RuntimeError, match="simulated checkpoint crash"):
+        fit_pairwise_lasso(config, genotypes[:70], response[:70], on_fold_completed=crash)
+    assert events == [("solve", 20), ("fold", 1)]
+
+
+def test_lasso_keeps_first_minimum_and_propagates_nonconvergence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    genotypes, response, _truth, _modes = _sparse_pairwise_fixture()
+    config = _build_fourier_config(_SITES, _WT, _Q3, max_order=2)
+    snapshots: list[PairwiseLassoCVState] = []
+
+    def tied_nonconverged_path(
+        design: np.ndarray, _target: np.ndarray, path: list[float]
+    ) -> tuple[list[np.ndarray], bool]:
+        return [np.zeros(design.shape[1], dtype=np.float64) for _ in path], False
+
+    monkeypatch.setattr(
+        fourier_recovery_module,
+        "_fista_lasso_path_with_status",
+        tied_nonconverged_path,
+    )
+    fit = fit_pairwise_lasso(
+        config,
+        genotypes[:70],
+        response[:70],
+        lambda_ratios=(1.0, 0.1),
+        on_fold_completed=snapshots.append,
+    )
+
+    assert fit.lambda_ratio == 1.0
+    assert fit.converged is False
+    assert snapshots[-1].converged is False
+
+
+def test_evaluate_plate_does_not_copy_or_iterate_the_full_landscape() -> None:
+    genotypes, response, truth, _modes = _sparse_pairwise_fixture()
+    selected = genotypes[:70]
+    fitness = np.expm1(response - float(np.min(response)) + 0.1)
+
+    class NonIterableLandscape(Mapping[Variant, float]):
+        def __getitem__(self, key: Variant) -> float:
+            return float(fitness[genotypes.index(key)])
+
+        def __iter__(self) -> Iterator[Variant]:
+            raise AssertionError("evaluate_plate iterated the full landscape")
+
+        def __len__(self) -> int:
+            return len(genotypes)
+
+        def __contains__(self, key: object) -> bool:
+            return key in genotypes
+
+    cell = evaluate_plate(
+        _build_fourier_config(_SITES, _WT, _Q3, max_order=2),
+        selected,
+        NonIterableLandscape(),
+        truth,
+        method="info",
+        seed=None,
+        budget=len(selected),
+        n_folds=5,
+    )
+
+    assert cell.selected_sha256
+
+
+def test_evaluate_plate_threads_lasso_resume_and_fold_callback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    genotypes, response, truth, _modes = _sparse_pairwise_fixture()
+    selected = genotypes[:70]
+    fitness = np.expm1(response[:70] - float(np.min(response[:70])) + 0.1)
+    resume = PairwiseLassoCVState(
+        problem_sha256="a" * 64,
+        completed_folds=1,
+        n_folds=5,
+        lambda_ratios=(1.0,),
+        cv_sse=np.array([1.0], dtype=np.float64),
+        converged=True,
+    )
+    observed: dict[str, object] = {}
+
+    def fake_fit(
+        _config: object,
+        _selected: object,
+        _response: object,
+        *,
+        n_folds: int,
+        resume_cv: PairwiseLassoCVState | None,
+        on_fold_completed: object,
+    ) -> PairwiseLassoFit:
+        observed.update(
+            n_folds=n_folds,
+            resume_cv=resume_cv,
+            on_fold_completed=on_fold_completed,
+        )
+        return PairwiseLassoFit(
+            pairwise_coefficients=np.zeros_like(truth),
+            lambda_ratio=1.0,
+            lambda_value=0.0,
+            support_size=0,
+            converged=True,
+        )
+
+    def callback(_state: PairwiseLassoCVState) -> None:
+        return None
+
+    monkeypatch.setattr(fourier_recovery_module, "fit_pairwise_lasso", fake_fit)
+    landscape = dict(zip(selected, fitness, strict=True))
+
+    evaluate_plate(
+        _build_fourier_config(_SITES, _WT, _Q3, max_order=2),
+        selected,
+        landscape,
+        truth,
+        method="info",
+        seed=None,
+        budget=len(selected),
+        n_folds=5,
+        resume_cv=resume,
+        on_fold_completed=callback,
+    )
+
+    assert observed == {
+        "n_folds": 5,
+        "resume_cv": resume,
+        "on_fold_completed": callback,
+    }
+
+
 def test_selection_plan_is_label_free_prefix_consistent_and_order_invariant() -> None:
     candidates = [variant for variant in _all_genotypes() if 1 <= len(variant) <= 3]
     scored = [
@@ -184,6 +612,9 @@ def test_registered_runtime_dimensions_are_explicit() -> None:
 
     assert registered_fit_count(budgets, seeds) == 344
     assert doptimal_workspace_bytes(29_678, 3_072) == 729_366_528
+    assert doptimal_resumable_peak_bytes(29_678, 3_072, 64) == (
+        729_366_528 + 2 * max(29_678 * 64 * 8, 29_678 * 8, 64 * 8) + 29_678 * 8 + 64 * 8
+    )
 
 
 def test_synthetic_runtime_benchmark_never_needs_landscape_labels() -> None:
@@ -207,7 +638,9 @@ def test_doptimal_runtime_pilot_projects_registered_maximum_without_labels() -> 
     config = _build_fourier_config(_SITES, _WT, _Q3, max_order=2)
 
     assert "landscape" not in inspect.signature(benchmark_doptimal_prefix).parameters
-    result = benchmark_doptimal_prefix(config, candidates, pilot_budget=8, maximum_budget=20)
+    result = benchmark_doptimal_prefix(
+        config, candidates, pilot_budget=8, maximum_budget=20, block_size=8
+    )
 
     assert result.pilot_budget == 8
     assert result.maximum_budget == 20
@@ -215,6 +648,10 @@ def test_doptimal_runtime_pilot_projects_registered_maximum_without_labels() -> 
     assert result.projected_maximum_seconds == pytest.approx(result.pilot_seconds * (20 / 8) ** 2)
     assert result.pilot_update_bytes == len(candidates) * 8 * 8
     assert result.maximum_update_bytes == len(candidates) * 20 * 8
+    assert result.resumable_block_size == 8
+    assert result.maximum_resumable_peak_bytes == doptimal_resumable_peak_bytes(
+        len(candidates), 20, 8
+    )
 
 
 def test_recovery_gate_requires_every_registered_stochastic_seed() -> None:
@@ -423,7 +860,9 @@ def test_runtime_preflight_ignores_projected_duration_and_rejects_a_stale_commit
         },
     }
 
-    assert payload["projected_seconds"] > 8.0 * 3600.0
+    projected_seconds = payload["projected_seconds"]
+    assert isinstance(projected_seconds, float)
+    assert projected_seconds > 8.0 * 3600.0
 
     validate_runtime_preflight(
         payload,
@@ -434,6 +873,41 @@ def test_runtime_preflight_ignores_projected_duration_and_rejects_a_stale_commit
         expected_fit_count=344,
         expected_feature_count=feature_count,
     )
+
+    resumable_payload = dict(payload)
+    doptimal_payload = payload["doptimal_pilot"]
+    assert isinstance(doptimal_payload, dict)
+    resumable_doptimal = dict(doptimal_payload)
+    resumable_doptimal.update(
+        {
+            "resumable_block_size": 64,
+            "maximum_resumable_peak_bytes": doptimal_resumable_peak_bytes(
+                candidate_count, budgets[-1], 64
+            ),
+        }
+    )
+    resumable_payload["doptimal_pilot"] = resumable_doptimal
+    validate_runtime_preflight(
+        resumable_payload,
+        expected_commit="old",
+        expected_candidate_count=candidate_count,
+        expected_candidate_sha256="a" * 64,
+        expected_budgets=budgets,
+        expected_fit_count=344,
+        expected_feature_count=feature_count,
+    )
+
+    resumable_doptimal["maximum_resumable_peak_bytes"] = 0
+    with pytest.raises(ValueError, match="resumable D-optimal memory"):
+        validate_runtime_preflight(
+            resumable_payload,
+            expected_commit="old",
+            expected_candidate_count=candidate_count,
+            expected_candidate_sha256="a" * 64,
+            expected_budgets=budgets,
+            expected_fit_count=344,
+            expected_feature_count=feature_count,
+        )
 
     incomplete = dict(payload)
     incomplete.pop("measurements")

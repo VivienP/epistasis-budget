@@ -122,21 +122,32 @@ commit-mismatched preflight cannot authorize the curve.
 
 ## Resumable execution
 
-The runner requires a durable checkpoint directory. Each of the 43 acquisition sequences is evaluated
-in two fixed blocks of four budgets: `(48, 96, 192, 384)` and `(768, 1536, 2242, 3072)`. A completed block
-is stored as an immutable content-addressed payload plus a completion marker. Restarting the same command
-validates and skips completed blocks, then resumes from the first missing block.
+The runner requires a pre-existing durable run-store directory. `prepare` validates and archives the
+dataset, score cache, explicit sidecar, and runtime preflight before publishing the immutable root
+manifest. D-optimal selection is published every 64 pivots, LASSO cross-validation after every
+completed fold, and each recovery cell after its final refit or bounded scientific failure. Cells
+execute in the registered budget-major order.
 
-Checkpoint reuse requires the same commit, dataset, score cache, sidecar, runtime preflight, candidate
-universe, selection plan, protocol, and numerical environment. Input or workspace drift during a block
-prevents its publication. Incomplete uploads without a valid completion marker are ignored; marked
-corruption fails closed. The final report is assembled only from exactly 86 valid blocks covering all
-344 registered cells.
+Checkpoint reuse requires the same commit, dataset, score cache, sidecar, runtime preflight,
+candidate universe, selection plan, protocol, and numerical environment. Input or workspace drift
+prevents the next transition from being published. Every payload is content-addressed and becomes
+durable before its manifest marker. Restart opens and verifies the manifest chain once, restores the
+exact D-optimal or LASSO state, and continues from the next missing pivot, fold, or cell. Missing,
+divergent, stale, or corrupted state fails closed. The final report is published only after all 344
+registered cells are durable.
+
+The CLI exposes separate `prepare`, `run`, `status`, `verify`, and `export` commands. `status`,
+`verify`, and `export` do not mutate the run store; `verify` and `export` require the recorded clean
+commit and numerical environment. An invocation without a subcommand is still accepted and runs an
+idempotent `prepare`, then `run`, then `export`, taking the sidecar adjacent to the score cache.
 
 ## Provenance and failure policy
 
-The report uses create-only atomic publication and captures dataset, cache, sidecar, candidate-universe,
-selection, fold, commit, code-diff, argv, and start/end hashes. Input or workspace drift, cache mismatch,
+The report uses create-only publication and binds the archived inputs, candidate universe,
+selection, folds, clean commit, numerical environment, and every durable execution attempt. Each
+invocation records its start before computation and its completion before report publication; an
+interrupted invocation is retained as abandoned when a later invocation resumes the run. Input or
+workspace drift, cache mismatch,
 duplicate identity, missing row, wrong WT residue, off-target mutation, non-finite value, value outside the
 `log1p` domain, incomplete Fourier grid, unresolved score tie, prefix failure, or missing seed makes the
 architecture decision ineligible. The raw diagnostic may still be retained with the failure reason.

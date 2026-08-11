@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from itertools import pairwise
 from time import perf_counter
@@ -26,7 +26,7 @@ from epibudget.data import reveal_measured_fitness
 from epibudget.epistasis import _landscape_tensor, _wht_forward
 from epibudget.graph import selection_graph
 from epibudget.labels import training_target
-from epibudget.recovery_protocol import REGISTERED_RECOVERY_PROTOCOL
+from epibudget.recovery_protocol import REGISTERED_EXECUTION_POLICY, REGISTERED_RECOVERY_PROTOCOL
 from epibudget.robustness import variant_fold
 from epibudget.tie_break import (
     TIE_BREAK_VERSION,
@@ -46,6 +46,7 @@ _DEFAULT_LAMBDA_RATIOS: tuple[float, ...] = tuple(
     float(value) for value in np.geomspace(1.0, 1e-3, 20)
 )
 _FLOAT64_BYTES = np.dtype(np.float64).itemsize
+_SHA256_LENGTH = 64
 _MIN_FOLDS = 2
 _MIN_GATE_SPEARMAN = 0.30
 _MIN_GATE_SSE_GAIN = 0.10
@@ -57,6 +58,20 @@ def doptimal_workspace_bytes(n_candidates: int, budget: int) -> int:
     if n_candidates < 1 or budget < 1:
         raise ValueError("candidate count and budget must be positive")
     return n_candidates * budget * _FLOAT64_BYTES
+
+
+def doptimal_resumable_peak_bytes(n_candidates: int, target_budget: int, block_size: int) -> int:
+    """Account for the full state and durable serialization round-trip peak."""
+    if n_candidates < 1 or target_budget < 1 or not 1 <= block_size <= target_budget:
+        raise ValueError(
+            "candidate count, target budget, and compatible block size must be positive"
+        )
+    update_buffer = doptimal_workspace_bytes(n_candidates, target_budget)
+    serialized_chunk = doptimal_workspace_bytes(n_candidates, block_size)
+    posterior_snapshot = n_candidates * _FLOAT64_BYTES
+    selected_indices = block_size * np.dtype(np.int64).itemsize
+    largest_serialized_array = max(serialized_chunk, posterior_snapshot, selected_indices)
+    return update_buffer + 2 * largest_serialized_array + posterior_snapshot + selected_indices
 
 
 def registered_fit_count(budgets: Sequence[int], seeds: Sequence[int]) -> int:
@@ -91,6 +106,49 @@ class PairwiseLassoFit:
     lambda_value: float
     support_size: int
     converged: bool
+
+
+@dataclass(frozen=True)
+class PairwiseLassoCVState:
+    """Immutable cumulative cross-validation state at a completed fold boundary."""
+
+    problem_sha256: str
+    completed_folds: int
+    n_folds: int
+    lambda_ratios: tuple[float, ...]
+    cv_sse: FloatArray
+    converged: bool
+
+    def __post_init__(self) -> None:
+        """Own and validate the exact numeric snapshot used for deterministic resume."""
+        if not _is_sha256(self.problem_sha256):
+            raise ValueError("LASSO CV problem SHA must be a lowercase SHA-256")
+        if type(self.n_folds) is not int or self.n_folds < _MIN_FOLDS:
+            raise ValueError("LASSO CV fold count must be at least 2")
+        if type(self.completed_folds) is not int or not 0 <= self.completed_folds <= self.n_folds:
+            raise ValueError("LASSO CV completed folds must be in 0..n_folds")
+        if type(self.lambda_ratios) is not tuple or not self.lambda_ratios:
+            raise ValueError("LASSO CV lambda ratios must be a non-empty tuple")
+        if any(
+            type(value) is not float or not np.isfinite(value) or not 0.0 < value <= 1.0
+            for value in self.lambda_ratios
+        ):
+            raise ValueError("LASSO CV lambda ratios must contain positive finite floats")
+        if any(first < second for first, second in pairwise(self.lambda_ratios)):
+            raise ValueError("LASSO CV lambda ratios must be in descending order")
+        if not isinstance(self.cv_sse, np.ndarray) or self.cv_sse.dtype != np.dtype(np.float64):
+            raise TypeError("LASSO CV SSE must be a float64 array")
+        if self.cv_sse.shape != (len(self.lambda_ratios),):
+            raise ValueError("LASSO CV SSE shape must match the lambda ratios")
+        if not np.all(np.isfinite(self.cv_sse)):
+            raise ValueError("LASSO CV SSE must be finite")
+        if np.any(self.cv_sse < 0.0):
+            raise ValueError("LASSO CV SSE must be nonnegative")
+        if type(self.converged) is not bool:
+            raise TypeError("LASSO CV converged flag must be boolean")
+        content = np.asarray(self.cv_sse, dtype=np.float64, order="C").tobytes(order="C")
+        snapshot = np.frombuffer(content, dtype=np.float64)
+        object.__setattr__(self, "cv_sse", snapshot)
 
 
 @dataclass(frozen=True)
@@ -327,6 +385,15 @@ def _validate_runtime_doptimal(
         != expected_candidate_count * maximum_budget * _FLOAT64_BYTES
     ):
         raise ValueError("runtime preflight D-optimal pilot dimensions do not match")
+    resumable_block_size = doptimal.get("resumable_block_size")
+    resumable_peak = doptimal.get("maximum_resumable_peak_bytes")
+    if resumable_block_size is not None or resumable_peak is not None:
+        expected_block_size = REGISTERED_EXECUTION_POLICY.doptimal_block_size
+        expected_peak = doptimal_resumable_peak_bytes(
+            expected_candidate_count, maximum_budget, expected_block_size
+        )
+        if resumable_block_size != expected_block_size or resumable_peak != expected_peak:
+            raise ValueError("runtime preflight resumable D-optimal memory does not match")
     pilot_seconds = _finite_runtime_number(doptimal.get("pilot_seconds"), "D-optimal timing")
     projected_seconds = _finite_runtime_number(
         doptimal.get("projected_maximum_seconds"), "D-optimal projection"
@@ -483,6 +550,8 @@ class DOptimalBenchmark:
     projected_maximum_seconds: float
     pilot_update_bytes: int
     maximum_update_bytes: int
+    resumable_block_size: int
+    maximum_resumable_peak_bytes: int
 
 
 def benchmark_synthetic_fit(
@@ -563,46 +632,146 @@ def _canonical_identity_sha256(variant: Variant) -> str:
     return hashlib.sha256(canonical_id(variant).encode("ascii")).hexdigest()
 
 
-def reduced_doptimal_order(
-    config: _FourierConfig, candidates: Sequence[Variant], budget: int
-) -> tuple[Variant, ...]:
-    """Build the deterministic reduced order-1-plus-order-2 Bayesian D-optimal sequence."""
+@dataclass
+class ReducedDOptimalState:
+    """Mutable state for the reduced pairwise D-optimal pivot sequence."""
+
+    candidates: tuple[Variant, ...]
+    site_indices: npt.NDArray[np.int64]
+    q: int
+    population_size: int
+    target_budget: int
+    selected_indices: list[int]
+    posterior_variance: FloatArray
+    updates: FloatArray
+
+
+def initialise_reduced_doptimal(
+    config: _FourierConfig,
+    candidates: Sequence[Variant],
+    *,
+    target_budget: int,
+) -> ReducedDOptimalState:
+    """Allocate the full deterministic D-optimal state before the first pivot."""
     if config.max_order != _PAIRWISE_ORDER:
         raise ValueError(f"reduced D-optimal requires max_order=2, got {config.max_order}")
     canonical = tuple(sorted(candidates, key=canonical_id))
     if len(set(canonical)) != len(canonical):
         raise ValueError("D-optimal candidates contain duplicate identities")
-    if not 1 <= budget <= len(canonical):
-        raise ValueError(f"budget {budget} must be in 1..{len(canonical)}")
+    if not 1 <= target_budget <= len(canonical):
+        raise ValueError(f"budget {target_budget} must be in 1..{len(canonical)}")
 
-    site_indices = _site_indices(config, canonical)
+    site_indices = np.asarray(_site_indices(config, canonical), dtype=np.int64, order="C")
     population_size = config.q ** len(config.sites)
     diagonal = float(
         population_size
         * _order_symmetric_kernel(site_indices[[0]], site_indices[[0]], config.q, (1, 2))[0, 0]
     )
-    posterior_variance = np.full(len(canonical), diagonal, dtype=np.float64)
-    updates = np.zeros((len(canonical), budget), dtype=np.float64)
-    selected: list[int] = []
-    for step in range(budget):
-        available = posterior_variance.copy()
-        available[selected] = -np.inf
+    return ReducedDOptimalState(
+        candidates=canonical,
+        site_indices=site_indices,
+        q=config.q,
+        population_size=population_size,
+        target_budget=target_budget,
+        selected_indices=[],
+        posterior_variance=np.full(len(canonical), diagonal, dtype=np.float64),
+        updates=np.zeros((len(canonical), target_budget), dtype=np.float64, order="C"),
+    )
+
+
+def advance_reduced_doptimal(state: ReducedDOptimalState, stop: int) -> None:
+    """Advance one state through the absolute, exclusive pivot ``stop``."""
+    start = len(state.selected_indices)
+    if not start <= stop <= state.target_budget:
+        raise ValueError(f"D-optimal stop {stop} must be in {start}..{state.target_budget}")
+    for step in range(start, stop):
+        available = state.posterior_variance.copy()
+        available[state.selected_indices] = -np.inf
         maximum = float(np.max(available))
         tied = np.flatnonzero(available == maximum)
         pick = min(
             (int(index) for index in tied),
-            key=lambda index: _canonical_identity_sha256(canonical[index]),
+            key=lambda index: _canonical_identity_sha256(state.candidates[index]),
         )
-        selected.append(pick)
+        state.selected_indices.append(pick)
         prior_covariance = (
-            population_size
-            * _order_symmetric_kernel(site_indices, site_indices[[pick]], config.q, (1, 2))[:, 0]
+            state.population_size
+            * _order_symmetric_kernel(
+                state.site_indices, state.site_indices[[pick]], state.q, (1, 2)
+            )[:, 0]
         )
-        covariance = prior_covariance - updates[:, :step] @ updates[pick, :step]
+        covariance = prior_covariance - state.updates[:, :step] @ state.updates[pick, :step]
         denominator = 1.0 + max(float(covariance[pick]), 0.0)
-        updates[:, step] = covariance / np.sqrt(denominator)
-        posterior_variance = np.maximum(posterior_variance - np.square(updates[:, step]), 0.0)
-    return tuple(canonical[index] for index in selected)
+        state.updates[:, step] = covariance / np.sqrt(denominator)
+        state.posterior_variance = np.maximum(
+            state.posterior_variance - np.square(state.updates[:, step]), 0.0
+        )
+
+
+def selected_reduced_doptimal(state: ReducedDOptimalState) -> tuple[Variant, ...]:
+    """Return the selected candidate prefix represented by one state."""
+    return tuple(state.candidates[index] for index in state.selected_indices)
+
+
+def _initial_reduced_doptimal_posterior(state: ReducedDOptimalState) -> FloatArray:
+    diagonal = float(
+        state.population_size
+        * _order_symmetric_kernel(
+            state.site_indices[[0]], state.site_indices[[0]], state.q, (1, 2)
+        )[0, 0]
+    )
+    return np.full(len(state.candidates), diagonal, dtype=np.float64)
+
+
+def validate_completed_reduced_doptimal_state(state: ReducedDOptimalState) -> None:
+    """Validate a complete state by replaying pivots and posterior updates in O(NB)."""
+    candidate_count = len(state.candidates)
+    if len(state.selected_indices) != state.target_budget:
+        raise ValueError("D-optimal state is not complete at its target budget")
+    if (
+        state.updates.dtype != np.dtype(np.float64)
+        or not state.updates.flags.c_contiguous
+        or state.updates.shape != (candidate_count, state.target_budget)
+        or state.posterior_variance.dtype != np.dtype(np.float64)
+        or not state.posterior_variance.flags.c_contiguous
+        or state.posterior_variance.shape != (candidate_count,)
+    ):
+        raise ValueError("D-optimal state has invalid completed-state binary layout")
+    if len(set(state.selected_indices)) != state.target_budget or any(
+        not 0 <= index < candidate_count for index in state.selected_indices
+    ):
+        raise ValueError("D-optimal state has invalid completed-state indices")
+    if not np.all(np.isfinite(state.updates)) or not np.all(np.isfinite(state.posterior_variance)):
+        raise ValueError("D-optimal state contains non-finite numeric values")
+    if np.any(state.posterior_variance < 0.0):
+        raise ValueError("D-optimal state posterior variance must be nonnegative")
+
+    posterior = _initial_reduced_doptimal_posterior(state)
+    selected: list[int] = []
+    for step, observed in enumerate(state.selected_indices):
+        available = posterior.copy()
+        available[selected] = -np.inf
+        maximum = float(np.max(available))
+        tied = np.flatnonzero(available == maximum)
+        expected = min(
+            (int(index) for index in tied),
+            key=lambda index: _canonical_identity_sha256(state.candidates[index]),
+        )
+        if observed != expected:
+            raise ValueError("D-optimal state pivot does not match the variance argmax")
+        selected.append(observed)
+        posterior = np.maximum(posterior - np.square(state.updates[:, step]), 0.0)
+    if posterior.tobytes(order="C") != state.posterior_variance.tobytes(order="C"):
+        raise ValueError("D-optimal state posterior recurrence does not match its final variance")
+
+
+def reduced_doptimal_order(
+    config: _FourierConfig, candidates: Sequence[Variant], budget: int
+) -> tuple[Variant, ...]:
+    """Build the deterministic reduced order-1-plus-order-2 Bayesian D-optimal sequence."""
+    state = initialise_reduced_doptimal(config, candidates, target_budget=budget)
+    advance_reduced_doptimal(state, budget)
+    return selected_reduced_doptimal(state)
 
 
 def benchmark_doptimal_prefix(
@@ -611,10 +780,13 @@ def benchmark_doptimal_prefix(
     *,
     pilot_budget: int,
     maximum_budget: int,
+    block_size: int = REGISTERED_EXECUTION_POLICY.doptimal_block_size,
 ) -> DOptimalBenchmark:
     """Time a label-free D-optimal prefix and project its O(N*B^2) maximum-budget cost."""
     if not 1 <= pilot_budget <= maximum_budget <= len(candidates):
         raise ValueError("require 1 <= pilot_budget <= maximum_budget <= candidate count")
+    if not 1 <= block_size <= maximum_budget:
+        raise ValueError("D-optimal checkpoint block size must fit the maximum budget")
     started = perf_counter()
     reduced_doptimal_order(config, candidates, pilot_budget)
     pilot_seconds = perf_counter() - started
@@ -626,6 +798,10 @@ def benchmark_doptimal_prefix(
         projected_maximum_seconds=pilot_seconds * scale,
         pilot_update_bytes=doptimal_workspace_bytes(len(candidates), pilot_budget),
         maximum_update_bytes=doptimal_workspace_bytes(len(candidates), maximum_budget),
+        resumable_block_size=block_size,
+        maximum_resumable_peak_bytes=doptimal_resumable_peak_bytes(
+            len(candidates), maximum_budget, block_size
+        ),
     )
 
 
@@ -645,12 +821,27 @@ def _require_no_boundary_ties(
             raise ValueError(f"{method} has an exact score tie crossing registered budget {budget}")
 
 
+def _validated_doptimal_state(
+    state: ReducedDOptimalState, candidates: Sequence[Variant], budget: int
+) -> tuple[Variant, ...]:
+    if not isinstance(state, ReducedDOptimalState):
+        raise TypeError("injected D-optimal state must be a ReducedDOptimalState")
+    canonical = tuple(sorted(candidates, key=canonical_id))
+    if state.target_budget != budget or len(state.selected_indices) != budget:
+        raise ValueError("injected D-optimal state is not complete at the requested target budget")
+    if state.candidates != canonical:
+        raise ValueError("injected D-optimal state candidate pool does not match scored candidates")
+    validate_completed_reduced_doptimal_state(state)
+    return selected_reduced_doptimal(state)
+
+
 def build_selection_plan(
     scored: Sequence[ScoredVariant],
     *,
     budgets: Sequence[int],
     seeds: Sequence[int],
     max_order: int,
+    doptimal_state: ReducedDOptimalState | None = None,
 ) -> SelectionPlan:
     """Build label-free info, fitness, random, and structural sequences from scored candidates."""
     registered_budgets = tuple(int(budget) for budget in budgets)
@@ -716,7 +907,10 @@ def build_selection_plan(
             "".join(sorted(alphabet)),
             max_order=_PAIRWISE_ORDER,
         )
-        doptimal = reduced_doptimal_order(doptimal_config, variants, maximum_budget)
+        if doptimal_state is None:
+            doptimal = reduced_doptimal_order(doptimal_config, variants, maximum_budget)
+        else:
+            doptimal = _validated_doptimal_state(doptimal_state, variants, maximum_budget)
         sequences.append(
             _selection_sequence(
                 "doptimal_reduced_pairwise",
@@ -817,18 +1011,27 @@ def evaluate_plate(
     seed: int | None,
     budget: int,
     n_folds: int,
+    resume_cv: PairwiseLassoCVState | None = None,
+    on_fold_completed: Callable[[PairwiseLassoCVState], None] | None = None,
 ) -> RecoveryCell:
     """Reveal exactly one frozen plate, fit it, and score the fixed pairwise estimand."""
     if len(selected) != budget:
         raise ValueError(f"selected plate has {len(selected)} rows but budget is {budget}")
     if len(set(selected)) != len(selected):
         raise ValueError("selected plate contains duplicate variants")
-    revealed = reveal_measured_fitness(dict(landscape), selected)
+    revealed = reveal_measured_fitness(landscape, selected)
     if len(revealed) != len(selected):
         missing = [variant for variant in selected if variant not in revealed]
         raise ValueError(f"selected plate has {len(missing)} missing measured labels")
     response = np.array([training_target(revealed[variant]) for variant in selected])
-    fit = fit_pairwise_lasso(config, selected, response, n_folds=n_folds)
+    fit = fit_pairwise_lasso(
+        config,
+        selected,
+        response,
+        n_folds=n_folds,
+        resume_cv=resume_cv,
+        on_fold_completed=on_fold_completed,
+    )
     if not fit.converged:
         raise RuntimeError("FISTA did not converge")
     metrics = coefficient_metrics(fit.pairwise_coefficients, truth)
@@ -854,6 +1057,115 @@ def _lambda_max(design: FloatArray, centered_response: FloatArray) -> float:
     return 2.0 * float(np.max(np.abs(design.T @ centered_response))) / float(design.shape[0])
 
 
+def _is_sha256(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == _SHA256_LENGTH
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
+def pairwise_lasso_problem_sha256(
+    config: _FourierConfig,
+    measured: Sequence[Variant],
+    response: FloatArray,
+    *,
+    n_folds: int,
+    lambda_ratios: Sequence[float],
+) -> str:
+    """Hash the exact ordered numeric problem that makes a CV snapshot reusable."""
+    response_array = np.asarray(response, dtype=np.float64, order="C")
+    if response_array.shape != (len(measured),):
+        raise ValueError(f"response must have shape ({len(measured)},), got {response_array.shape}")
+    if not np.all(np.isfinite(response_array)):
+        raise ValueError("response must be finite")
+    if type(n_folds) is not int or n_folds < _MIN_FOLDS:
+        raise ValueError("n_folds must be at least 2")
+    ratios = tuple(float(value) for value in lambda_ratios)
+    if not ratios or any(not np.isfinite(value) or not 0.0 < value <= 1.0 for value in ratios):
+        raise ValueError("lambda ratios must be non-empty and in (0, 1]")
+    if any(first < second for first, second in pairwise(ratios)):
+        raise ValueError("lambda ratios must be in descending order")
+    folds = np.asarray(
+        [variant_fold(variant, n_folds) for variant in measured], dtype=np.int64, order="C"
+    )
+    return _pairwise_lasso_problem_sha256_from_arrays(
+        config,
+        measured,
+        response_array,
+        folds,
+        n_folds=n_folds,
+        lambda_ratios=ratios,
+    )
+
+
+def _pairwise_lasso_problem_sha256_from_arrays(
+    config: _FourierConfig,
+    measured: Sequence[Variant],
+    response: FloatArray,
+    folds: npt.NDArray[np.int64],
+    *,
+    n_folds: int,
+    lambda_ratios: tuple[float, ...],
+) -> str:
+    """Hash already-normalized arrays that are used directly by the CV solve."""
+
+    digest = hashlib.sha256()
+
+    def update_segment(name: str, content: bytes) -> None:
+        encoded_name = name.encode("ascii")
+        digest.update(len(encoded_name).to_bytes(4, "big"))
+        digest.update(encoded_name)
+        digest.update(len(content).to_bytes(8, "big"))
+        digest.update(content)
+
+    def update_array(name: str, value: npt.NDArray[np.generic]) -> None:
+        array = np.asarray(value)
+        if array.dtype.hasobject or array.dtype.kind in {"O", "V", "U", "S"}:
+            raise ValueError(f"{name} must use a plain numeric dtype")
+        little_dtype = array.dtype.newbyteorder("<")
+        canonical = np.asarray(array, dtype=little_dtype, order="C")
+        descriptor = {
+            "dtype": array.dtype.name,
+            "byteorder": "little",
+            "shape": [int(extent) for extent in array.shape],
+            "order": "C",
+        }
+        update_segment(
+            f"{name}.descriptor",
+            json.dumps(descriptor, sort_keys=True, separators=(",", ":"), allow_nan=False).encode(
+                "ascii"
+            ),
+        )
+        update_segment(f"{name}.bytes", canonical.tobytes(order="C"))
+
+    config_payload = {
+        "sites": list(config.sites),
+        "q": config.q,
+        "max_order": config.max_order,
+        "alphabet_index": [
+            [[residue, index] for residue, index in sorted(mapping.items())]
+            for mapping in config.alphabet_index
+        ],
+        "modes": [list(mode) for mode in config.modes],
+    }
+    update_segment(
+        "config",
+        json.dumps(config_payload, sort_keys=True, separators=(",", ":"), allow_nan=False).encode(
+            "ascii"
+        ),
+    )
+    update_array("basis", np.asarray(config.basis))
+    update_segment("measured.count", len(measured).to_bytes(8, "big"))
+    for index, variant in enumerate(measured):
+        update_segment(f"measured.{index}", canonical_id(variant).encode("ascii"))
+    update_array("response", response)
+    update_array("folds", folds)
+    update_segment("n_folds", n_folds.to_bytes(8, "big"))
+    update_array("lambda_ratios", np.asarray(lambda_ratios, dtype=np.float64, order="C"))
+    return digest.hexdigest()
+
+
 def fit_pairwise_lasso(  # noqa: PLR0912, PLR0915
     config: _FourierConfig,
     measured: Sequence[Variant],
@@ -861,9 +1173,11 @@ def fit_pairwise_lasso(  # noqa: PLR0912, PLR0915
     *,
     n_folds: int = 5,
     lambda_ratios: Sequence[float] = _DEFAULT_LAMBDA_RATIOS,
+    resume_cv: PairwiseLassoCVState | None = None,
+    on_fold_completed: Callable[[PairwiseLassoCVState], None] | None = None,
 ) -> PairwiseLassoFit:
     """Fit the registered order-1-plus-order-2 LASSO with fold-local response preprocessing."""
-    response = np.asarray(response, dtype=np.float64)
+    response = np.asarray(response, dtype=np.float64, order="C")
     if config.max_order != _PAIRWISE_ORDER:
         raise ValueError(f"pairwise LASSO requires max_order=2, got {config.max_order}")
     if response.shape != (len(measured),):
@@ -879,13 +1193,37 @@ def fit_pairwise_lasso(  # noqa: PLR0912, PLR0915
         raise ValueError("lambda ratios must be non-empty and in (0, 1]")
     if any(first < second for first, second in pairwise(ratios)):
         raise ValueError("lambda ratios must be in descending order")
+    folds = np.asarray(
+        [variant_fold(variant, n_folds) for variant in measured], dtype=np.int64, order="C"
+    )
+    problem_sha256 = _pairwise_lasso_problem_sha256_from_arrays(
+        config,
+        measured,
+        response,
+        folds,
+        n_folds=n_folds,
+        lambda_ratios=ratios,
+    )
+    if resume_cv is not None:
+        if resume_cv.n_folds != n_folds:
+            raise ValueError("resume CV fold count does not match n_folds")
+        if resume_cv.lambda_ratios != ratios:
+            raise ValueError("resume CV lambda ratios do not match")
+        if resume_cv.problem_sha256 != problem_sha256:
+            raise ValueError("resume CV problem SHA does not match the current fit")
+    if on_fold_completed is not None and not callable(on_fold_completed):
+        raise TypeError("on_fold_completed must be callable")
 
     population_size = config.q ** len(config.sites)
     design = np.sqrt(population_size) * _design_matrix(config, _site_indices(config, measured))
-    folds = np.array([variant_fold(variant, n_folds) for variant in measured], dtype=np.int64)
-    cv_sse = np.zeros(len(ratios), dtype=np.float64)
-    converged = True
-    for fold in range(n_folds):
+    start_fold = 0 if resume_cv is None else resume_cv.completed_folds
+    cv_sse = (
+        np.zeros(len(ratios), dtype=np.float64)
+        if resume_cv is None
+        else np.array(resume_cv.cv_sse, dtype=np.float64, order="C", copy=True)
+    )
+    converged = True if resume_cv is None else resume_cv.converged
+    for fold in range(start_fold, n_folds):
         train = folds != fold
         test = folds == fold
         if not np.any(train) or not np.any(test):
@@ -910,6 +1248,17 @@ def fit_pairwise_lasso(  # noqa: PLR0912, PLR0915
         for index, beta in enumerate(path):
             predicted = mean_train + centered_design_test @ beta
             cv_sse[index] += float(np.sum(np.square(predicted - response[test])))
+        if on_fold_completed is not None:
+            on_fold_completed(
+                PairwiseLassoCVState(
+                    problem_sha256=problem_sha256,
+                    completed_folds=fold + 1,
+                    n_folds=n_folds,
+                    lambda_ratios=ratios,
+                    cv_sse=cv_sse,
+                    converged=converged,
+                )
+            )
 
     best = int(np.argmin(cv_sse))
     mean_all = float(np.mean(response))

@@ -180,12 +180,16 @@ def validate_cache_against_universe(
     scorer_seed: int,
     n_perturbations: int,
     wt_sequence: str | None = None,
+    sidecar_path: Path | None = None,
 ) -> tuple[dict[Variant, ScoredVariant], CacheMetadata, CacheIdentity]:
     """Load a scored cache and reject any mismatch against the exact requested candidate universe.
 
     ``model_id``, ``scorer_seed``, and ``n_perturbations`` are the caller's own expected values
     (e.g. a registered headline/protocol constant) — never derived from the sidecar under check,
     since comparing the sidecar against itself can never fail.
+
+    ``sidecar_path`` identifies the exact metadata file to validate. When omitted, the historical
+    adjacent sidecar path is used for backward compatibility.
 
     Rejects (raises ``ValueError``, never warns) on: a missing sidecar; a sidecar whose
     ``candidate_sha256``, ``candidate_count``, ``candidate_alphabet``, ``max_order``, ``model_id``,
@@ -200,10 +204,10 @@ def validate_cache_against_universe(
     validated (``wt_sha256`` is ``None`` when ``wt_sequence`` was not supplied, since that field is
     then not independently checked here).
     """
-    sidecar = cache_metadata_path(cache_path)
+    sidecar = cache_metadata_path(cache_path) if sidecar_path is None else sidecar_path
     if not sidecar.exists():
         raise ValueError(
-            f"score cache {cache_path} has no metadata sidecar; refuse unsafe analysis"
+            f"score cache {cache_path} has no metadata sidecar at {sidecar}; refuse unsafe analysis"
         )
     metadata = CacheMetadata.model_validate_json(sidecar.read_text(encoding="utf-8"))
     expected_hash = candidate_sha256(candidates)

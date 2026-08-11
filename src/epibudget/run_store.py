@@ -18,10 +18,12 @@ encoded in the path. From this the store guarantees two things:
   detected on read, because the address is derived from the content rather than recorded beside it.
 
 The store does **not** promise to survive host power loss on every platform. File contents are
-fsync-ed always; directory entries are fsync-ed only where the platform supports it, which excludes
-Windows. :meth:`ContentAddressedRunStore.durability_capabilities` reports what the running platform
-actually provides. Where directory sync is unavailable, a power loss can lose a whole published file
-— but it cannot produce a file that verifies and is wrong.
+fsync-ed always; directory entries are fsync-ed only where the filesystem accepts it, which excludes
+Windows and the network and FUSE mounts that reject the call.
+:meth:`ContentAddressedRunStore.durability_capabilities` reports what a given root actually
+provides, by attempting the flush rather than assuming the platform allows it. Where directory sync
+is unavailable, a power loss can lose a whole published file — but it cannot produce a file that
+verifies and is wrong, and it never fails a publication that would otherwise have succeeded.
 
 State is a chain of immutable manifests linked by parent digest. There is no mutable ``HEAD``
 pointer, so a torn write can never redirect the store to an older or partial state. Two writers that
@@ -261,14 +263,27 @@ def _directory_sync_supported() -> bool:
     return _directory_flag() is not None
 
 
-def _sync_directory(path: Path) -> None:
-    """Flush a directory entry where the platform supports it; do nothing where it does not."""
+def _sync_directory(path: Path) -> bool:
+    """Flush a directory entry, reporting whether the filesystem actually accepted it.
+
+    A directory flush is a durability enhancement, never a correctness requirement: integrity comes
+    from content addressing plus full re-read verification. Network and FUSE filesystems, including
+    a mounted Google Drive, refuse the call outright, so a refusal is reported as an unavailable
+    capability rather than failing the publication that would otherwise have succeeded.
+    """
     flag = _directory_flag()
     if flag is None:
-        return
-    descriptor = os.open(path, os.O_RDONLY | flag)
+        return False
+    try:
+        descriptor = os.open(path, os.O_RDONLY | flag)
+    except OSError:
+        return False
     try:
         os.fsync(descriptor)
+    except OSError:
+        return False
+    else:
+        return True
     finally:
         os.close(descriptor)
 
@@ -328,10 +343,10 @@ class ContentAddressedRunStore:
 
     # -- durability ----------------------------------------------------------------
 
-    @staticmethod
-    def durability_capabilities() -> dict[str, bool]:
-        """Report what the running platform actually provides, without claiming more."""
-        return {"file_fsync": True, "directory_fsync": _directory_sync_supported()}
+    def durability_capabilities(self) -> dict[str, bool]:
+        """Report what this root actually provides, by trying it rather than by assuming it."""
+        directory_sync = _directory_sync_supported() and _sync_directory(self._root)
+        return {"file_fsync": True, "directory_fsync": directory_sync}
 
     def initialise(self) -> None:
         """Prove the root is durable, then publish the store header. Safe to repeat."""

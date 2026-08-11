@@ -18,6 +18,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+import epibudget.run_store as run_store_module
 from epibudget.run_store import (
     ArrayRef,
     BlobRef,
@@ -110,7 +111,45 @@ def test_durability_capabilities_are_reported_not_assumed(tmp_path: Path) -> Non
 
     assert capabilities["file_fsync"] is True
     assert isinstance(capabilities["directory_fsync"], bool)
-    assert capabilities["directory_fsync"] == hasattr(os, "O_DIRECTORY")
+    if not hasattr(os, "O_DIRECTORY"):
+        assert capabilities["directory_fsync"] is False
+
+
+def test_directory_flush_never_propagates_a_filesystem_refusal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Portable guard: the flush reports failure, it never raises out of a publication."""
+    monkeypatch.setattr(run_store_module, "_directory_flag", lambda: 0)
+
+    def refuse(*_args: object, **_kwargs: object) -> int:
+        raise OSError(22, "Invalid argument")
+
+    monkeypatch.setattr(os, "open", refuse)
+
+    assert run_store_module._sync_directory(tmp_path) is False
+
+
+def test_a_filesystem_that_refuses_directory_fsync_still_publishes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A mounted network or FUSE volume rejects a directory flush; that must not fail a write."""
+    original = os.fsync
+
+    def refuse_directories(descriptor: int) -> None:
+        if os.fstat(descriptor).st_mode & 0o170000 == 0o040000:
+            raise OSError(22, "Invalid argument")
+        original(descriptor)
+
+    monkeypatch.setattr(os, "fsync", refuse_directories)
+    store = ContentAddressedRunStore(tmp_path)
+    store.initialise()
+
+    blob = store.put_json({"step": 1})
+    manifest = store.publish_manifest(entries={"a": blob}, meta={"n": 1}, parent=None)
+
+    assert store.durability_capabilities()["directory_fsync"] is False
+    assert store.get_json(manifest.entry("a")) == {"step": 1}
+    assert store.verify().is_clean is True
 
 
 def test_probe_rejects_a_filesystem_that_does_not_read_back_what_it_wrote(

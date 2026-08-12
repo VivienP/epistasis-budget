@@ -16,6 +16,7 @@ from epibudget.fourier_recovery import (
     RecoveryCell,
     SelectionPlan,
     SelectionSequence,
+    _sequence_sha256,
 )
 from epibudget.recovery_engine import (
     RecoveryEngineError,
@@ -47,7 +48,12 @@ from epibudget.recovery_state import (
     RecoveryStateCursor,
     registered_cell_keys,
 )
-from epibudget.run_store import BlobRef, ContentAddressedRunStore, canonical_json_bytes
+from epibudget.run_store import (
+    BlobRef,
+    ContentAddressedRunStore,
+    RunStoreSession,
+    canonical_json_bytes,
+)
 from epibudget.scored_cache import CacheIdentity, candidate_sha256
 from epibudget.types import ScoredVariant, Variant
 
@@ -411,6 +417,40 @@ def test_selection_match_uses_the_canonical_doptimal_candidate_order() -> None:
 
     assert doptimal.candidates != enumerated
     assert engine._require_selection_matches_doptimal(plan, doptimal) is None
+
+
+def test_doptimal_checkpoint_identity_uses_the_canonical_state_order(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first: Variant = frozenset({(0, "A", "C")})
+    second: Variant = frozenset({(1, "A", "C")})
+    enumerated = (second, first)
+    base = _registered_inputs()
+    registered = replace(
+        base,
+        candidates=enumerated,
+        config=_build_fourier_config((0, 1), ("A", "A"), "AC", max_order=2),
+    )
+    monkeypatch.setattr(
+        engine,
+        "REGISTERED_RECOVERY_PROTOCOL",
+        replace(REGISTERED_RECOVERY_PROTOCOL, budgets=(1,)),
+    )
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    store = ContentAddressedRunStore(run_dir)
+    store.initialise()
+    journal = RecoveryStateCursor.open(RunStoreSession.open(store))
+
+    observed = engine._restore_doptimal_cursor(
+        journal,
+        _runtime_record(),
+        registered,
+    )
+
+    assert observed.state.candidates != enumerated
+    assert _sequence_sha256(observed.state.candidates) != candidate_sha256(enumerated)
 
 
 def test_execution_history_binds_attempt_times_workspace_and_archived_inputs() -> None:

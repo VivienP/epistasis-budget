@@ -14,6 +14,8 @@ python -m pip install -e ".[dev]"
 Python 3.12 or later is required. The default development and test path must remain offline; model
 downloads and public-data fetches belong behind the existing `slow` and `data` markers.
 
+Add `.[notebook]` when you need to run the notebooks under `notebooks/` locally.
+
 ## Quality gate
 
 Run the same checks as CI before opening a pull request:
@@ -22,8 +24,15 @@ Run the same checks as CI before opening a pull request:
 ruff format --check src/ tests/ scripts/
 ruff check src/ tests/ scripts/
 mypy --strict src/
-pytest -q -m "not slow and not data"
+pytest -m "not slow and not data" -n 4 --dist loadfile
 python scripts/validate_artifacts.py
+```
+
+The repository ships the same gate as Git hooks. Opting in runs the fast checks on every commit and the
+offline suite once per push:
+
+```bash
+git config core.hooksPath scripts/hooks
 ```
 
 ## Pull requests

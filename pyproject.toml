@@ -36,12 +36,18 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Tooling is pinned exactly: a floating minor of a linter or type checker changes the verdict of the gate
+# without a repository change, which has already broken CI on a documentation-only commit.
 dev = [
-    "pytest>=8.2",
+    "pytest==9.1.1",
     "pytest-cov>=5.0",
-    "mypy>=1.11",
+    "pytest-xdist==3.8.0",  # parallel offline suite in the pre-push hook and in CI
+    "mypy==2.3.0",
     "ruff==0.16.0",
     "types-tqdm",
+]
+
+notebook = [
     "jupyter>=1.0",         # reproducible demo notebook
 ]
 

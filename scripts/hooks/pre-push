@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# epibudget pre-push gate. Opt in with:  git config core.hooksPath scripts/hooks
+#
+# The offline suite is the expensive half of the local gate, so it runs once per push instead of once per
+# commit. This is the last point before code leaves the machine, and it is the command CI runs. The worker
+# count is fixed rather than `-n auto`: every worker imports Torch, and one process per core runs out of
+# memory on a high-core machine.
+set -uo pipefail
+
+if ! command -v pytest >/dev/null 2>&1; then
+  echo "epibudget pre-push: [FAIL] pytest is required to push (pip install -e \".[dev]\")"
+  exit 1
+fi
+
+echo "epibudget pre-push: offline test suite"
+if ! pytest -m "not slow and not data" -n 4 --dist loadfile; then
+  echo "pre-push: BLOCKED. Fix the failures above (or --no-verify only with maintainer approval)."
+  exit 1
+fi
+echo "pre-push: OK"

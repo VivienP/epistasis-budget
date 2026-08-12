@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # epibudget pre-commit gate. Opt in with:  git config core.hooksPath scripts/hooks
 #
-# Source/test/script changes run format, lint, types, and the offline tests. Documentation-only changes
-# retain the artifact and secret gates without paying for unrelated source checks. A missing tool blocks
-# source/test/script commits and is tolerated only when no executable project code is staged.
+# Source/test/script changes run format, lint, and types; the offline suite is the expensive half and runs
+# once per push in scripts/hooks/pre-push. Documentation-only changes retain the artifact and secret gates
+# without paying for unrelated source checks. A missing tool blocks source/test/script commits and is
+# tolerated only when no executable project code is staged.
 set -uo pipefail
 
 fail=0
@@ -45,7 +46,6 @@ if [ -n "$source_staged" ]; then
   run "ruff format --check" ruff format --check src/ tests/ scripts/
   run "ruff check"          ruff check src/ tests/ scripts/
   run "mypy --strict"       mypy --strict src/
-  run "pytest (offline)"    pytest -q -m "not slow and not data"
 else
   echo "  [skip] source quality checks (no source/test/script file staged)"
 fi
@@ -61,7 +61,7 @@ if have git; then
 fi
 
 if [ "$fail" -ne 0 ]; then
-  echo "pre-commit: BLOCKED. Fix the failures above (or --no-verify only with Vivien's explicit approval)."
+  echo "pre-commit: BLOCKED. Fix the failures above (or --no-verify only with maintainer approval)."
   exit 1
 fi
 echo "pre-commit: OK"

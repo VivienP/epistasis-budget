@@ -1,7 +1,7 @@
 # TrpB Fourier recovery on Google Colab
 
 This runbook executes the registered TrpB Fourier recovery diagnostic at commit
-`569746e30d45b8ee715a8959e683cb0352f1c480`. Google Drive stores the immutable inputs and durable run
+`89ac928601c203870e87dea753323246da4fa78f`. Google Drive stores the immutable inputs and durable run
 store. The Colab-local `/content` filesystem stores the checkout and runtime preflight.
 
 The score cache is selected by its complete scientific identity. File names are not sufficient: the
@@ -28,7 +28,7 @@ drive.mount("/content/drive")
 
 import os
 
-commit = "569746e30d45b8ee715a8959e683cb0352f1c480"
+commit = "89ac928601c203870e87dea753323246da4fa78f"
 short = commit[:7]
 root = "/content/drive/MyDrive/epibudget"
 
@@ -118,11 +118,14 @@ set -euo pipefail
 cd "$EPI_REPO"
 
 python - <<'PY'
+import hashlib
 import os
 from pathlib import Path
 
 from epibudget.coeff_recovery import AA20
 from epibudget.data import TRPB_SITES, TRPB_WT_AT_SITES, TRPB_WT_SEQUENCE, enumerate_candidates
+from epibudget.fourier_recovery import validate_deterministic_selection_boundaries
+from epibudget.recovery_protocol import REGISTERED_RECOVERY_PROTOCOL
 from epibudget.scored_cache import validate_cache_against_universe
 
 dataset = Path(os.environ["EPI_DATA"])
@@ -132,6 +135,26 @@ sidecar = Path(os.environ["EPI_SIDECAR"])
 for path in (dataset, cache, sidecar):
     if not path.is_file():
         raise FileNotFoundError(path)
+
+expected_sha256 = {
+    dataset: REGISTERED_RECOVERY_PROTOCOL.dataset_sha256,
+    cache: REGISTERED_RECOVERY_PROTOCOL.cache_sha256,
+    sidecar: REGISTERED_RECOVERY_PROTOCOL.sidecar_sha256,
+}
+
+
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        while block := stream.read(1024 * 1024):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+for path, expected in expected_sha256.items():
+    observed = file_sha256(path)
+    if observed != expected:
+        raise ValueError(f"SHA-256 mismatch for {path}: {observed} != {expected}")
 
 candidates = enumerate_candidates(TRPB_SITES, TRPB_WT_AT_SITES, AA20, max_order=3)
 loaded, metadata, identity = validate_cache_against_universe(
@@ -152,6 +175,11 @@ assert identity.candidate_sha256 == (
 )
 assert metadata.wt_sha256 == (
     "c0964e6dbcd438545d5a28cf9bf743806e119e334bd5e21df3a5ba759a1af4cb"
+)
+validate_deterministic_selection_boundaries(
+    tuple(loaded.values()),
+    budgets=REGISTERED_RECOVERY_PROTOCOL.budgets,
+    max_order=REGISTERED_RECOVERY_PROTOCOL.selection_max_order,
 )
 
 print("Canonical TrpB cache validated:", cache)
@@ -274,8 +302,7 @@ cd "$EPI_REPO"
 
 date -u
 python scripts/fourier_recovery_curve.py run \
-    --run-dir "$EPI_RUN_DIR" \
-    --out "$EPI_REPORT"
+    --run-dir "$EPI_RUN_DIR"
 date -u
 ```
 
@@ -294,9 +321,9 @@ ps -eo pid,etime,time,pcpu,pmem,rss,stat,cmd | grep '[f]ourier_recovery_curve.py
 After a disconnect, or whenever cell 8 is not active, run:
 
 ```bash
-cd /content/epistasis-budget-569746e
+cd /content/epistasis-budget-89ac928
 python scripts/fourier_recovery_curve.py status \
-    --run-dir /content/drive/MyDrive/epibudget/runs/fourier_recovery_569746e
+    --run-dir /content/drive/MyDrive/epibudget/runs/fourier_recovery_89ac928
 ```
 
 ## Cell 9 — Verify and export the completed report

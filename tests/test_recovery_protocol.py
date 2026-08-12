@@ -18,6 +18,7 @@ from epibudget.recovery_protocol import (
     REGISTERED_RECOVERY_PROTOCOL,
     RecoveryExecutionPolicy,
     RecoveryScientificProtocol,
+    validate_recovery_configuration,
 )
 
 
@@ -49,6 +50,15 @@ def test_registered_protocol_matches_the_frozen_a1_grid() -> None:
     assert protocol.feature_count == 2_242
     assert protocol.sequence_count == 43
     assert protocol.cell_count == 344
+    assert protocol.dataset_sha256 == (
+        "e94e2bed0a128f505eeedd8890cad64b3113c4a17562908ad8a121fa2a8e205f"
+    )
+    assert protocol.cache_sha256 == (
+        "e4349d8b05e3ad64214aaa544be4bab024b4777cb855947f4656e78093ebc189"
+    )
+    assert protocol.sidecar_sha256 == (
+        "512c395729d252f7b856c3804c1c6ba561969162a6c03a8b4fe017d59ce8e7ef"
+    )
 
 
 def test_execution_policy_holds_every_machinery_knob() -> None:
@@ -145,6 +155,7 @@ def test_identity_payloads_expose_both_fingerprints_separately() -> None:
         ({"selection_max_order": 1}, "cover the estimation order"),
         ({"feature_count": 2_166}, "must exceed its coefficient count"),
         ({"stochastic_methods": ("random", "info")}, "unique"),
+        ({"dataset_sha256": "not-a-sha"}, "input SHA-256"),
         ({"dataset": ""}, "version and a dataset"),
     ],
 )
@@ -172,3 +183,16 @@ def test_incoherent_policy_fields_fail_closed(changes: dict[str, object], messag
 def test_budget_blocks_reject_a_grid_that_does_not_divide() -> None:
     with pytest.raises(ValueError, match="do not divide into blocks"):
         REGISTERED_EXECUTION_POLICY.budget_blocks((48, 96, 192))
+
+
+def test_doptimal_target_must_divide_into_complete_checkpoint_blocks() -> None:
+    validate_recovery_configuration(
+        REGISTERED_RECOVERY_PROTOCOL,
+        REGISTERED_EXECUTION_POLICY,
+    )
+
+    with pytest.raises(ValueError, match="divide into complete D-optimal blocks"):
+        validate_recovery_configuration(
+            _protocol(budgets=(7,)),
+            _policy(doptimal_block_size=2),
+        )

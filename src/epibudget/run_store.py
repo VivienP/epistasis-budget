@@ -666,7 +666,7 @@ class ContentAddressedRunStore:
                 issues.append(StoreIssue(relative, "blob", "malformed_address", _ERROR))
                 continue
             if not _marker_of(payload_path).is_file():
-                issues.append(StoreIssue(relative, "blob", "missing_marker", _ERROR))
+                issues.append(StoreIssue(relative, "blob", "missing_marker", _INFO))
                 continue
             if self._load_marker(payload_path, "blob", digest) is None:
                 issues.append(StoreIssue(relative, "blob", "invalid_marker", _ERROR))
@@ -689,7 +689,7 @@ class ContentAddressedRunStore:
                 issues.append(StoreIssue(relative, "manifest", "malformed_address", _ERROR))
                 continue
             if not _marker_of(payload_path).is_file():
-                issues.append(StoreIssue(relative, "manifest", "missing_marker", _ERROR))
+                issues.append(StoreIssue(relative, "manifest", "missing_marker", _INFO))
                 continue
             if self._load_marker(payload_path, "manifest", digest) is None:
                 issues.append(StoreIssue(relative, "manifest", "invalid_marker", _ERROR))

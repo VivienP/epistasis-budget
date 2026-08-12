@@ -25,6 +25,15 @@ from typing import Final
 
 _MINIMUM_FOLD_COUNT: Final = 2
 _PAIRWISE_ORDER: Final = 2
+_SHA256_LENGTH: Final = 64
+
+
+def _is_sha256(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == _SHA256_LENGTH
+        and all(character in "0123456789abcdef" for character in value)
+    )
 
 
 @dataclass(frozen=True)
@@ -33,6 +42,9 @@ class RecoveryScientificProtocol:
 
     version: str
     dataset: str
+    dataset_sha256: str
+    cache_sha256: str
+    sidecar_sha256: str
     deterministic_methods: tuple[str, ...]
     stochastic_methods: tuple[str, ...]
     budgets: tuple[int, ...]
@@ -48,6 +60,11 @@ class RecoveryScientificProtocol:
         """Reject any protocol whose own fields are mutually inconsistent."""
         if not self.version or not self.dataset:
             raise ValueError("recovery protocol requires a version and a dataset")
+        if not all(
+            _is_sha256(value)
+            for value in (self.dataset_sha256, self.cache_sha256, self.sidecar_sha256)
+        ):
+            raise ValueError("recovery protocol input SHA-256 values must be lowercase digests")
         methods = self.methods
         if len(set(methods)) != len(methods) or not methods:
             raise ValueError("recovery protocol methods must be unique and non-empty")
@@ -100,6 +117,9 @@ class RecoveryScientificProtocol:
         """Return the fields that define the scientific meaning, excluding the version label."""
         return {
             "dataset": self.dataset,
+            "dataset_sha256": self.dataset_sha256,
+            "cache_sha256": self.cache_sha256,
+            "sidecar_sha256": self.sidecar_sha256,
             "deterministic_methods": list(self.deterministic_methods),
             "stochastic_methods": list(self.stochastic_methods),
             "budgets": list(self.budgets),
@@ -194,9 +214,24 @@ def _digest(payload: dict[str, object]) -> str:
     return hashlib.sha256(rendered.encode("utf-8")).hexdigest()
 
 
+def validate_recovery_configuration(
+    protocol: RecoveryScientificProtocol,
+    policy: RecoveryExecutionPolicy,
+) -> None:
+    """Reject a protocol-policy pair that the resumable engine cannot execute exactly."""
+    maximum_budget = protocol.budgets[-1]
+    if maximum_budget % policy.doptimal_block_size:
+        raise ValueError(
+            "maximum budget must divide into complete D-optimal blocks under the execution policy"
+        )
+
+
 REGISTERED_RECOVERY_PROTOCOL: Final = RecoveryScientificProtocol(
-    version="epibudget-fourier-recovery-protocol-v1",
+    version="epibudget-fourier-recovery-protocol-v2",
     dataset="trpb_johnston2024",
+    dataset_sha256="e94e2bed0a128f505eeedd8890cad64b3113c4a17562908ad8a121fa2a8e205f",
+    cache_sha256="e4349d8b05e3ad64214aaa544be4bab024b4777cb855947f4656e78093ebc189",
+    sidecar_sha256="512c395729d252f7b856c3804c1c6ba561969162a6c03a8b4fe017d59ce8e7ef",
     deterministic_methods=("info", "fitness", "doptimal_reduced_pairwise"),
     stochastic_methods=("random", "structural"),
     budgets=(48, 96, 192, 384, 768, 1536, 2242, 3072),

@@ -821,6 +821,20 @@ def _require_no_boundary_ties(
             raise ValueError(f"{method} has an exact score tie crossing registered budget {budget}")
 
 
+def validate_deterministic_selection_boundaries(
+    scored: Sequence[ScoredVariant], *, budgets: Sequence[int], max_order: int
+) -> None:
+    """Reject registered deterministic boundaries that depend on an arbitrary exact tie."""
+    canonical = tuple(sorted(scored, key=lambda item: canonical_id(item.variant)))
+    info_graph = selection_graph(canonical, max_order=max_order, method="info")
+    info_scores = {
+        item.variant: info_graph.info_gain(frozenset(), item.variant) for item in canonical
+    }
+    fitness_scores = {item.variant: item.delta_g for item in canonical}
+    _require_no_boundary_ties("info", canonical, info_scores, budgets)
+    _require_no_boundary_ties("fitness", canonical, fitness_scores, budgets)
+
+
 def _validated_doptimal_state(
     state: ReducedDOptimalState, candidates: Sequence[Variant], budget: int
 ) -> tuple[Variant, ...]:

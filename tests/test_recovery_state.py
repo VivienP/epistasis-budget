@@ -53,6 +53,9 @@ def protocol() -> RecoveryScientificProtocol:
     return RecoveryScientificProtocol(
         version="test-protocol-v1",
         dataset="synthetic",
+        dataset_sha256=SHA_A,
+        cache_sha256=SHA_B,
+        sidecar_sha256=SHA_C,
         deterministic_methods=("info",),
         stochastic_methods=("random",),
         budgets=(2, 4),

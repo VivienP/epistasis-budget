@@ -303,8 +303,22 @@ def test_a_payload_without_its_marker_is_never_valid_and_is_kept_for_diagnosis(
     report = store.verify()
     assert report.blob_count == 0
     assert report.is_clean is False
+    assert report.has_errors is False
     assert "missing_marker" in _problems(report)
     assert _only_blob(tmp_path).read_bytes() == b"interrupted"
+
+
+def test_a_manifest_referencing_an_unmarked_payload_fails_audit(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    reference = store.put_bytes(b"published")
+    store.publish_manifest(entries={"payload": reference}, meta={}, parent=None)
+    _marker_path(_only_blob(tmp_path)).unlink()
+
+    report = store.verify()
+
+    assert report.has_errors is True
+    assert "missing_marker" in _problems(report)
+    assert "unresolvable_entry" in _problems(report)
 
 
 def test_a_marker_without_its_payload_is_reported_as_an_orphan(tmp_path: Path) -> None:
@@ -351,6 +365,7 @@ def test_an_unmarked_manifest_leaves_the_previous_state_current(tmp_path: Path) 
 
     assert store.latest_manifest() == first
     assert report.manifest_count == 1
+    assert report.has_errors is False
     assert "missing_marker" in _problems(report)
 
 

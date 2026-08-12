@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -11,7 +12,7 @@ import pytest
 
 import epibudget.recovery_engine as engine
 from epibudget.coeff_recovery import _build_fourier_config
-from epibudget.data import DatasetSpec
+from epibudget.data import DatasetSpec, enumerate_candidates
 from epibudget.fourier_recovery import (
     PairwiseTruth,
     RecoveryCell,
@@ -28,7 +29,12 @@ from epibudget.recovery_engine import (
     recovery_status,
     verify_recovery_run,
 )
-from epibudget.recovery_protocol import REGISTERED_RECOVERY_PROTOCOL
+from epibudget.recovery_protocol import (
+    REGISTERED_EXECUTION_POLICY,
+    REGISTERED_RECOVERY_PROTOCOL,
+    RecoveryExecutionPolicy,
+    RecoveryScientificProtocol,
+)
 from epibudget.recovery_runtime import (
     ArchivedRecoveryInput,
     NumericCompatibility,
@@ -48,6 +54,7 @@ from epibudget.recovery_state import (
     RecoveryRunState,
     RecoveryStateCursor,
     registered_cell_keys,
+    replay_recovery_state,
 )
 from epibudget.run_store import (
     BlobRef,
@@ -57,6 +64,8 @@ from epibudget.run_store import (
 )
 from epibudget.scored_cache import CacheIdentity, candidate_sha256
 from epibudget.types import ScoredVariant, Variant
+
+_PAIRWISE_ORDER = 2
 
 _COMPLETED = 17
 
@@ -113,6 +122,76 @@ def _registered_inputs() -> engine._RegisteredInputs:
     )
 
 
+def _integrated_recovery_fixture() -> tuple[
+    RecoveryScientificProtocol,
+    RecoveryExecutionPolicy,
+    engine._RegisteredInputs,
+]:
+    sites = (0, 1)
+    wt_at_sites = ("A", "A")
+    alphabet = "ACD"
+    candidates = tuple(enumerate_candidates(sites, wt_at_sites, alphabet, max_order=2))
+    config = _build_fourier_config(sites, wt_at_sites, alphabet, max_order=2)
+    coefficient_count = int(sum(np.count_nonzero(mode) == _PAIRWISE_ORDER for mode in config.modes))
+    protocol = replace(
+        REGISTERED_RECOVERY_PROTOCOL,
+        version="synthetic-integrated-recovery-v1",
+        dataset="synthetic_full_factorial",
+        budgets=(8,),
+        seeds=(0,),
+        n_folds=2,
+        selection_max_order=2,
+        estimation_max_order=2,
+        coefficient_count=coefficient_count,
+        feature_count=len(config.modes),
+    )
+    policy = replace(
+        REGISTERED_EXECUTION_POLICY,
+        version="synthetic-integrated-execution-v1",
+        doptimal_block_size=2,
+        legacy_budget_block_size=1,
+    )
+    landscape: dict[Variant, float] = {frozenset(): 0.75}
+    for index, variant in enumerate(candidates, start=1):
+        order = len(variant)
+        residues = sum(ord(mutation[2]) for mutation in variant)
+        landscape[variant] = 0.4 + 0.13 * index + 0.17 * order + 0.001 * residues * order
+    scored = tuple(
+        ScoredVariant(
+            variant=variant,
+            delta_g=float(index),
+            var_delta_g=0.25 + index / 100.0,
+        )
+        for index, variant in enumerate(candidates, start=1)
+    )
+    identity = CacheIdentity(
+        model_id="synthetic-model",
+        scorer_seed=0,
+        n_perturbations=1,
+        candidate_sha256=candidate_sha256(candidates),
+        candidate_count=len(candidates),
+        candidate_alphabet=alphabet,
+        max_order=2,
+        wt_sha256="a" * 64,
+    )
+    registered = engine._RegisteredInputs(
+        specification=DatasetSpec(
+            identifier="synthetic_full_factorial",
+            loader=lambda _path: landscape,
+            sites=sites,
+            wt_at_sites=wt_at_sites,
+            wt_sequence="AA",
+            default_data_path="synthetic.csv",
+        ),
+        candidates=candidates,
+        config=config,
+        scored=scored,
+        expected_cache_identity=identity,
+        observed_cache_identity=identity.model_copy(),
+    )
+    return protocol, policy, registered
+
+
 def _input_paths(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
     paths = tuple(
         tmp_path / name for name in ("data.csv", "cache.jsonl", "cache.meta.json", "preflight.json")
@@ -130,6 +209,7 @@ def _patch_prepare(monkeypatch: pytest.MonkeyPatch) -> None:
         "_validate_registered_inputs",
         lambda *_args, **_kwargs: _registered_inputs(),
     )
+    monkeypatch.setattr(engine, "_require_registered_input_digests", lambda _digests: None)
 
 
 def _runtime_record() -> RecoveryRuntimeRecord:
@@ -248,6 +328,33 @@ def test_prepare_rejects_a_legacy_nonempty_directory_before_mutation(tmp_path: P
         )
 
     assert {path.name: path.read_bytes() for path in run_dir.iterdir()} == before
+
+
+def test_prepare_rejects_a_noncanonical_registered_input_before_store_mutation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(engine, "_clean_commit", lambda _repo: "a" * 40)
+    monkeypatch.setattr(engine, "capture_numeric_compatibility", _compatibility)
+    monkeypatch.setattr(
+        engine,
+        "_validate_registered_inputs",
+        lambda *_args, **_kwargs: _registered_inputs(),
+    )
+    protocol = replace(
+        REGISTERED_RECOVERY_PROTOCOL,
+        dataset_sha256="0" * 64,
+        cache_sha256="1" * 64,
+        sidecar_sha256="2" * 64,
+    )
+    monkeypatch.setattr(engine, "REGISTERED_RECOVERY_PROTOCOL", protocol)
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+
+    with pytest.raises(RecoveryEngineError, match="dataset SHA-256"):
+        prepare_recovery_run(run_dir, *_input_paths(tmp_path), repo=tmp_path)
+
+    assert tuple(run_dir.iterdir()) == ()
 
 
 def test_prepare_is_idempotent_and_different_inputs_fail_without_mutation(
@@ -500,6 +607,91 @@ def test_doptimal_publication_separates_universe_and_sequence_identities(
 
     assert manifest.sequence == 1
     assert journal.snapshot().doptimal_completed == 1
+
+
+def test_integrated_recovery_resumes_after_an_unmarked_doptimal_manifest(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    protocol, policy, registered = _integrated_recovery_fixture()
+    monkeypatch.setattr(engine, "REGISTERED_RECOVERY_PROTOCOL", protocol)
+    monkeypatch.setattr(engine, "REGISTERED_EXECUTION_POLICY", policy)
+    monkeypatch.setattr(engine, "_require_registered_input_digests", lambda _digests: None)
+    monkeypatch.setattr(engine, "_clean_commit", lambda _repo: "a" * 40)
+    monkeypatch.setattr(engine, "capture_numeric_compatibility", _compatibility)
+    monkeypatch.setattr(
+        engine,
+        "_validate_registered_inputs",
+        lambda *_args, **_kwargs: registered,
+    )
+    monkeypatch.setattr(
+        engine,
+        "_open_journal",
+        lambda store: RecoveryStateCursor.open(
+            RunStoreSession.open(store),
+            protocol=protocol,
+            execution_policy=policy,
+        ),
+    )
+    monkeypatch.setattr(engine, "registered_cell_keys", lambda: registered_cell_keys(protocol))
+
+    original_publish = ContentAddressedRunStore._publish
+    interrupted = False
+
+    def interrupt_first_doptimal_manifest(
+        store: ContentAddressedRunStore,
+        payload_path: Path,
+        content: bytes,
+        kind: str,
+        expected_sha256: str | None,
+    ) -> None:
+        nonlocal interrupted
+        decoded = json.loads(content) if kind == "manifest" else None
+        meta = decoded.get("meta") if isinstance(decoded, dict) else None
+        if (
+            not interrupted
+            and isinstance(meta, dict)
+            and meta.get("state_kind") == "reduced_doptimal"
+        ):
+            payload_path.parent.mkdir(parents=True, exist_ok=True)
+            payload_path.write_bytes(content)
+            interrupted = True
+            raise OSError("synthetic manifest interruption")
+        original_publish(store, payload_path, content, kind, expected_sha256)
+
+    monkeypatch.setattr(ContentAddressedRunStore, "_publish", interrupt_first_doptimal_manifest)
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    inputs = _input_paths(tmp_path)
+    prepared = prepare_recovery_run(run_dir, *inputs, repo=tmp_path)
+    assert prepared.prepared is True
+
+    with pytest.raises(OSError, match="synthetic manifest interruption"):
+        engine.run_recovery(run_dir, repo=tmp_path)
+
+    interrupted_audit = ContentAddressedRunStore(run_dir).verify()
+    assert interrupted is True
+    assert interrupted_audit.has_errors is False
+    assert "missing_marker" in interrupted_audit.problems()
+
+    completed = engine.run_recovery(run_dir, repo=tmp_path)
+    verified = verify_recovery_run(run_dir)
+    exported = export_recovery_report(run_dir, tmp_path / "report.json")
+    final_store = ContentAddressedRunStore(run_dir)
+    final_state = replay_recovery_state(
+        final_store,
+        protocol=protocol,
+        execution_policy=policy,
+    )
+
+    assert completed == verified
+    assert completed.report_available is True
+    assert completed.doptimal_completed == protocol.budgets[-1]
+    assert completed.completed_cells == protocol.cell_count
+    assert len(final_state.abandoned_execution_attempts) == 1
+    assert final_state.finalized_execution_attempt is not None
+    assert exported.stat().st_size > 0
+    assert final_store.verify().has_errors is False
 
 
 def test_execution_history_binds_attempt_times_workspace_and_archived_inputs() -> None:

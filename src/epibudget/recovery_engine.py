@@ -41,6 +41,7 @@ from epibudget.fourier_recovery import (
     pairwise_lasso_problem_sha256,
     pairwise_truth,
     registered_fit_count,
+    validate_deterministic_selection_boundaries,
     validate_runtime_preflight,
 )
 from epibudget.labels import training_target
@@ -56,6 +57,7 @@ from epibudget.recovery_lasso import (
 from epibudget.recovery_protocol import (
     REGISTERED_EXECUTION_POLICY,
     REGISTERED_RECOVERY_PROTOCOL,
+    validate_recovery_configuration,
 )
 from epibudget.recovery_runtime import (
     RecoveryInputBundle,
@@ -101,6 +103,7 @@ _SCORER_SEED = 0
 _N_PERTURBATIONS = 16
 _GIT_COMMIT_LENGTH = 40
 _SHA256_LENGTH = 64
+_REGISTERED_INPUT_COUNT = 4
 _PLAN_SCHEMA = "epibudget-recovery-selection-plan-payload-v1"
 _REPORT_SCHEMA = "epibudget-fourier-recovery-v3"
 _IMPUTATION_NOTE = (
@@ -173,6 +176,32 @@ def _file_digest(path: Path) -> tuple[str, int]:
     return digest.hexdigest(), size
 
 
+def _require_registered_input_digests(digests: Sequence[tuple[str, int]]) -> None:
+    protocol = REGISTERED_RECOVERY_PROTOCOL
+    expected = (
+        ("dataset", protocol.dataset_sha256),
+        ("cache", protocol.cache_sha256),
+        ("sidecar", protocol.sidecar_sha256),
+    )
+    if len(digests) != _REGISTERED_INPUT_COUNT:
+        raise RecoveryEngineError("registered recovery requires four input digests")
+    for (name, expected_sha256), (observed_sha256, _size) in zip(
+        expected, digests[:3], strict=True
+    ):
+        if observed_sha256 != expected_sha256:
+            raise RecoveryEngineError(f"registered {name} SHA-256 does not match")
+
+
+def _require_registered_configuration() -> None:
+    try:
+        validate_recovery_configuration(
+            REGISTERED_RECOVERY_PROTOCOL,
+            REGISTERED_EXECUTION_POLICY,
+        )
+    except ValueError as error:
+        raise RecoveryEngineError("registered recovery configuration is incompatible") from error
+
+
 def _validate_registered_inputs(
     cache: Path,
     sidecar: Path,
@@ -229,11 +258,17 @@ def _validate_registered_inputs(
         wt_sequence=specification.wt_sequence,
         sidecar_path=sidecar,
     )
+    scored = tuple(loaded[variant] for variant in candidates)
+    validate_deterministic_selection_boundaries(
+        scored,
+        budgets=protocol.budgets,
+        max_order=protocol.selection_max_order,
+    )
     return _RegisteredInputs(
         specification=specification,
         candidates=candidates,
         config=config,
-        scored=tuple(loaded[variant] for variant in candidates),
+        scored=scored,
         expected_cache_identity=expected_identity,
         observed_cache_identity=CacheIdentity.from_metadata(metadata),
     )
@@ -318,6 +353,7 @@ def prepare_recovery_run(
     repo: Path | None = None,
 ) -> RecoveryStatus:
     """Prepare a registered recovery run without loading measured labels."""
+    _require_registered_configuration()
     started_utc = datetime.now(UTC).isoformat()
     preparation_argv = tuple(sys.argv) or ("python",)
     if not run_dir.is_dir():
@@ -348,6 +384,7 @@ def prepare_recovery_run(
             raise RecoveryEngineError("initialised recovery run has no valid prepared root")
     input_paths = (dataset, cache, sidecar, runtime_preflight)
     before = tuple(_file_digest(path) for path in input_paths)
+    _require_registered_input_digests(before)
     registered = _validate_registered_inputs(
         cache, sidecar, runtime_preflight, execution_commit=commit
     )
@@ -913,6 +950,7 @@ def run_recovery(  # noqa: PLR0912, PLR0915 - one linear resume sequence that mu
     on_progress: Callable[[RecoveryProgress], None] | None = None,
 ) -> RecoveryStatus:
     """Resume the registered recovery computation from verified durable state."""
+    _require_registered_configuration()
     started_utc = datetime.now(UTC).isoformat()
     process_argv = tuple(sys.argv) or ("python",)
     store = _open_initialised_store(run_dir)

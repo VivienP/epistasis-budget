@@ -31,6 +31,7 @@ from epibudget.fourier_recovery import (
     pairwise_truth,
     reduced_doptimal_order,
     registered_fit_count,
+    validate_deterministic_selection_boundaries,
     validate_recovery_dataset,
     validate_runtime_preflight,
 )
@@ -592,6 +593,24 @@ def test_selection_plan_is_label_free_prefix_consistent_and_order_invariant() ->
         assert len(sequence.selected) == 20
         assert len(set(sequence.selected)) == 20
         assert plan.plate(sequence.method, sequence.seed, 8) == sequence.selected[:8]
+
+
+def test_deterministic_selection_boundaries_are_validated_without_labels() -> None:
+    candidates = [variant for variant in _all_genotypes() if 1 <= len(variant) <= 2]
+    scored = [
+        ScoredVariant(variant=variant, delta_g=1.0, var_delta_g=float(index + 1))
+        for index, variant in enumerate(candidates)
+    ]
+
+    assert (
+        "landscape" not in inspect.signature(validate_deterministic_selection_boundaries).parameters
+    )
+    with pytest.raises(ValueError, match="exact score tie crossing registered budget"):
+        validate_deterministic_selection_boundaries(
+            scored,
+            budgets=(8,),
+            max_order=2,
+        )
 
 
 def test_reduced_doptimal_is_prefix_consistent_and_input_order_invariant() -> None:

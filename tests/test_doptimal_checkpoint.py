@@ -105,7 +105,8 @@ def _identity(
         execution_policy=policy,
         numerical_compatibility=numerical,
         numerical_compatibility_sha256=hashlib.sha256(canonical_json_bytes(numerical)).hexdigest(),
-        candidate_sha256=_sequence_sha256(state.candidates),
+        candidate_universe_sha256=hashlib.sha256(b"candidate-universe").hexdigest(),
+        candidate_sequence_sha256=_sequence_sha256(state.candidates),
         candidate_count=len(state.candidates),
         target_budget=state.target_budget,
         geometry_sha256=doptimal_geometry_sha256(state),
@@ -143,7 +144,7 @@ def _recovery_cursor(
                 protocol_semantic_sha256=protocol.semantic_sha256,
                 execution_policy_sha256=identity.execution_policy.policy_sha256,
                 numerical_compatibility_sha256=identity.numerical_compatibility_sha256,
-                candidate_sha256=identity.candidate_sha256,
+                candidate_sha256=identity.candidate_universe_sha256,
                 runtime_record_ref=store.put_json({"runtime": "synthetic"}),
                 input_bundle_ref=store.put_json({"inputs": "synthetic"}),
             ),
@@ -259,7 +260,8 @@ def test_checkpoint_identity_owns_an_immutable_numeric_payload() -> None:
         execution_policy=REGISTERED_EXECUTION_POLICY,
         numerical_compatibility=numerical,
         numerical_compatibility_sha256=hashlib.sha256(canonical_json_bytes(numerical)).hexdigest(),
-        candidate_sha256=_sequence_sha256(state.candidates),
+        candidate_universe_sha256=hashlib.sha256(b"candidate-universe").hexdigest(),
+        candidate_sequence_sha256=_sequence_sha256(state.candidates),
         candidate_count=len(state.candidates),
         target_budget=state.target_budget,
         geometry_sha256=doptimal_geometry_sha256(state),
@@ -312,6 +314,16 @@ def test_state_geometry_must_match_the_checkpoint_identity(tmp_path: Path, damag
     store = _store(tmp_path / "run")
 
     with pytest.raises(DOptimalCheckpointError, match="geometry"):
+        restore_doptimal_checkpoint(store, state, identity)
+
+
+def test_state_candidate_sequence_must_match_the_checkpoint_identity(tmp_path: Path) -> None:
+    state = _initial_state()
+    identity = _identity(state)
+    state.candidates = tuple(reversed(state.candidates))
+    store = _store(tmp_path / "run")
+
+    with pytest.raises(DOptimalCheckpointError, match="candidate hash"):
         restore_doptimal_checkpoint(store, state, identity)
 
 
@@ -589,7 +601,7 @@ def _publish_raw_delta(
     return store.publish_manifest(
         entries={name: reference.blob for name, reference in refs.items()},
         meta={
-            "schema_version": "epibudget-reduced-doptimal-delta-v1",
+            "schema_version": "epibudget-reduced-doptimal-delta-v2",
             "state_kind": "reduced_doptimal",
             "identity": identity.payload() if identity_payload is None else identity_payload,
             "start": start,

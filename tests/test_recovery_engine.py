@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -451,6 +452,54 @@ def test_doptimal_checkpoint_identity_uses_the_canonical_state_order(
 
     assert observed.state.candidates != enumerated
     assert _sequence_sha256(observed.state.candidates) != candidate_sha256(enumerated)
+
+
+def test_doptimal_publication_separates_universe_and_sequence_identities(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first: Variant = frozenset({(0, "A", "C")})
+    second: Variant = frozenset({(1, "A", "C")})
+    enumerated = (second, first)
+    base = _registered_inputs()
+    registered = replace(
+        base,
+        candidates=enumerated,
+        config=_build_fourier_config((0, 1), ("A", "A"), "AC", max_order=2),
+    )
+    protocol = replace(REGISTERED_RECOVERY_PROTOCOL, budgets=(1,))
+    policy = replace(engine.REGISTERED_EXECUTION_POLICY, doptimal_block_size=1)
+    monkeypatch.setattr(engine, "REGISTERED_RECOVERY_PROTOCOL", protocol)
+    monkeypatch.setattr(engine, "REGISTERED_EXECUTION_POLICY", policy)
+
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    store = ContentAddressedRunStore(run_dir)
+    store.initialise()
+    journal = RecoveryStateCursor.open(
+        RunStoreSession.open(store),
+        protocol=protocol,
+        execution_policy=policy,
+    )
+    runtime = _runtime_record()
+    numerical = runtime.numeric_compatibility.payload()
+    prepared = PreparedRecoveryRun(
+        scientific_identity_sha256=runtime.scientific_identity.sha256,
+        protocol_semantic_sha256=protocol.semantic_sha256,
+        execution_policy_sha256=policy.policy_sha256,
+        numerical_compatibility_sha256=hashlib.sha256(canonical_json_bytes(numerical)).hexdigest(),
+        candidate_sha256=candidate_sha256(enumerated),
+        runtime_record_ref=store.put_json({"runtime": "synthetic"}),
+        input_bundle_ref=store.put_json({"inputs": "synthetic"}),
+    )
+    engine.publish_prepared_run_at(journal, prepared)
+
+    doptimal = engine._restore_doptimal_cursor(journal, runtime, registered)
+    engine.advance_reduced_doptimal(doptimal.state, 1)
+    manifest = doptimal.publish(doptimal.state)
+
+    assert manifest.sequence == 1
+    assert journal.snapshot().doptimal_completed == 1
 
 
 def test_execution_history_binds_attempt_times_workspace_and_archived_inputs() -> None:

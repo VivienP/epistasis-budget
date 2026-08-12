@@ -30,7 +30,7 @@ from epibudget.run_store import (
     canonical_json_bytes,
 )
 
-_SCHEMA = "epibudget-reduced-doptimal-delta-v1"
+_SCHEMA = "epibudget-reduced-doptimal-delta-v2"
 _STATE_KIND = "reduced_doptimal"
 _SHA256_LENGTH = 64
 _ARRAY_NAMES = frozenset({"updates", "selected_indices", "posterior_variance"})
@@ -105,7 +105,8 @@ class DOptimalCheckpointIdentity:
     execution_policy: RecoveryExecutionPolicy
     numerical_compatibility: Mapping[str, object]
     numerical_compatibility_sha256: str
-    candidate_sha256: str
+    candidate_universe_sha256: str
+    candidate_sequence_sha256: str
     candidate_count: int
     target_budget: int
     geometry_sha256: str
@@ -115,7 +116,8 @@ class DOptimalCheckpointIdentity:
         digests = (
             self.scientific_identity_sha256,
             self.numerical_compatibility_sha256,
-            self.candidate_sha256,
+            self.candidate_universe_sha256,
+            self.candidate_sequence_sha256,
             self.geometry_sha256,
         )
         if not all(_is_sha256(value) for value in digests):
@@ -157,7 +159,8 @@ class DOptimalCheckpointIdentity:
             "execution_policy": self.execution_policy.identity_payload(),
             "numerical_compatibility": numerical,
             "numerical_compatibility_sha256": self.numerical_compatibility_sha256,
-            "candidate_sha256": self.candidate_sha256,
+            "candidate_universe_sha256": self.candidate_universe_sha256,
+            "candidate_sequence_sha256": self.candidate_sequence_sha256,
             "candidate_count": self.candidate_count,
             "target_budget": self.target_budget,
             "geometry_sha256": self.geometry_sha256,
@@ -183,7 +186,7 @@ def _require_state_identity(  # noqa: PLR0912
         raise DOptimalCheckpointError("D-optimal state target budget does not match its identity")
     if len(state.candidates) != identity.candidate_count:
         raise DOptimalCheckpointError("D-optimal state candidate count does not match its identity")
-    if _sequence_sha256(state.candidates) != identity.candidate_sha256:
+    if _sequence_sha256(state.candidates) != identity.candidate_sequence_sha256:
         raise DOptimalCheckpointError("D-optimal state candidate hash does not match its identity")
     try:
         geometry_sha256 = doptimal_geometry_sha256(state)
@@ -224,7 +227,7 @@ def _require_incremental_state(
         raise DOptimalCheckpointError("D-optimal state target budget does not match its identity")
     if len(state.candidates) != identity.candidate_count:
         raise DOptimalCheckpointError("D-optimal state candidate count does not match its identity")
-    if _sequence_sha256(state.candidates) != identity.candidate_sha256:
+    if _sequence_sha256(state.candidates) != identity.candidate_sequence_sha256:
         raise DOptimalCheckpointError("D-optimal state candidate hash does not match its identity")
     try:
         geometry_sha256 = doptimal_geometry_sha256(state)

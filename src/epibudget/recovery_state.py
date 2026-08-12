@@ -54,7 +54,7 @@ _SELECTION_SCHEMA = "epibudget-recovery-selection-plan-v1"
 _CELL_SCHEMA = "epibudget-recovery-cell-v1"
 _CELL_RESULT_SCHEMA = "epibudget-recovery-cell-result-v1"
 _REPORT_SCHEMA = "epibudget-recovery-report-v1"
-_DOPTIMAL_SCHEMA = "epibudget-reduced-doptimal-delta-v1"
+_DOPTIMAL_SCHEMA = "epibudget-reduced-doptimal-delta-v2"
 _LASSO_SCHEMA = "epibudget-pairwise-lasso-fold-v1"
 _ATTEMPT_STARTED_SCHEMA = "epibudget-execution-attempt-started-v1"
 _ATTEMPT_COMPLETED_SCHEMA = "epibudget-execution-attempt-completed-v1"
@@ -867,7 +867,8 @@ def _replay_doptimal(  # noqa: PLR0912, PLR0915
                 "execution_policy",
                 "numerical_compatibility",
                 "numerical_compatibility_sha256",
-                "candidate_sha256",
+                "candidate_universe_sha256",
+                "candidate_sequence_sha256",
                 "candidate_count",
                 "target_budget",
                 "geometry_sha256",
@@ -886,10 +887,11 @@ def _replay_doptimal(  # noqa: PLR0912, PLR0915
     if numerical_sha != prepared.numerical_compatibility_sha256:
         raise RecoveryStateError("D-optimal numerical compatibility identity drifted")
     _require_identity_digest(identity["numerical_compatibility"], numerical_sha, "numerical")
-    if _require_sha256(identity["candidate_sha256"], "candidate identity") != (
+    if _require_sha256(identity["candidate_universe_sha256"], "candidate universe identity") != (
         prepared.candidate_sha256
     ):
-        raise RecoveryStateError("D-optimal candidate identity drifted")
+        raise RecoveryStateError("D-optimal candidate universe identity drifted")
+    _require_sha256(identity["candidate_sequence_sha256"], "candidate sequence identity")
     candidate_count = _require_integer(identity["candidate_count"], "candidate count", minimum=1)
     target = _require_integer(identity["target_budget"], "D-optimal target budget", minimum=1)
     if target != protocol.budgets[-1] or target > candidate_count:

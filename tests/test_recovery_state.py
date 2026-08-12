@@ -43,6 +43,7 @@ from epibudget.run_store import (
 )
 
 SHA_A = "a" * 64
+SHA_B = "b" * 64
 SHA_C = "c" * 64
 SHA_D = "d" * 64
 
@@ -153,6 +154,7 @@ def _append_doptimal(
     scientific_sha256: str | None = None,
     selected_values: tuple[int, ...] | None = None,
     prefix_sha256: str | None = None,
+    candidate_universe_sha256: str | None = None,
     state_rows: int = 6,
     candidate_count: int = 6,
 ) -> Manifest:
@@ -170,7 +172,8 @@ def _append_doptimal(
         "execution_policy": policy.identity_payload(),
         "numerical_compatibility": {"probe": "synthetic"},
         "numerical_compatibility_sha256": prepared.numerical_compatibility_sha256,
-        "candidate_sha256": prepared.candidate_sha256,
+        "candidate_universe_sha256": candidate_universe_sha256 or prepared.candidate_sha256,
+        "candidate_sequence_sha256": SHA_B,
         "candidate_count": candidate_count,
         "target_budget": protocol.budgets[-1],
         "geometry_sha256": SHA_D,
@@ -187,7 +190,7 @@ def _append_doptimal(
             "posterior_variance": posterior.blob,
         },
         meta={
-            "schema_version": "epibudget-reduced-doptimal-delta-v1",
+            "schema_version": "epibudget-reduced-doptimal-delta-v2",
             "state_kind": "reduced_doptimal",
             "identity": identity,
             "start": start,
@@ -371,7 +374,8 @@ def _doptimal_draft(
         "execution_policy": policy.identity_payload(),
         "numerical_compatibility": {"probe": "synthetic"},
         "numerical_compatibility_sha256": prepared.numerical_compatibility_sha256,
-        "candidate_sha256": prepared.candidate_sha256,
+        "candidate_universe_sha256": prepared.candidate_sha256,
+        "candidate_sequence_sha256": SHA_B,
         "candidate_count": 6,
         "target_budget": protocol.budgets[-1],
         "geometry_sha256": SHA_D,
@@ -388,7 +392,7 @@ def _doptimal_draft(
             "posterior_variance": posterior.blob,
         },
         meta={
-            "schema_version": "epibudget-reduced-doptimal-delta-v1",
+            "schema_version": "epibudget-reduced-doptimal-delta-v2",
             "state_kind": "reduced_doptimal",
             "identity": identity,
             "start": start,
@@ -817,6 +821,28 @@ def test_replay_rejects_doptimal_gap_and_identity_drift(
     )
 
     with pytest.raises(RecoveryStateError):
+        replay_recovery_state(store, protocol=protocol, execution_policy=policy)
+
+
+def test_replay_rejects_doptimal_candidate_universe_drift(
+    store: ContentAddressedRunStore,
+    protocol: RecoveryScientificProtocol,
+    policy: RecoveryExecutionPolicy,
+) -> None:
+    prepared = _prepared(store, protocol, policy)
+    parent = publish_prepared_run(store, prepared, protocol=protocol, execution_policy=policy)
+    _append_doptimal(
+        store,
+        prepared,
+        protocol,
+        policy,
+        start=0,
+        stop=2,
+        parent=parent,
+        candidate_universe_sha256=SHA_D,
+    )
+
+    with pytest.raises(RecoveryStateError, match="candidate universe"):
         replay_recovery_state(store, protocol=protocol, execution_policy=policy)
 
 
@@ -1361,14 +1387,15 @@ def test_replay_rejects_array_reference_not_matching_entry(
             "posterior_variance": posterior.blob,
         },
         meta={
-            "schema_version": "epibudget-reduced-doptimal-delta-v1",
+            "schema_version": "epibudget-reduced-doptimal-delta-v2",
             "state_kind": "reduced_doptimal",
             "identity": {
                 "scientific_identity_sha256": prepared.scientific_identity_sha256,
                 "execution_policy": policy.identity_payload(),
                 "numerical_compatibility": {"probe": "synthetic"},
                 "numerical_compatibility_sha256": prepared.numerical_compatibility_sha256,
-                "candidate_sha256": prepared.candidate_sha256,
+                "candidate_universe_sha256": prepared.candidate_sha256,
+                "candidate_sequence_sha256": SHA_B,
                 "candidate_count": 6,
                 "target_budget": protocol.budgets[-1],
                 "geometry_sha256": SHA_D,

@@ -1,7 +1,7 @@
 # TrpB Fourier recovery on Google Colab
 
 This runbook executes the registered TrpB Fourier recovery diagnostic at commit
-`c9c69e0d7abf076490b520655819f086f167eb77`. Google Drive stores the immutable inputs and durable run
+`569746e30d45b8ee715a8959e683cb0352f1c480`. Google Drive stores the immutable inputs and durable run
 store. The Colab-local `/content` filesystem stores the checkout and runtime preflight.
 
 The score cache is selected by its complete scientific identity. File names are not sufficient: the
@@ -28,7 +28,7 @@ drive.mount("/content/drive")
 
 import os
 
-commit = "c9c69e0d7abf076490b520655819f086f167eb77"
+commit = "569746e30d45b8ee715a8959e683cb0352f1c480"
 short = commit[:7]
 root = "/content/drive/MyDrive/epibudget"
 
@@ -78,6 +78,11 @@ git fetch origin "$EPI_COMMIT"
 git checkout --detach "$EPI_COMMIT"
 test "$(git rev-parse HEAD)" = "$EPI_COMMIT"
 
+python -m pip install -q \
+    "numpy==2.3.5" \
+    "scipy==1.18.0" \
+    "pandas==2.2.2" \
+    "threadpoolctl==3.6.0"
 python -m pip install -q -e ".[dev]"
 
 test -z "$(git status --porcelain)"
@@ -85,11 +90,18 @@ python --version
 python - <<'PY'
 import mypy.version
 import numpy
+import pandas
 import scipy
 import threadpoolctl
 
+assert numpy.__version__ == "2.3.5"
+assert scipy.__version__ == "1.18.0"
+assert pandas.__version__ == "2.2.2"
+assert threadpoolctl.__version__ == "3.6.0"
+
 print("NumPy:", numpy.__version__)
 print("SciPy:", scipy.__version__)
+print("pandas:", pandas.__version__)
 print("mypy:", mypy.version.__version__)
 print("threadpoolctl:", threadpoolctl.__version__)
 PY
@@ -268,8 +280,8 @@ date -u
 ```
 
 The run publishes D-optimal checkpoints, LASSO-fold checkpoints, and completed cells to Drive. If the
-runtime disconnects, rerun cells 1 and 2 and then this cell. Do not reuse the former `b0cc018` run store:
-it is bound to a different execution commit.
+runtime disconnects, rerun cells 1 and 2 and then this cell. Do not reuse the former `b0cc018` or
+`c9c69e0` run stores: they are bound to different execution commits.
 
 ## Status during execution
 
@@ -282,9 +294,9 @@ ps -eo pid,etime,time,pcpu,pmem,rss,stat,cmd | grep '[f]ourier_recovery_curve.py
 After a disconnect, or whenever cell 8 is not active, run:
 
 ```bash
-cd /content/epistasis-budget-c9c69e0
+cd /content/epistasis-budget-569746e
 python scripts/fourier_recovery_curve.py status \
-    --run-dir /content/drive/MyDrive/epibudget/runs/fourier_recovery_c9c69e0
+    --run-dir /content/drive/MyDrive/epibudget/runs/fourier_recovery_569746e
 ```
 
 ## Cell 9 — Verify and export the completed report

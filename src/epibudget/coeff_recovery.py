@@ -473,7 +473,12 @@ def _fista_lasso_path_with_status(
                 design, y, momentum, gradient, smooth_momentum, lam, lipschitz
             )
             acceleration_new = 0.5 * (1.0 + np.sqrt(1.0 + 4.0 * acceleration**2))
-            momentum = beta_new + ((acceleration - 1.0) / acceleration_new) * (beta_new - beta)
+            extrapolated = beta_new + ((acceleration - 1.0) / acceleration_new) * (beta_new - beta)
+            if float((momentum - beta_new) @ (beta_new - beta)) > 0.0:
+                momentum = beta_new.copy()
+                acceleration_new = 1.0
+            else:
+                momentum = extrapolated
             beta = beta_new
             acceleration = acceleration_new
             _require_finite_fista(momentum, beta)

@@ -113,6 +113,38 @@ def test_fista_lasso_satisfies_kkt_on_correlated_underdetermined_design() -> Non
         assert max(active_error, inactive_error) <= 1e-5 * max(1.0, lam)
 
 
+def test_fista_lasso_restart_converges_on_dense_correlated_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rng = np.random.default_rng(0)
+    latent = rng.normal(size=(16, 5))
+    design = latent @ rng.normal(size=(5, 32)) + 0.03 * rng.normal(size=(16, 32))
+    response = rng.normal(size=16)
+    response -= np.mean(response)
+    lambda_max = 2.0 * float(np.max(np.abs(design.T @ response)))
+    lambda_path = lambda_max * np.geomspace(1.0, 1e-2, 8)
+    monkeypatch.setattr(coeff_recovery, "_FISTA_MAX_ITERATIONS", 1_000)
+
+    path, converged = _fista_lasso_path_with_status(design, response, lambda_path)
+
+    assert converged is True
+    for lam, beta in zip(lambda_path, path, strict=True):
+        residual = response - design @ beta
+        gradient = 2.0 * (design.T @ residual)
+        active = np.abs(beta) > _SUPPORT_THRESHOLD
+        active_error = (
+            float(np.max(np.abs(gradient[active] - lam * np.sign(beta[active]))))
+            if np.any(active)
+            else 0.0
+        )
+        inactive_error = (
+            float(np.max(np.maximum(np.abs(gradient[~active]) - lam, 0.0)))
+            if np.any(~active)
+            else 0.0
+        )
+        assert max(active_error, inactive_error) <= 1e-5 * max(1.0, lam)
+
+
 def test_fista_lasso_rejects_nonfinite_intermediates() -> None:
     design = np.array([[1e308]], dtype=np.float64)
     response = np.array([1.0], dtype=np.float64)

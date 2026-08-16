@@ -72,7 +72,8 @@ ratios are `geomspace(1, 1e-3, 20)`. Each ratio therefore denotes `ratio * lambd
 Select the ratio with the smallest summed held-out SSE, breaking an exact tie toward the larger penalty,
 then refit the full plate with its own response and character means and `lambda_max` at that ratio.
 
-Optimization uses warm-started FISTA with deterministic backtracking. Each lambda must reach a maximum
+Optimization uses warm-started FISTA with deterministic backtracking and the gradient-based adaptive
+restart condition `(y_k - x_(k+1)).T @ (x_(k+1) - x_k) > 0`. Each lambda must reach a maximum
 active/inactive KKT residual no greater than `1e-5 * max(1, lambda)` within 5,000 iterations; otherwise
 the fit is non-converged and fails closed.
 
